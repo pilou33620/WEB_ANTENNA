@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<IPC-2581 revision="B" xmlns="http://webstds.ipc.org/2581">
+ <Content roleRef="owner">
+  <FunctionMode mode="USERDEF" level="1"/>
+  <StepRef name="PATCH-2450"/>
+  <DictionaryLineDesc units="MILLIMETER">
+   <EntryLineDesc id="l50"><LineDesc lineEnd="ROUND" lineWidth="0.5"/></EntryLineDesc>
+  </DictionaryLineDesc>
+  <DictionaryStandard units="MILLIMETER">
+   <EntryStandard id="pad25"><Circle diameter="2.5"/></EntryStandard>
+   <EntryStandard id="pad_gnd"><Circle diameter="1.0"/></EntryStandard>
+  </DictionaryStandard>
+ </Content>
+ <Ecad name="patch-2450">
+  <CadHeader units="MILLIMETER">
+   <Spec name="CORE_Dielectric">
+    <Dielectric type="DIELECTRIC_CONSTANT"><Property value="4.30"/></Dielectric>
+   </Spec>
+   <Spec name="CORE_Perte">
+    <Dielectric type="LOSS_TANGENT"><Property value="0.020"/></Dielectric>
+   </Spec>
+  </CadHeader>
+  <CadData>
+   <Layer name="TOP" layerFunction="SIGNAL" side="TOP" polarity="POSITIVE"/>
+   <Layer name="CORE" layerFunction="DIELPREG" side="INTERNAL"/>
+   <Layer name="BOTTOM" layerFunction="PLANE" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="Hole1-2" layerFunction="DRILL" side="ALL">
+    <Span fromLayer="TOP" toLayer="BOTTOM"/>
+   </Layer>
+   <Stackup overallThickness="1.670">
+    <StackupGroup name="AllStackupLayers" thickness="1.670">
+     <StackupLayer layerOrGroupRef="TOP" thickness="0.035" sequence="1"/>
+     <StackupLayer layerOrGroupRef="CORE" thickness="1.600" sequence="2">
+      <SpecRef id="CORE_Dielectric"/>
+      <SpecRef id="CORE_Perte"/>
+     </StackupLayer>
+     <StackupLayer layerOrGroupRef="BOTTOM" thickness="0.035" sequence="3"/>
+    </StackupGroup>
+   </Stackup>
+   <Step name="PATCH-2450">
+    <Datum x="0" y="0"/>
+    <Profile>
+     <Polygon>
+      <PolyBegin x="0.0000" y="0.0000"/>
+      <PolyStepSegment x="70.0000" y="0.0000"/>
+      <PolyStepSegment x="70.0000" y="70.0000"/>
+      <PolyStepSegment x="0.0000" y="70.0000"/>
+      <PolyStepSegment x="0.0000" y="0.0000"/>
+     </Polygon>
+    </Profile>
+    <LogicalNet name="ANT" netClass="SIGNAL"/>
+    <LogicalNet name="GND" netClass="GROUND"/>
+
+    <LayerFeature layerRef="TOP">
+     <Set net="ANT">
+      <Features>
+       <Contour>
+        <Polygon>
+      <PolyBegin x="16.0000" y="20.3346"/>
+      <PolyStepSegment x="54.0000" y="20.3346"/>
+      <PolyStepSegment x="54.0000" y="49.6654"/>
+      <PolyStepSegment x="16.0000" y="49.6654"/>
+      <PolyStepSegment x="16.0000" y="20.3346"/>
+        </Polygon>
+       </Contour>
+      </Features>
+     </Set>
+     <Set net="ANT" padUsage="TERMINATION" geometry="pad25">
+      <Pad>
+       <Location x="35.0000" y="30.1115"/>
+       <StandardPrimitiveRef id="pad25"/>
+      </Pad>
+     </Set>
+    </LayerFeature>
+
+    <LayerFeature layerRef="BOTTOM">
+     <Set net="GND">
+      <Features>
+       <Contour>
+        <Polygon>
+      <PolyBegin x="0.0000" y="0.0000"/>
+      <PolyStepSegment x="70.0000" y="0.0000"/>
+      <PolyStepSegment x="70.0000" y="70.0000"/>
+      <PolyStepSegment x="0.0000" y="70.0000"/>
+      <PolyStepSegment x="0.0000" y="0.0000"/>
+        </Polygon>
+        <Cutout>
+      <PolyBegin x="36.5600" y="30.1115"/>
+      <PolyStepSegment x="36.5300" y="30.4159"/>
+      <PolyStepSegment x="36.4413" y="30.7085"/>
+      <PolyStepSegment x="36.2971" y="30.9782"/>
+      <PolyStepSegment x="36.1031" y="31.2146"/>
+      <PolyStepSegment x="35.8667" y="31.4086"/>
+      <PolyStepSegment x="35.5970" y="31.5528"/>
+      <PolyStepSegment x="35.3043" y="31.6416"/>
+      <PolyStepSegment x="35.0000" y="31.6715"/>
+      <PolyStepSegment x="34.6957" y="31.6416"/>
+      <PolyStepSegment x="34.4030" y="31.5528"/>
+      <PolyStepSegment x="34.1333" y="31.4086"/>
+      <PolyStepSegment x="33.8969" y="31.2146"/>
+      <PolyStepSegment x="33.7029" y="30.9782"/>
+      <PolyStepSegment x="33.5587" y="30.7085"/>
+      <PolyStepSegment x="33.4700" y="30.4159"/>
+      <PolyStepSegment x="33.4400" y="30.1115"/>
+      <PolyStepSegment x="33.4700" y="29.8072"/>
+      <PolyStepSegment x="33.5587" y="29.5146"/>
+      <PolyStepSegment x="33.7029" y="29.2449"/>
+      <PolyStepSegment x="33.8969" y="29.0085"/>
+      <PolyStepSegment x="34.1333" y="28.8145"/>
+      <PolyStepSegment x="34.4030" y="28.6703"/>
+      <PolyStepSegment x="34.6957" y="28.5815"/>
+      <PolyStepSegment x="35.0000" y="28.5515"/>
+      <PolyStepSegment x="35.3043" y="28.5815"/>
+      <PolyStepSegment x="35.5970" y="28.6703"/>
+      <PolyStepSegment x="35.8667" y="28.8145"/>
+      <PolyStepSegment x="36.1031" y="29.0085"/>
+      <PolyStepSegment x="36.2971" y="29.2449"/>
+      <PolyStepSegment x="36.4413" y="29.5146"/>
+      <PolyStepSegment x="36.5300" y="29.8072"/>
+      <PolyStepSegment x="36.5600" y="30.1115"/>
+        </Cutout>
+       </Contour>
+      </Features>
+     </Set>
+    </LayerFeature>
+
+    <LayerFeature layerRef="Hole1-2">
+     <Set net="ANT" padUsage="VIA" geometry="sonde">
+      <Hole name="sonde" diameter="1.300" platingStatus="PLATED"
+            plusTol="0" minusTol="0" x="35.0000" y="30.1115"/>
+     </Set>
+    </LayerFeature>
+   </Step>
+  </CadData>
+ </Ecad>
+</IPC-2581>

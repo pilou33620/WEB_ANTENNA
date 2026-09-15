@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Antenne openEMS — du fichier IPC-2581 à la simulation FDTD</title>
+<link rel="stylesheet" href="css/theme.css">
+<link rel="stylesheet" href="css/workspace.css">
+<link rel="stylesheet" href="css/antenne.css">
+</head>
+<body>
+
+<header>
+  <div class="brand"><i></i><b>Antenne openEMS</b><span>V1.0 · IPC-2581 → FDTD</span></div>
+  <div class="tools">
+    <button class="tb on" id="bOuvrir" title="Choisir un fichier IPC-2581 (.xml, .cvg) ou son archive .zip">📂 Ouvrir un fichier…</button>
+    <button class="tb" id="bJson" title="Enregistrer le modèle traduit : il se rouvre sans que le parseur ait à retravailler">Exporter .json</button>
+    <button class="tb" id="bPng" title="Image de ce qui est affiché">Exporter .png</button>
+    <div class="sep"></div>
+    <button class="tb" id="bFit" title="Voir toute la carte">Ajuster <kbd>F</kbd></button>
+    <button class="tb" id="bFlip" title="Regarder la carte par en dessous"><span id="bFlipTxt">Dessous</span> <kbd>B</kbd></button>
+    <button class="tb" id="bRefs" title="Afficher les repères des composants">Repères <kbd>R</kbd></button>
+    <button class="tb" id="bTrous" title="Afficher les perçages">Perçages <kbd>D</kbd></button>
+    <button class="tb" id="bPlans" title="Afficher les plans de cuivre">Plans <kbd>P</kbd></button>
+    <div class="sep"></div>
+    <button class="tb" id="bProjet" title="Choisir où ranger le travail, et reprendre un projet existant">📁 Projet</button>
+    <div class="sep"></div>
+    <!-- Les trois gestes de l'outil, dans l'ordre où on les fait. -->
+    <button class="tb" id="bConcevoir" title="Dessiner une antenne et sa carte au lieu d'en importer une : empilage, matériaux, gabarits">✏️ Concevoir</button>
+    <button class="tb" id="bExemple" title="Poser un cas complet et déjà réglé — patch 2,45 GHz sur FR-4 — pour vérifier que toute la chaîne fonctionne">🧪 Exemple</button>
+    <button class="tb" id="bAssistant" title="Ouvrir l'assistant : il mène de la carte au modèle FDTD en six étapes">🧭 Assistant</button>
+    <button class="tb" id="bScript" title="Écrire le script Python openEMS qui refait exactement cette simulation" disabled>⤓ Script .py</button>
+    <button class="tb" id="bLancer" title="Lancer openEMS sur ce modèle" disabled>▶ Lancer</button>
+    <button class="tb" id="bWs">Espace de travail ▾</button>
+  </div>
+</header>
+
+<main id="ws">
+  <div class="dock" id="dockL"></div>
+  <div class="gut gv" data-dock="dockL"></div>
+
+  <div class="ctr" id="ctr">
+    <div id="canvasWrap">
+      <!-- LES DEUX VUES SONT SUPERPOSÉES ET NON CÔTE À CÔTE. Elles montrent
+           la même chose sous deux angles, et on ne les regarde jamais en
+           même temps : la 2D pour désigner du cuivre au pixel près, la 3D
+           pour vérifier qu'une boîte et un port sont là où on les croit. -->
+      <canvas id="carte"></canvas>
+      <canvas id="vue3d" hidden></canvas>
+
+      <div class="vues">
+        <button class="vb on" id="bVue2d" title="Vue de dessus, couche par couche">2D</button>
+        <button class="vb" id="bVue3d" title="Aperçu 3D du modèle qui part au solveur">3D</button>
+        <span class="vsep"></span>
+        <span class="vhint" id="vueHint">—</span>
+      </div>
+
+      <div id="accueil">
+        <div class="vide">
+          <h2>Une antenne, un fichier IPC-2581, une simulation FDTD</h2>
+          <p>Cet outil part de la carte réelle — le cuivre tel qu'il est routé,
+             l'empilage tel qu'il est fabriqué — et la conduit jusqu'à openEMS :
+             on désigne l'antenne, on complète ce que le fichier ne dit pas, on
+             pose la boîte d'air et le port d'excitation, et le solveur rend le
+             S<sub>11</sub>, l'impédance d'entrée et le diagramme de rayonnement.</p>
+          <p class="petit">Rien n'est deviné en silence : tout ce que l'assistant
+             complète est écrit, chiffré, et justifié — y compris dans le script
+             Python qu'il sait exporter.</p>
+          <div class="depot" id="depot">
+            <b>Déposez le fichier ici</b>
+            <small>… ou cliquez pour le choisir.<br>
+              Formats acceptés : <code>.xml</code>, <code>.cvg</code>,
+              l'archive <code>.zip</code> qui en contient un, et le
+              <code>.json</code> déjà exporté d'ici.</small>
+            <button class="tb on" id="bOuvrir2">📂 Choisir un fichier…</button>
+            <span class="err" id="depotErr"></span>
+          </div>
+          <!-- LA TROISIÈME FAÇON DE COMMENCER, et la plus fréquente après la
+               première séance : une antenne se dimensionne en plusieurs
+               passes, et chacune reprend la précédente. Elle est remplie par
+               js/28-projet.js, et reste cachée tant qu'il n'y a rien à
+               reprendre. -->
+          <div class="ou reprendre" id="accueilProjets" hidden></div>
+          <div class="ou">
+            <span>ou bien</span>
+            <button class="tb" id="bConcevoir2" title="Dessiner l'antenne et la carte ici même">✏️ Concevoir une antenne</button>
+            <button class="tb" id="bExemple2" title="Un patch 2,45 GHz déjà dimensionné et réglé : de quoi vérifier l'installation d'un bout à l'autre">🧪 Poser l'exemple</button>
+            <small>Pas encore de fichier : on dessine le cuivre, on choisit le
+              substrat et ses matériaux, et un gabarit donne le premier
+              dessin à la fréquence visée.<br>
+              L'exemple, lui, ne demande rien : il pose un cas connu — patch
+              2,45 GHz sur FR-4 — et il ne reste qu'à lancer le solveur pour
+              voir si tout répond.</small>
+          </div>
+        </div>
+      </div>
+
+      <div id="attente" hidden>
+        <div><b id="attenteTitre">Lecture du fichier…</b>
+          <span id="attenteDetail">le parseur travaille sur le serveur</span></div>
+      </div>
+    </div>
+    <div class="gut gh" data-dock="dockB"></div>
+    <div class="dock" id="dockB"></div>
+  </div>
+
+  <div class="gut gv" data-dock="dockR"></div>
+  <div class="dock" id="dockR"></div>
+</main>
+
+<input type="file" id="fichier" accept=".xml,.cvg,.ipc,.ipc2581,.zip,.json" hidden>
+
+<div id="pnlStore" hidden>
+
+  <!-- ===================================================================
+       L'ASSISTANT. Six étapes, dans l'ordre où les décisions se prennent :
+       on ne peut pas poser un port avant de savoir entre quelles couches,
+       ni dimensionner une boîte avant de connaître la bande. Chaque étape
+       dit ce qu'elle attend et ce qui manque encore.
+       =================================================================== -->
+  <section class="pnl" data-pnl="assistant" data-title="Assistant">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Assistant</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body">
+      <div class="etapes" id="etapes"></div>
+      <div class="scroll" id="assistantCorps"></div>
+      <div class="pnl-bar bilan" id="assistantBilan"></div>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       LA CONCEPTION. Le seul panneau qui ÉCRIT la carte au lieu de la lire :
+       il fabrique un document au format du parseur et le donne à
+       `mdlCharger()`. Tout le reste de l'outil n'y voit aucune différence.
+       =================================================================== -->
+  <section class="pnl" data-pnl="conception" data-title="Conception">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Conception</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body">
+      <div class="scroll" id="conceptionCorps"></div>
+      <div class="pnl-bar" id="conceptionBarre"></div>
+    </div>
+  </section>
+
+  <!-- ===================================================================
+       LE PROJET. Où l'on range le travail, et comment on le reprend. Ce
+       panneau est le seul à parler au disque : voir js/28-projet.js pour ce
+       qui est capturé, et python/projet.py pour ce qui est écrit.
+       =================================================================== -->
+  <section class="pnl" data-pnl="projet" data-title="Projet">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Projet</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body"><div class="scroll" id="projetCorps"></div></div>
+  </section>
+
+  <section class="pnl" data-pnl="resultats" data-title="Résultats">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Résultats</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body"><div class="scroll" id="resultats"></div></div>
+  </section>
+
+  <section class="pnl" data-pnl="journal" data-title="Journal du solveur">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Journal du solveur</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body">
+      <div class="pnl-bar" id="journalBarre"></div>
+      <div class="scroll jrn" id="journal"></div>
+    </div>
+  </section>
+
+  <!-- ==== la lecture de la carte : couches, nets, boîtiers, sélection ==== -->
+  <section class="pnl" data-pnl="couches" data-title="Couches">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Couches</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body">
+      <div class="pnl-bar">
+        <button class="tb mini" id="bCchTout">Tout</button>
+        <button class="tb mini" id="bCchRien">Rien</button>
+        <button class="tb mini" id="bCchCuivre" title="Ne garder que le cuivre">Cuivre seul</button>
+      </div>
+      <div class="pnl-bar" id="barElements"></div>
+      <div class="scroll" id="listeCouches"></div>
+    </div>
+  </section>
+
+  <section class="pnl" data-pnl="carte" data-title="La carte">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">La carte</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body"><div class="scroll" id="infos"></div></div>
+  </section>
+
+  <section class="pnl" data-pnl="nets" data-title="Nets">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Nets</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body">
+      <div class="pnl-bar">
+        <input type="search" id="filtreNets" placeholder="filtrer…" autocomplete="off">
+        <button class="tb mini" id="bNetRien" title="Ne plus mettre de net en évidence">✕</button>
+      </div>
+      <div class="scroll" id="listeNets"></div>
+    </div>
+  </section>
+
+  <section class="pnl" data-pnl="composants" data-title="Composants">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Composants</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body">
+      <div class="pnl-bar">
+        <input type="search" id="filtreComps" placeholder="repère, valeur, boîtier…" autocomplete="off">
+      </div>
+      <div class="scroll" id="listeComps"></div>
+    </div>
+  </section>
+
+  <section class="pnl" data-pnl="detail" data-title="Sélection">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Sélection</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body"><div class="scroll" id="detail"></div></div>
+  </section>
+</div>
+
+<div id="floatLayer"></div>
+<div id="dropZone"></div>
+<div id="dragGhost"></div>
+
+<footer>
+  <span>Fichier <b id="fNom">—</b></span>
+  <span>Composants <b id="fComps">0</b></span>
+  <span>Nets <b id="fNets">0</b></span>
+  <span>Perçages <b id="fTrous">0</b></span>
+  <span id="fHint" class="hint">Démarrage…</span>
+  <span class="push" id="fSolveur">openEMS : …</span>
+  <span id="fPos">—</span>
+  <span id="fZoom">100 %</span>
+  <span id="fFace">dessus</span>
+</footer>
+
+<!-- L'ordre compte : chaque module s'appuie sur les précédents.
+
+     00 à 06 lisent et affichent la carte IPC-2581. Ils viennent de la
+     visionneuse de WEB_CAO (https://github.com/pilou33620/WEB_CAO), d'où cet
+     outil tient aussi son habillage ; 06 a été réécrit pour ne plus dépendre
+     des services propres à ce dépôt-là.
+
+     10 à 19 sont l'outil lui-même : l'état, la géométrie, le serveur,
+     l'assistant, la 3D, la surimpression, les résultats, le câblage.
+
+     90 pose les panneaux détachables, et il vient en dernier parce qu'il
+     applique la disposition à un DOM déjà rempli. -->
+<script src="js/00-espace-config.js"></script>
+<script src="js/01-api.js"></script>
+<script src="js/02-modele.js"></script>
+<script src="js/03-rendu.js"></script>
+<script src="js/04-interaction.js"></script>
+<script src="js/05-panneaux.js"></script>
+<script src="js/06-ouverture.js"></script>
+
+<!-- three.js r134, posé dans le dépôt et non pris sur un CDN : l'outil doit
+     marcher sur un poste sans accès réseau, et une simulation qui dépend d'un
+     serveur tiers n'est pas reproductible. -->
+<script src="js/vendor/three.min.js"></script>
+
+<script src="js/10-etat.js"></script>
+<script src="js/11-geometrie.js"></script>
+<script src="js/12-api-openems.js"></script>
+<script src="js/13-assistant.js"></script>
+<script src="js/14-apercu3d.js"></script>
+<script src="js/15-overlay2d.js"></script>
+<script src="js/16-resultats.js"></script>
+<script src="js/17-objets.js"></script>
+<script src="js/18-champs.js"></script>
+<script src="js/19-demarrage.js"></script>
+
+<!-- 20 à 23 : le mode conception. Il vient APRÈS l'outil parce qu'il
+     s'appuie sur tout ce qui précède — il fabrique un document que
+     `mdlCharger` lit, pose un port que l'assistant vérifie, et enveloppe
+     `peindre`, `poser` et `prefEcrire` comme le font déjà 15 et 19. -->
+<script src="js/20-conception.js"></script>
+<script src="js/21-dessin.js"></script>
+<script src="js/22-antennes.js"></script>
+<script src="js/23-panneau-conception.js"></script>
+<script src="js/24-balayage.js"></script>
+<script src="js/25-polygones.js"></script>
+<script src="js/26-exemple.js"></script>
+<script src="js/27-apercu-motif.js"></script>
+<script src="js/29-tableau-s.js"></script>
+<!-- 28 vient en dernier des modules métier : il enveloppe `poser`, `antMaj`
+     et `conAppliquer`, et il ne peut le faire qu'une fois que 06, 13 et 20
+     les ont posées. -->
+<script src="js/28-projet.js"></script>
+
+<script src="js/90-workspace.js"></script>
+</body>
+</html>

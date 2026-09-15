@@ -1,0 +1,237 @@
+/* =============================================================================
+   visionneuse IPC-2581 — feuille de style (dashboard nocturne)
+   Mêmes variables et mêmes composants d'interface que les autres outils :
+   en-tête, barre d'outils, panneaux dockables, pied de page.
+   ============================================================================= */
+:root{
+  --bg:#0f1012;
+  --panel:#17181b;
+  --panel2:#1c1e22;
+  --border:#2b2e34;
+  --border2:#3a3e46;
+  --txt:#e6e8ec;
+  --txt-dim:#8b919c;
+  --yellow:#f2c744;
+  --blue:#3fa0ea;
+  --blue-deep:#2b7fbf;
+  --red:#e8443a;
+  --green:#4cc38a;
+  --cyan:#8af0ff;
+  --mono:"JetBrains Mono","SF Mono",Consolas,"Roboto Mono",monospace;
+  --ui:"Segoe UI",system-ui,-apple-system,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg);color:var(--txt);font-family:var(--ui);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+/* ---------- en-tête ---------- */
+header{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--border);
+}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{font-size:15px;letter-spacing:.14em;text-transform:uppercase}
+.brand span{font-family:var(--mono);font-size:10px;color:var(--txt-dim);letter-spacing:.18em}
+.brand i{display:inline-block;width:4px;height:18px;background:var(--red);border-radius:1px;transform:translateY(3px)}
+/* Nom du projet : plus lisible que la version, sans voler la vedette au titre */
+.brand span.proj{color:var(--txt);letter-spacing:.06em;font-size:11px;
+  border:1px solid var(--border2);border-radius:3px;padding:1px 6px}
+.tools{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sep{width:1px;height:22px;background:var(--border2);margin:0 4px}
+button.tb{
+  background:var(--panel2);color:var(--txt);border:1px solid var(--border2);
+  padding:6px 10px;border-radius:5px;font-size:12px;cursor:pointer;font-family:var(--ui);
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+}
+button.tb:hover{border-color:var(--blue);color:#fff}
+button.tb.on{background:var(--blue-deep);border-color:var(--blue);color:#fff}
+button.tb:disabled{opacity:.45;cursor:default;border-color:var(--border2);color:var(--txt-dim)}
+button.tb kbd{font-family:var(--mono);font-size:9px;color:var(--txt-dim);border:1px solid var(--border2);border-radius:3px;padding:0 3px}
+button.tb.on kbd{color:#dff0ff;border-color:#5cb4f0}
+button.tb.mini{padding:3px 7px;font-size:10.5px}
+/* ---------- disposition ---------- */
+main{flex:1;display:flex;min-height:0}
+#canvasWrap{position:absolute;inset:0;overflow:hidden}
+#carte{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.scroll{overflow-y:auto;flex:1;min-height:0}
+.scroll::-webkit-scrollbar{width:8px}
+.scroll::-webkit-scrollbar-thumb{background:#31343a;border-radius:4px}
+
+/* ---------- page d'accueil, tant qu'aucun fichier n'est ouvert ---------- */
+#accueil{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  padding:24px;background:var(--bg);z-index:3;
+}
+#accueil[hidden]{display:none}
+.vide{max-width:640px;width:100%}
+.vide h2{margin:0 0 6px;font-size:15px;letter-spacing:.12em;text-transform:uppercase}
+.vide p{margin:0 0 14px;font-size:12.5px;color:var(--txt-dim);line-height:1.6}
+.vide code{font-family:var(--mono);color:var(--blue)}
+/* La zone de dépôt : c'est le geste principal, elle occupe la place. */
+.depot{
+  border:1px dashed var(--border2);border-radius:8px;background:var(--panel);
+  padding:26px 22px;text-align:center;transition:all .15s;
+}
+.depot.survol{border-color:var(--blue);background:#20242a}
+.depot b{display:block;font-size:14px;margin-bottom:6px}
+.depot small{display:block;font-size:11.5px;color:var(--txt-dim);line-height:1.55;margin-bottom:14px}
+.depot .err{display:block;margin-top:12px;font-size:11.5px;color:var(--red);line-height:1.5;white-space:pre-wrap}
+/* Le voile d'attente : parser une carte de fabrication prend quelques
+   secondes, et un écran figé sans un mot passe pour un plantage. */
+#attente{
+  position:absolute;inset:0;z-index:4;display:flex;align-items:center;justify-content:center;
+  background:rgba(15,16,18,.82);font-family:var(--mono);font-size:12px;color:var(--txt);
+}
+#attente[hidden]{display:none}
+#attente div{text-align:center;line-height:1.9}
+#attente b{display:block;font-size:13px;color:var(--yellow)}
+
+/* ---------- panneaux ---------- */
+.pnl-bar input[type=search]{
+  flex:1;min-width:0;background:#101216;border:1px solid var(--border2);color:var(--txt);
+  border-radius:4px;padding:3px 6px;font-family:var(--mono);font-size:11px;
+}
+.pnl-bar input[type=search]:focus{outline:none;border-color:var(--blue)}
+.pnl-lbl{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--txt-dim)}
+/* La rangée des natures d'objet : huit boutons dans un panneau parfois étroit.
+   Ils passent à la ligne, et se serrent un peu pour que deux tiennent côte à
+   côte même dans un dock réduit. */
+#barElements{gap:4px}
+
+/* liste de couches : case, pastille de couleur, nom, comptage */
+.cch{
+  display:flex;align-items:center;gap:8px;width:100%;
+  padding:4px 10px;border:none;border-left:2px solid transparent;
+  background:transparent;color:var(--txt);cursor:pointer;text-align:left;
+  font-family:var(--ui);font-size:12px;
+}
+.cch:hover{background:#20242a}
+.cch.on{background:#1e2126;border-left-color:var(--yellow)}
+.cch.off{color:#5f656f}
+.cch .pastille{width:11px;height:11px;border-radius:2px;flex:none;border:1px solid #0008}
+.cch.off .pastille{opacity:.28}
+.cch .nom{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cch .cpt{font-family:var(--mono);font-size:9.5px;color:var(--txt-dim)}
+.grp{font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--yellow);padding:10px 10px 4px;opacity:.85}
+
+/* listes de nets et de composants */
+.ligne{
+  display:flex;align-items:baseline;gap:8px;width:100%;
+  padding:4px 10px;border:none;border-left:2px solid transparent;
+  background:transparent;color:var(--txt-dim);cursor:pointer;text-align:left;
+  font-family:var(--ui);font-size:12px;
+}
+.ligne:hover{background:#20242a;color:var(--txt)}
+.ligne.on{background:#241f13;color:var(--txt);border-left-color:var(--yellow)}
+.ligne b{font-weight:600;color:var(--txt);min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.ligne .cpt{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:#5f656f;flex:none}
+.ligne em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--yellow);opacity:.85}
+.rien{padding:10px;font-size:11.5px;color:var(--txt-dim);font-style:italic}
+
+/* fiche de détail et fiche d'informations */
+.fiche{padding:8px 10px;font-size:12px;line-height:1.7}
+/* Une cote que le lecteur a devinee faute de padstack declare. En italique et
+   attenuee : elle accompagne le chiffre sans le disputer, et elle doit se
+   distinguer au coup d'oeil d'une valeur lue dans le fichier. */
+.fiche .suppose{font-style:italic;opacity:.68;font-size:.85em;cursor:help}
+.fiche h3{margin:0 0 6px;font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--yellow);font-weight:400}
+.fiche h3+h3,.fiche table+h3{margin-top:12px}
+.fiche table{width:100%;border-collapse:collapse;font-size:11.5px}
+.fiche td{padding:2px 6px 2px 0;vertical-align:top;color:var(--txt-dim)}
+.fiche td+td{color:var(--txt);font-family:var(--mono);text-align:right;
+  word-break:break-word}
+.fiche td.g{text-align:left}
+.fiche tr.sep td{border-top:1px solid var(--border);padding-top:6px}
+.fiche .val{color:var(--yellow)}
+.fiche .lien{color:var(--blue);cursor:pointer;text-decoration:underline dotted}
+/* Ce qui accompagne un chiffre sans en être un : d'où vient la formule, et ce
+   qui a manqué pour l'appliquer. Le second se lit en jaune — une valeur
+   calculée sur une hypothèse n'est pas une valeur lue. */
+.fiche .note{margin-top:8px;font-size:10.5px;line-height:1.5;color:var(--txt-dim)}
+.fiche .note.attention{color:var(--yellow);opacity:.95}
+
+/* L'empilage que le calcul utilise : une ligne par conducteur, une ligne pour
+   le diélectrique qui le sépare du suivant. Les champs sont modifiables — un
+   fichier IPC-2581 ne renseigne pas toujours l'épaisseur ni la permittivité,
+   et c'est ici qu'on comble. */
+table.pileForm{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px}
+table.pileForm td{padding:2px 0;vertical-align:middle;color:var(--txt-dim)}
+table.pileForm td+td{text-align:right;white-space:nowrap;font-family:var(--mono);
+  font-size:10.5px}
+table.pileForm tr.cu td.g{color:var(--txt)}
+table.pileForm tr.gap td.g{padding-left:14px;font-size:11px;opacity:.85}
+table.pileForm .pastille{display:inline-block;width:9px;height:9px;border-radius:2px;
+  margin-right:6px;border:1px solid #0008;vertical-align:baseline}
+table.pileForm em{font-style:normal;font-family:var(--mono);font-size:9px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--yellow);opacity:.8}
+input.ltv{
+  width:64px;background:#101216;border:1px solid var(--border2);color:var(--txt);
+  border-radius:4px;padding:1px 4px;font-family:var(--mono);font-size:10.5px;
+  text-align:right;
+}
+input.ltv:focus{outline:none;border-color:var(--blue)}
+/* Vide : la valeur affichée en gris est celle qui sera prise faute de mieux. */
+input.ltv.manque{border-color:#6b5a1e;background:#191710}
+input.ltv.manque::placeholder{color:var(--yellow);opacity:.55}
+/* Saisie ici, et non lue dans le fichier : la distinction doit rester visible. */
+input.ltv.saisi{border-color:var(--blue);color:#dff0ff}
+select.ltRoleSelect{
+  background:#101216;border:1px solid var(--border2);color:var(--txt-dim);
+  border-radius:3px;padding:1px 3px;font-family:var(--mono);font-size:9.5px;
+  cursor:pointer;margin-left:6px;vertical-align:middle;
+}
+select.ltRoleSelect:focus{outline:none;border-color:var(--blue)}
+select.ltRoleSelect.saisi{border-color:var(--blue);color:#dff0ff;background:#0e1724}
+select.ltRoleSelect option{background:#15181e;color:var(--txt)}
+
+/* Badges de fonction des couches dans la liste d'empilage */
+.badgeFonction{
+  display:inline-block;font-size:9px;padding:1px 4px;border-radius:3px;
+  font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;
+  line-height:1.2;vertical-align:middle;margin-left:4px;
+}
+.badgeFonction.fn-plan{background:#2a2312;color:var(--yellow);border:1px solid #5a4718}
+.badgeFonction.fn-gnd{background:rgba(63,160,234,.15);color:var(--blue);border:1px solid rgba(63,160,234,.35)}
+.badgeFonction.fn-pwr{background:rgba(232,68,58,.15);color:#f0796f;border:1px solid rgba(232,68,58,.35)}
+.badgeFonction.fn-sig{background:#12241b;color:var(--green);border:1px solid #1f4a33}
+.badgeFonction.fn-diel{background:#1c1d1a;color:#9b9e93;border:1px solid #363a32}
+.badgeFonction.fn-masque{background:#22172f;color:#c084fc;border:1px solid #4a2d6b}
+.badgeFonction.fn-seri{background:#1a1c22;color:#d0d4dc;border:1px solid #383c48}
+.badgeFonction.fn-autre{background:#112220;color:var(--accent);border:1px solid #1b453f}
+
+
+/* empilage : une bande par couche, hauteur proportionnelle à l'épaisseur */
+.pile{display:flex;flex-direction:column;gap:2px;padding:6px 10px 2px}
+.pile .lit{display:flex;align-items:center;gap:8px;font-size:11px;font-family:var(--mono)}
+.pile .bande{flex:none;width:26px;border-radius:2px;border:1px solid #0006}
+.pile .lit span{color:var(--txt-dim)}
+.pile .lit b{color:var(--txt);font-weight:400}
+
+/* ---------- pied de page ---------- */
+footer{
+  display:flex;gap:16px;align-items:center;flex-wrap:wrap;
+  padding:5px 14px;background:var(--panel);border-top:1px solid var(--border);
+  font-family:var(--mono);font-size:11px;color:var(--txt-dim);
+}
+footer b{color:var(--txt);font-weight:600}
+footer .push{margin-left:auto}
+footer .hint{color:var(--yellow);opacity:.9}
+
+/* La liste de la sélection à plusieurs morceaux (Ctrl+clic). Trois colonnes :
+   le rang — celui dont parle le tableau des lots du panneau de simulation —,
+   ce que le morceau est, et de quoi le retirer. La colonne du milieu porte une
+   phrase et non un nombre : elle s'aligne à gauche, contre la règle générale
+   des fiches, où la deuxième colonne est une valeur. */
+.fiche table.selListe td:nth-child(2){
+  text-align:left;font-family:inherit;color:var(--txt);
+  padding-right:4px;word-break:break-word;
+}
+.fiche table.selListe td:last-child{width:1%;text-align:right;padding-right:0}
+.fiche table.selListe td:last-child button{padding:0 5px;line-height:1.5}
+.fiche table.selListe tr:hover td{background:var(--panel2)}

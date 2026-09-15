@@ -1,0 +1,64 @@
+# =============================================================================
+# Environnements virtuels Python & configuration
+# =============================================================================
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+.env
+.env.*
+!.env.example
+
+# =============================================================================
+# Binaires lourds externes (à télécharger séparément)
+# =============================================================================
+# Solveur FDTD openEMS (binaires Windows / Linux)
+openEMS/
+openems/
+openEMS*/
+openems*/
+
+# Visualiseur 3D ParaView (archives et dossiers décompressés)
+ParaView*/
+paraview*/
+ParaView-*
+paraview-*
+
+# =============================================================================
+# Caches et artefacts Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# =============================================================================
+# Fichiers temporaires de calcul, scratch et sorties volumineuses
+# =============================================================================
+scratch/
+scratch_*.json
+*.vtr
+*.vts
+*.vti
+*.h5
+*.hdf5
+
+# =============================================================================
+# IDEs, éditeurs et OS
+# =============================================================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini

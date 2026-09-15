@@ -1,0 +1,158 @@
+/* Éditeur PCB — espace de travail modulaire
+   Panneaux détachables : chaque panneau peut être empilé dans un dock
+   (gauche, droite, bas), flotter au-dessus du canevas, être replié ou fermé.
+   La disposition est conservée dans le stockage local du navigateur. */
+
+/* ---------- structure ---------- */
+#ws{flex:1;display:flex;min-height:0;position:relative}
+.ctr{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+#canvasWrap{flex:1;position:relative;min-width:0;min-height:0}
+
+.dock{
+  display:flex;flex-direction:column;min-height:0;min-width:0;flex:none;
+  background:var(--panel);overflow:hidden;
+}
+#dockL{width:212px;border-right:1px solid var(--border)}
+#dockR{width:278px;border-left:1px solid var(--border)}
+#dockB{height:200px;border-top:1px solid var(--border);flex-direction:row}
+.dock.empty{display:none}
+.dock.empty + .gut,.gut.off{display:none}
+
+/* ---------- poignées de redimensionnement ---------- */
+.gut{flex:none;background:transparent;position:relative;z-index:6;touch-action:none}
+.gut.gv{width:5px;cursor:col-resize;margin:0 -2px}
+.gut.gh{height:5px;cursor:row-resize;margin:-2px 0}
+.gut:hover,.gut.act{background:var(--blue)}
+.gut.gh.off,.dock.empty ~ .gut.gh{display:none}
+
+/* ---------- panneau ---------- */
+.pnl{
+  display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;
+  background:var(--panel);
+}
+.dock > .pnl{flex:1 1 0}
+#dockB > .pnl{flex:1 1 0;border-right:1px solid var(--border)}
+.dock > .pnl ~ .pnl{border-top:1px solid var(--border)}
+#dockB > .pnl ~ .pnl{border-top:none;border-left:1px solid var(--border)}
+.pnl.collapsed{flex:0 0 auto !important;height:auto !important}
+.pnl.collapsed > .pnl-body{display:none !important}
+.pnl.drop-src{opacity:.4}
+
+.pnl-head{
+  display:flex;align-items:center;gap:7px;flex:none;
+  padding:7px 7px 7px 8px;background:var(--panel2);
+  border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-size:10px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--txt-dim);
+  cursor:grab;user-select:none;touch-action:none;
+}
+.pnl-head:hover{color:var(--txt)}
+.pnl.dragging .pnl-head{cursor:grabbing}
+.pnl-grip{font-size:11px;letter-spacing:0;color:#4d525b;flex:none}
+.pnl-head:hover .pnl-grip{color:var(--blue)}
+.pnl-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pnl-acts{display:flex;align-items:center;gap:2px;flex:none}
+.pnl-btn{
+  background:transparent;border:1px solid transparent;color:var(--txt-dim);
+  border-radius:4px;width:19px;height:19px;line-height:1;padding:0;cursor:pointer;
+  font-size:10px;display:inline-flex;align-items:center;justify-content:center;
+}
+.pnl-btn:hover{border-color:var(--border2);color:#fff;background:#22252b}
+.pnl.collapsed .pnl-btn[data-act=collapse]{transform:rotate(-90deg)}
+.pnl-btn[data-act=maximize]{display:none}
+.pnl.floating .pnl-btn[data-act=maximize]{display:inline-flex}
+
+.pnl-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.pnl-bar{
+  display:flex;align-items:center;gap:8px;flex:none;flex-wrap:wrap;
+  padding:6px 8px;border-bottom:1px solid var(--border);background:#15171a;
+}
+.pnl-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--txt-dim)}
+.pnl-bar select{
+  background:#101216;border:1px solid var(--border2);color:var(--txt);
+  border-radius:4px;padding:2px 4px;font-family:var(--mono);font-size:10px;
+}
+.pnl-bar select:focus{outline:none;border-color:var(--blue)}
+#unroutedWrap{display:inline-flex;align-items:center;gap:5px;cursor:pointer;
+  font-family:var(--mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--txt-dim)}
+#unroutedWrap input{accent-color:var(--blue);margin:0}
+
+/* les conteneurs remplis par le script prennent toute la hauteur restante */
+#props,#rules,#layers,#list,#palette,#bom{flex:1;min-height:0;max-height:none;overflow-y:auto}
+#props::-webkit-scrollbar,#rules::-webkit-scrollbar,#palette::-webkit-scrollbar,#bom::-webkit-scrollbar{width:8px}
+#props::-webkit-scrollbar-thumb,#rules::-webkit-scrollbar-thumb,#palette::-webkit-scrollbar-thumb,#bom::-webkit-scrollbar-thumb{background:#31343a;border-radius:4px}
+
+/* ---------- séparateur entre panneaux d'un même dock ---------- */
+.psplit{flex:none;background:transparent;z-index:5;touch-action:none}
+.dock > .psplit{height:5px;cursor:row-resize;margin:-3px 0}
+#dockB > .psplit{width:5px;height:auto;cursor:col-resize;margin:0 -3px}
+.psplit:hover,.psplit.act{background:var(--blue)}
+
+/* ---------- panneaux flottants ---------- */
+#floatLayer{position:fixed;inset:0;pointer-events:none;z-index:30}
+#floatLayer .pnl{
+  position:absolute;pointer-events:auto;border:1px solid var(--border2);
+  border-radius:7px;box-shadow:0 18px 44px rgba(0,0,0,.55);
+}
+#floatLayer .pnl.maximized{border-radius:0;box-shadow:none;border-left:none;border-right:none}
+#floatLayer .pnl > .pnl-head{border-radius:6px 6px 0 0}
+#floatLayer .pnl.maximized > .pnl-head{border-radius:0}
+#floatLayer .pnl.collapsed{height:auto !important}
+#floatLayer .pnl.collapsed > .pnl-head{border-radius:6px;border-bottom:none}
+.fres{position:absolute;z-index:2;display:none;touch-action:none}
+#floatLayer .pnl > .fres{display:block}
+.fres.e{top:8px;bottom:8px;right:-3px;width:7px;cursor:ew-resize}
+.fres.w{top:8px;bottom:8px;left:-3px;width:7px;cursor:ew-resize}
+.fres.s{left:8px;right:8px;bottom:-3px;height:7px;cursor:ns-resize}
+.fres.n{left:8px;right:8px;top:-3px;height:7px;cursor:ns-resize}
+.fres.se{right:-3px;bottom:-3px;width:14px;height:14px;cursor:nwse-resize}
+.fres.sw{left:-3px;bottom:-3px;width:14px;height:14px;cursor:nesw-resize}
+.fres.ne{right:-3px;top:-3px;width:14px;height:14px;cursor:nesw-resize}
+.fres.nw{left:-3px;top:-3px;width:14px;height:14px;cursor:nwse-resize}
+#floatLayer .pnl.collapsed .fres{display:none}
+
+/* ---------- retour visuel du glisser-déposer ---------- */
+#dropZone{
+  position:fixed;display:none;z-index:60;pointer-events:none;
+  background:rgba(63,160,234,.16);border:1px dashed var(--blue);border-radius:4px;
+}
+#dropZone.line{background:var(--blue);border:none;border-radius:2px;box-shadow:0 0 8px rgba(63,160,234,.8)}
+#dropZone.on{display:block}
+#dragGhost{
+  position:fixed;display:none;z-index:70;pointer-events:none;
+  padding:6px 10px;background:var(--panel2);border:1px solid var(--blue);
+  border-radius:5px;font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--txt);box-shadow:0 10px 26px rgba(0,0,0,.5);
+}
+#dragGhost.on{display:block}
+body.ws-drag{cursor:grabbing !important}
+body.ws-drag *{cursor:grabbing !important}
+body.ws-resize-v *{cursor:col-resize !important}
+body.ws-resize-h *{cursor:row-resize !important}
+
+/* ---------- menu de l'espace de travail ---------- */
+#wsMenu{
+  position:fixed;display:none;z-index:80;min-width:216px;padding:5px;
+  background:var(--panel);border:1px solid var(--border2);border-radius:7px;
+  box-shadow:0 18px 40px rgba(0,0,0,.55);
+}
+#wsMenu.on{display:block}
+#wsMenu .mi{
+  display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;
+  background:transparent;border:none;border-radius:5px;color:var(--txt);
+  font-family:var(--ui);font-size:12px;cursor:pointer;text-align:left;
+}
+#wsMenu .mi:hover{background:#22252b}
+#wsMenu .mi .st{margin-left:auto;font-family:var(--mono);font-size:9px;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--txt-dim)}
+#wsMenu .mi.off{color:var(--txt-dim)}
+#wsMenu .mtitle{font-family:var(--mono);font-size:9px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--txt-dim);padding:6px 8px 4px}
+#wsMenu .msep{height:1px;background:var(--border);margin:4px 2px}
+#wsMenu .mi .ck{width:11px;flex:none;color:var(--yellow);font-size:10px}
+
+@media (max-width:980px){
+  #dockL{width:176px}#dockR{width:214px}
+}
