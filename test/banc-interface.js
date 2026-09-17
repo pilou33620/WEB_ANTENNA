@@ -384,6 +384,13 @@ verifie("le port de l'IFA est au fond du decroche",
         Math.abs(tIfa.port.y-(pIfa.Lg-pIfa.ed))<1e-4);
 verifie("le via de court-circuit reste hors du decroche",
         via.x<(pIfa.marge+pIfa.d-pIfa.wf/2-pIfa.gd));
+const tIfaTop=CON_MOTIF_IFA.tracer(cx,Object.assign({},pIfa,{masseTop:1}));
+verifie("l'IFA par defaut n'a pas de plan de masse en haut",
+        !tIfa.formes.some(f=>f.cu==="haut"&&!f.trou&&f.type==="rect"&&f.net==="GND"));
+verifie("l'IFA avec masseTop pose un plan de masse sur le dessus",
+        tIfaTop.formes.some(f=>f.cu==="haut"&&!f.trou&&f.type==="rect"&&f.net==="GND"));
+verifie("l'IFA avec masseTop pose aussi son decroche d'isolation sur le dessus",
+        tIfaTop.formes.some(f=>f.cu==="haut"&&f.trou&&f.type==="rect"));
 
 /* -- le MIFA : replier ne raccourcit pas le fil -------------------------- */
 const pMifa=conGabaritDefauts(CON_MOTIF_MIFA,cx);
@@ -1333,6 +1340,20 @@ ANT_COURBE_ETAT.m1 = 99; // hors borne
 antResultatsRendre();
 verifie("un indice de marqueur hors borne est securise a null",
         ANT_COURBE_ETAT.m1 === null);
+
+// 20. L'antenne exemple et la vue du maillage FDTD
+charger("26-exemple.js");
+charger("15-overlay2d.js");
+verifie("l'exemple patch porte des cotes adaptees",
+        typeof EX==="object"&&EX.cotes&&EX.cotes.L===27.5&&EX.cotes.y0===8.1&&EX.cotes.g===1.49);
+verifie("l'etat initial du maillage est desactive",
+        ANT.vueMaillage === false);
+antBasculerVueMaillage(true);
+verifie("antBasculerVueMaillage(true) active le maillage",
+        ANT.vueMaillage === true);
+antBasculerVueMaillage();
+verifie("antBasculerVueMaillage() inverse l'etat",
+        ANT.vueMaillage === false);
 
 
 

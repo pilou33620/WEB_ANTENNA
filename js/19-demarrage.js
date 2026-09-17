@@ -73,13 +73,19 @@ function antBrancherBarre(){
   b("bArreter",antArreter);
   b("bVue2d",function(){ antVuePoser("2d"); });
   b("bVue3d",function(){ antVuePoser("3d"); });
+  b("bVueMaillage",function(){
+    if(typeof antBasculerVueMaillage==="function")antBasculerVueMaillage();
+  });
 
   /* Le raccourci qui sert le plus : passer d'une vue à l'autre sans quitter
-     le clavier. `V` est pris par la visionneuse (rien), `3` est libre. */
+     le clavier. `V` est pris par la visionneuse (rien), `3` est libre, `m` bascule le maillage. */
   window.addEventListener("keydown",function(e){
     if(e.target&&/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName))return;
     if(e.ctrlKey||e.altKey||e.metaKey)return;
     if(e.key==="3"){ antVuePoser(ANT.vue==="3d"?"2d":"3d"); }
+    if((e.key==="m"||e.key==="M")&&typeof antBasculerVueMaillage==="function"){
+      antBasculerVueMaillage();
+    }
     if(e.key==="Escape"&&ANT.posePort){
       ANT.posePort=false;
       document.body.classList.remove("pose-port");

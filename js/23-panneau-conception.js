@@ -410,6 +410,11 @@ function conApercuLier(){
 /* Un champ de cote. `n` (le nombre de replis du méandre) est un compte, pas
    une longueur : il ne se convertit pas en pouces et ne porte pas d'unité. */
 function conChampCote(ch,val){
+  if(ch.booleen){
+    return '<span><label class="ck" title="'+aEsc(ch.aide)+'">'+
+      '<input type="checkbox" data-con-cote="'+ch.id+'"'+(val?' checked':'')+'> '+
+      '<b>'+aEsc(conSymbole(ch))+'</b> '+aEsc(ch.nom)+'</label></span>';
+  }
   /* LE SYMBOLE D'ABORD, et en gras : c'est la lettre portée sur le dessin
      juste au-dessus. Sans elle, il faut lire « hauteur au-dessus de la
      masse » et deviner que c'est le « ha » du croquis — ce qui, sur un motif
@@ -817,6 +822,14 @@ function conPanneauLier(box){
     const ch=(conGabarit(CON.gabarit)||{champs:[]}).champs
       .find(c=>c.id===el.dataset.conCote);
     if(!ch)return;
+    if(ch.booleen){
+      el.onchange=function(){
+        CON.gabaritP[ch.id]=el.checked?1:0;
+        CON.gabaritTouche[ch.id]=true;
+        conApercuMaj();
+      };
+      return;
+    }
     el.oninput=function(){
       const v=parseFloat(String(el.value).replace(",","."));
       if(!isFinite(v))return;

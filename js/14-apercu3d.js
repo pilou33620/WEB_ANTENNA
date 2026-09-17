@@ -149,7 +149,7 @@ function ant3dDessiner(){
    frappe dans un champ de saisie rendrait la 3D inutilisable. */
 function ant3dClef(m){
   return [m.cuivre.length, m.stats.polygones, m.vias.length,
-          m.modele_cuivre, m.z_haut,
+          m.modele_cuivre, m.z_haut, !!ANT.vueMaillage,
           JSON.stringify(m.primitives),
           m.boite.x1,m.boite.x2,m.boite.y1,m.boite.y2,m.boite.z1,m.boite.z2,
           JSON.stringify(m.ports||[m.port])
@@ -183,6 +183,7 @@ function ant3dMaj(){
   ant3dObjets(m,T);
   ant3dPorts(m,T);
   ant3dBoites(m,T);
+  ant3dMaillage(m,T);
   ant3dRepere(m,T);
 
   ant3dPoserCamera();
@@ -411,6 +412,32 @@ function ant3dBoites(m,T){
      cadre est degenere au point de ne plus rien montrer. */
   if(b.x2-b.x1>2.05*e&&b.y2-b.y1>2.05*e&&b.z2-b.z1>2.05*e)
     cadre(b.x1+e,b.y1+e,b.z1+e,b.x2-e,b.y2-e,b.z2-e,0xe8443a,true);
+}
+
+/* La grille FDTD : lignes de maillage en 3D dans le plan de l'antenne */
+function ant3dMaillage(m,T){
+  if(!ANT.vueMaillage)return;
+  const maille=m.maillage;
+  if(!maille||!maille.x||!maille.y)return;
+  const mx=maille.x, my=maille.y;
+  const b=m.boite;
+  const zPlane=m.z_haut||0;
+  const positions=[];
+  for(let i=0;i<mx.length;i++){
+    const p1=T(mx[i],b.y1,zPlane);
+    const p2=T(mx[i],b.y2,zPlane);
+    positions.push(p1[0],p1[1],p1[2], p2[0],p2[1],p2[2]);
+  }
+  for(let j=0;j<my.length;j++){
+    const p1=T(b.x1,my[j],zPlane);
+    const p2=T(b.x2,my[j],zPlane);
+    positions.push(p1[0],p1[1],p1[2], p2[0],p2[1],p2[2]);
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute("position",new THREE.Float32BufferAttribute(positions,3));
+  const mat=new THREE.LineBasicMaterial({color:0x3fa0ea,transparent:true,opacity:0.32});
+  const lines=new THREE.LineSegments(geo,mat);
+  ANT3D.racine.add(lines);
 }
 
 /* Un trièdre, coin de la boîte : sans lui, une vue tournée ne dit plus où

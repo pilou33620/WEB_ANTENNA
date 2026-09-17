@@ -145,7 +145,8 @@ const ANT={
   refus:null,                  // {message, conseil} quand il n'y en a pas
   tache:null,                  // {id, etat, avancement, …} pendant le calcul
   resultat:null,               // S11, Z, ROE, champ lointain
-  vue:"2d"
+  vue:"2d",
+  vueMaillage:false
 };
 
 /* ==========================================================================

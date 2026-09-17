@@ -32,6 +32,7 @@ function antSurimpression(c,dpr,W,H){
   antPeindreRetenu(c,dpr);
   antPeindreObjets(c,dpr);
   antPeindreBoite(c,dpr);
+  antPeindreMaillage(c,dpr);
   antPeindrePort(c,dpr);
 }
 
@@ -149,6 +150,61 @@ function antPeindreBoite(c,dpr){
              " dont "+((b.ep_pml||0)*k).toFixed(1).replace(".",",")+" de PML",
              a.x+6,a.y-6);
   c.restore();
+}
+
+/* -------------------------------------------------------------------------
+   Le maillage FDTD (grille Yee), vu de dessus
+   ------------------------------------------------------------------------- */
+function antPeindreMaillage(c,dpr){
+  if(!ANT.vueMaillage)return;
+  const m=ANT.modele;
+  if(!m||!m.maillage||!m.maillage.x||!m.maillage.y)return;
+  const k=(V.unite==="in")?(1/25.4):1;
+  const b=m.boite;
+  const x1=b.x1*k, x2=b.x2*k;
+  const y1=b.y1*k, y2=b.y2*k;
+  const mx=m.maillage.x, my=m.maillage.y;
+
+  poserMonde(c,dpr);
+  c.save();
+  c.lineWidth=0.75/V.vue.scale;
+  c.strokeStyle="rgba(63, 160, 234, 0.28)";
+  c.beginPath();
+  for(let i=0;i<mx.length;i++){
+    const x=mx[i]*k;
+    c.moveTo(x,y1);
+    c.lineTo(x,y2);
+  }
+  for(let j=0;j<my.length;j++){
+    const y=my[j]*k;
+    c.moveTo(x1,y);
+    c.lineTo(x2,y);
+  }
+  c.stroke();
+  c.restore();
+
+  /* Étiquette en pixels CSS dans le coin supérieur gauche */
+  c.setTransform(dpr,0,0,dpr,0,0);
+  const a=w2s(x1,y1);
+  c.save();
+  c.font='10px "JetBrains Mono","SF Mono",Consolas,monospace';
+  c.fillStyle="#3fa0ea";
+  c.textBaseline="bottom";
+  c.fillText("grille FDTD : "+mx.length+" × "+my.length+" lignes (X × Y)"+
+             (m.estimation?" · "+(m.estimation.cellules||0).toLocaleString("fr-FR")+" cellules":""),
+             a.x+6,a.y-6);
+  c.restore();
+}
+
+function antBasculerVueMaillage(force){
+  ANT.vueMaillage=(force!==undefined)?!!force:!ANT.vueMaillage;
+  const btn=document.getElementById("bVueMaillage");
+  if(btn && btn.classList && typeof btn.classList.toggle==="function")btn.classList.toggle("on",ANT.vueMaillage);
+  if(ANT.vue==="3d"){
+    if(typeof ant3dMaj==="function")ant3dMaj();
+  }else{
+    if(typeof dessiner==="function")dessiner();
+  }
 }
 
 /* -------------------------------------------------------------------------

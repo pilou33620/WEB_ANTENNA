@@ -459,7 +459,9 @@ const CON_MOTIF_IFA={
     {id:"wf", nom:"largeur du brin d'alimentation",
      aide:"synthétisé pour 50 Ω"},
     {id:"dVia", nom:"diamètre du via", aide:"le court-circuit, traversant"},
-    {id:"marge", nom:"marge de carte", aide:"le substrat qui dépasse du bras"}
+    {id:"marge", nom:"marge de carte", aide:"le substrat qui dépasse du bras"},
+    {id:"masseTop", nom:"plan de masse dessus (TOP)", booleen:true, sym:"GND₂",
+     aide:"ajoute un plan de masse sur la face supérieure, relié au court-circuit et découpé autour du brin d'alimentation"}
   ],
   defauts:function(c){
     const quart=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
@@ -479,7 +481,8 @@ const CON_MOTIF_IFA={
       Lg:Math.max(quart,15),
       wf:c.wf,
       dVia:dVia,
-      marge:Math.max(3*c.h,2)
+      marge:Math.max(3*c.h,2),
+      masseTop:0
     };
   },
   tracer:function(c,p){
@@ -497,19 +500,26 @@ const CON_MOTIF_IFA={
     const xg2=xf+p.wf/2+gd;    // bord droit de l'encoche
     const dev=p.La+p.ha+p.sc;
     const festim=CON_C0/(4*dev*Math.sqrt(c.eeffAir));
+    const formes=[
+      gRect("bas","GND",0,0,Lb,p.Lg),
+      /* Décroché dans la masse sous le brin d'alimentation : le brin
+         n'est plus noyé dans le plan de masse */
+      gRect("bas","",xg1,yd,xg2,yg,true),
+      /* Le bras et son court-circuit : une seule piste coudée. */
+      gPiste("haut","ANTENNE",[[x0,ys],[x0,yb],[x0+p.La,yb]],p.wb),
+      /* Le brin d'alimentation descend dans le décroché jusqu'au fond */
+      gPiste("haut","ANTENNE",[[xf,yb],[xf,yd]],p.wf),
+      gVia("ANTENNE",x0,ys,p.dVia)
+    ];
+    if(p.masseTop){
+      /* Plan de masse sur la face supérieure (TOP) : raccordement direct du
+         court-circuit à plat, avec décroché d'isolation autour de l'alimentation */
+      formes.push(gRect("haut","GND",0,0,Lb,p.Lg));
+      formes.push(gRect("haut","",xg1,yd-0.3,xg2,yg,true));
+    }
     return {
       carte:{L:Lb, W:Wb},
-      formes:[
-        gRect("bas","GND",0,0,Lb,p.Lg),
-        /* Décroché dans la masse sous le brin d'alimentation : le brin
-           n'est plus noyé dans le plan de masse */
-        gRect("bas","",xg1,yd,xg2,yg,true),
-        /* Le bras et son court-circuit : une seule piste coudée. */
-        gPiste("haut","ANTENNE",[[x0,ys],[x0,yb],[x0+p.La,yb]],p.wb),
-        /* Le brin d'alimentation descend dans le décroché jusqu'au fond */
-        gPiste("haut","ANTENNE",[[xf,yb],[xf,yd]],p.wf),
-        gVia("ANTENNE",x0,ys,p.dVia)
-      ],
+      formes:formes,
       port:{x:xf, y:yd, w:p.wf, l:Math.min(ed,0.6)},
       cotes:[
         gCote("La",x0,Wb,x0+p.La,Wb,2.2,"La"),
@@ -528,7 +538,8 @@ const CON_MOTIF_IFA={
         titre:"F inversé imprimé",
         resume:"bras "+conLong(p.La,2)+" à "+conLong(p.ha,2)+
                " de la masse, alimentation à "+conLong(p.d,2)+
-               " du court-circuit, décroché "+conLong(ed,2)+" × "+conLong(p.wf+2*gd,2),
+               " du court-circuit, décroché "+conLong(ed,2)+" × "+conLong(p.wf+2*gd,2)+
+               (p.masseTop?" [masse TOP+BOT]":""),
         festim:festim,
         lignes:[
           ["Quart d'onde visé",
@@ -538,7 +549,9 @@ const CON_MOTIF_IFA={
           ["Décroché de masse (ed × (wf + 2·gd))",
              conLong(ed,2)+" × "+conLong(p.wf+2*gd,2)+" — isole l'alimentation"],
           ["Via de court-circuit", "⌀ "+conLong(p.dVia,2)+", traversant"],
-          ["Plan de masse", conLong(p.Lg,1)+" — il fait partie de l'antenne"],
+          ["Plan de masse", p.masseTop
+             ? (conLong(p.Lg,1)+" — dessus (TOP) et dessous (BOTTOM)")
+             : (conLong(p.Lg,1)+" — il fait partie de l'antenne")],
           ["Carte", conLong(Lb,2)+" × "+conLong(Wb,2)]
         ]
       }
@@ -918,7 +931,8 @@ function conGabaritDefauts(g,c){
   const out={};
   g.champs.forEach(function(ch){
     const v=d[ch.id];
-    out[ch.id]=ch.entier?Math.max(1,Math.round(v)):+(+v).toFixed(4);
+    if(ch.booleen)out[ch.id]=v?1:0;
+    else out[ch.id]=ch.entier?Math.max(1,Math.round(v)):+(+v).toFixed(4);
   });
   return out;
 }
@@ -931,6 +945,10 @@ function conGabaritCotes(g,c,p){
   const d=conGabaritDefauts(g,c);
   const out={};
   g.champs.forEach(function(ch){
+    if(ch.booleen){
+      out[ch.id]=(p&&p[ch.id]!=null)?(p[ch.id]?1:0):(d[ch.id]?1:0);
+      return;
+    }
     let v=(p&&p[ch.id]!=null)?+p[ch.id]:NaN;
     if(!isFinite(v))v=d[ch.id];
     if(ch.entier)v=Math.max(1,Math.round(v));
@@ -951,6 +969,11 @@ function conGabaritEcarts(g,c,p){
   g.champs.forEach(function(ch){
     const a=d[ch.id], b=p[ch.id];
     if(a==null||b==null)return;
+    if(ch.booleen){
+      if(!a!==!b)
+        out.push({champ:ch, calcul:a?1:0, pose:b?1:0});
+      return;
+    }
     if(Math.abs(a-b)>Math.max(1e-4,Math.abs(a)*0.002))
       out.push({champ:ch, calcul:a, pose:b});
   });

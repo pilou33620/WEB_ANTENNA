@@ -53,7 +53,16 @@ const EX={
      descente juste avant la fin — et une transformée sur une descente coupée
      n'est pas une mesure. On laisse donc de la marge : ce qui arrête, c'est
      les −40 dB, pas le compteur. */
-  nmax:60000
+  nmax:60000,
+  /* Cotes pré-adaptées issues de l'analyse 3D FDTD (A-FAIRE.md & croisement-g-y0.json) :
+     - L = 27.50 mm (corrige l'allongement effectif pour centrer la résonance à 2,45 GHz)
+     - y0 = 8.10 mm (encastrement optimal évitant la réactance capacitive excessive de la formule théorique)
+     - g = 1.49 mm (fentes resserrées pour minimiser la capacité parasite) */
+  cotes:{
+    L:27.50,
+    y0:8.10,
+    g:1.49
+  }
 };
 
 /* Poser l'exemple. Rien de plus que la suite des gestes qu'on ferait à la
@@ -82,7 +91,7 @@ function exPoser(){
         entre le cuivre du dessus et le plan de masse, et demande le champ
         lointain. */
   CON.fcible=EX.f;
-  conGabaritPoser("patch");
+  conGabaritPoser("patch", EX.cotes);
 
   /* 3. L'arrêt et le maillage, reposés — voir EX plus haut. */
   ANT.arret.energie=EX.energie;
@@ -98,10 +107,8 @@ function exPoser(){
   antMaj(true);
   antAssistantRendre();
 
-  hint("Exemple posé : patch 2,45 GHz sur FR-4 1,6 mm, port au bout de la "+
-       "ligne, bande 2,08–2,82 GHz, arrêt à −40 dB. Il ne reste qu'à presser "+
-       "▶ Lancer : ce qu'on vérifie, c'est que le journal défile et que les "+
-       "courbes reviennent.");
+  hint("Exemple posé : patch 2,45 GHz adapté sur FR-4 1,6 mm (L=27,5 mm, y₀=8,1 mm, g=1,5 mm), port au bout de la "+
+       "ligne, bande 2,08–2,82 GHz, arrêt à −40 dB. Pressez ▶ Lancer pour vérifier toute la chaîne (S₁₁ ≤ −15 dB).");
 }
 
 /* ==========================================================================
