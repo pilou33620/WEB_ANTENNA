@@ -37,7 +37,18 @@
     <button class="tb tb-ia" id="bIaAssistant" title="Assistant IA technique — Google AI Studio. Vérification locale des réglages sans réseau ni clé ; rien ne s'applique sans un clic. (Alt+I)"><span class="ia-sparkle">✨</span> IA</button>
     <button class="tb" id="bScript" title="Écrire le script Python openEMS qui refait exactement cette simulation" disabled>⤓ Script .py</button>
     <button class="tb" id="bLancer" title="Lancer openEMS sur ce modèle" disabled>▶ Lancer</button>
+    <button class="tb danger" id="bArreter" title="Arrêter la simulation en cours (conserve l'application ouverte)" style="display:none">■ Stop</button>
+    <div class="sim-header-prog" id="simProgression" style="display:none" title="Progression de la simulation">
+      <div class="sim-prog-track">
+        <div class="sim-prog-fill" id="simProgFill" style="width:0%"></div>
+      </div>
+      <span class="sim-prog-txt" id="simProgTxt">0 %</span>
+      <span class="sim-prog-reste" id="simProgReste"></span>
+    </div>
     <button class="tb" id="bWs">Espace de travail ▾</button>
+  </div>
+  <div class="sim-top-line" id="simTopLine" style="display:none">
+    <div class="sim-top-line-fill" id="simTopLineFill" style="width:0%"></div>
   </div>
 </header>
 
@@ -329,6 +340,7 @@
   <span>Perçages <b id="fTrous">0</b></span>
   <span id="fHint" class="hint">Démarrage…</span>
   <span class="push" id="fSolveur">openEMS : …</span>
+  <span id="fAvancement" class="sim-footer-prog" style="display:none"></span>
   <span id="fPos">—</span>
   <span id="fZoom">100 %</span>
   <span id="fFace">dessus</span>

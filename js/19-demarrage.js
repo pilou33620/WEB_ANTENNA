@@ -70,6 +70,7 @@ function antBrancherBarre(){
   });
   b("bScript",antTelechargerScript);
   b("bLancer",antLancer);
+  b("bArreter",antArreter);
   b("bVue2d",function(){ antVuePoser("2d"); });
   b("bVue3d",function(){ antVuePoser("3d"); });
 

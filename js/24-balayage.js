@@ -621,6 +621,12 @@ async function antLancerBalayage(){
   antJournalRendre();
   antBoutonsEtat();
   await oeSuivre(function(){ antJournalRendre(); antBoutonsEtat(); });
+  antJournalRendre();
+  antBoutonsEtat();
   antResultatsRendre();
   antAssistantRendre();
+  antBoutonsEtat();
+  if(ANT.tache&&ANT.tache.etat==="arrete"){
+    typeof wsHint==="function"&&wsHint("Balayage arrêté. Les fichiers de calcul ont été conservés.");
+  }
 }

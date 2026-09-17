@@ -28,6 +28,7 @@ body{
 }
 /* ---------- en-tête ---------- */
 header{
+  position:relative;
   display:flex;align-items:center;gap:18px;flex-wrap:wrap;
   padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--border);
 }
@@ -51,6 +52,21 @@ button.tb:disabled{opacity:.45;cursor:default;border-color:var(--border2);color:
 button.tb kbd{font-family:var(--mono);font-size:9px;color:var(--txt-dim);border:1px solid var(--border2);border-radius:3px;padding:0 3px}
 button.tb.on kbd{color:#dff0ff;border-color:#5cb4f0}
 button.tb.mini{padding:3px 7px;font-size:10.5px}
+button.tb.danger{
+  background:rgba(232,68,58,.18);
+  border-color:var(--red);
+  color:#ff9e99;
+  font-weight:600;
+}
+button.tb.danger:hover{
+  background:var(--red);
+  border-color:var(--red);
+  color:#fff;
+}
+button.tb.danger:disabled{
+  opacity:.5;
+  cursor:default;
+}
 /* ---------- disposition ---------- */
 main{flex:1;display:flex;min-height:0}
 #canvasWrap{position:absolute;inset:0;overflow:hidden}

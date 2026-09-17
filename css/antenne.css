@@ -536,3 +536,88 @@ svg.apm .apm-cote.on text{fill:var(--yellow);font-weight:600}
 }
 .vide .ou.reprendre>span{margin-bottom:0;flex:0 0 100%}
 .vide .ou.reprendre>small{flex:0 0 100%;margin-top:4px}
+
+/* ---------- Barre de chargement & progression globale de simulation ---------- */
+.sim-header-prog{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:3px 10px;background:rgba(0,0,0,.35);
+  border:1px solid var(--border2);border-radius:5px;
+  height:28px;
+}
+.sim-prog-track{
+  width:90px;height:7px;background:var(--border);border-radius:3.5px;
+  overflow:hidden;position:relative;
+}
+.sim-prog-fill{
+  display:block;height:100%;width:0%;
+  background:linear-gradient(90deg, var(--blue), var(--cyan));
+  border-radius:3.5px;transition:width .3s ease;
+}
+.sim-header-prog.arrete .sim-prog-fill{
+  background:var(--yellow);
+}
+.sim-header-prog.echoue .sim-prog-fill{
+  background:var(--red);
+}
+.sim-prog-txt{
+  font-family:var(--mono);font-size:11px;font-weight:600;
+  color:var(--txt);min-width:34px;text-align:right;
+}
+.sim-prog-reste{
+  font-family:var(--mono);font-size:10.5px;color:var(--txt-dim);
+  white-space:nowrap;
+}
+
+/* Ligne supérieure de progression fine */
+.sim-top-line{
+  position:absolute;bottom:0;left:0;width:100%;height:3px;
+  background:rgba(255,255,255,.05);z-index:10;pointer-events:none;
+}
+.sim-top-line-fill{
+  height:100%;width:0%;
+  background:linear-gradient(90deg, var(--blue), var(--cyan));
+  box-shadow:0 0 8px var(--cyan);
+  transition:width .3s ease;
+}
+.sim-top-line.arrete .sim-top-line-fill{
+  background:var(--yellow);box-shadow:0 0 8px var(--yellow);
+}
+.sim-top-line.echoue .sim-top-line-fill{
+  background:var(--red);box-shadow:0 0 8px var(--red);
+}
+
+/* Indicateur d'avancement dans le pied de page */
+.sim-footer-prog{
+  font-family:var(--mono);font-size:11px;color:var(--yellow);
+  padding:0 8px;display:inline-flex;align-items:center;gap:6px;
+}
+
+/* Boîte d'avancement dans l'Assistant (Étape Calcul) */
+.sim-assist-box{
+  margin:12px 0 16px;padding:12px 14px;
+  background:var(--panel2);border:1px solid var(--border2);border-radius:6px;
+}
+.sim-assist-box .sim-assist-head{
+  display:flex;align-items:center;justify-content:space-between;
+  gap:10px;margin-bottom:8px;
+}
+.sim-assist-box .sim-assist-titre{
+  font-family:var(--ui);font-size:12px;font-weight:600;color:var(--txt);
+}
+.sim-assist-box .sim-assist-jauge{
+  width:100%;height:8px;background:var(--border);
+  border-radius:4px;overflow:hidden;margin-bottom:8px;
+}
+.sim-assist-box .sim-assist-fill{
+  display:block;height:100%;width:0%;
+  background:linear-gradient(90deg, var(--blue), var(--cyan));
+  transition:width .3s ease;
+}
+.sim-assist-box.arrete .sim-assist-fill{background:var(--yellow)}
+.sim-assist-box.echoue .sim-assist-fill{background:var(--red)}
+.sim-assist-box .sim-assist-stats{
+  display:flex;flex-wrap:wrap;gap:12px;font-family:var(--mono);
+  font-size:11px;color:var(--txt-dim);
+}
+.sim-assist-box .sim-assist-stats b{color:var(--txt)}
+

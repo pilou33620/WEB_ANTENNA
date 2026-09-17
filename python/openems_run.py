@@ -407,6 +407,9 @@ class Tache(object):
         fin, cause = min(fins)
         self.avancement["restant_s"] = max(0.0, (fin - pas1) / pas_par_s)
         self.avancement["cause"] = cause
+        if fin > 0:
+            pct_est = max(0.0, min(99.0, 100.0 * pas1 / fin))
+            self.avancement["pourcent"] = max(self.avancement.get("pourcent", 0.0), pct_est)
 
     def vue(self, depuis=0):
         """Ce que la page affiche : l'etat, l'avancement, les lignes nouvelles."""
@@ -461,10 +464,12 @@ class Tache(object):
 
         if self.etat == "arrete":
             self.detail = "Arrete a la demande."
+            self.avancement["restant_s"] = None
             return
         if code != 0:
             self.etat = "echoue"
             self.detail = self._diagnostic(code)
+            self.avancement["restant_s"] = None
             return
 
         chemin_json = os.path.join(self.dossier, "resultats.json")
@@ -472,6 +477,7 @@ class Tache(object):
             self.etat = "echoue"
             self.detail = ("Le calcul s'est termine sans ecrire de resultats. "
                            "Le journal ci-dessous dit ou il s'est arrete.")
+            self.avancement["restant_s"] = None
             return
         try:
             with open(chemin_json, "r", encoding="utf-8") as f:
@@ -479,8 +485,11 @@ class Tache(object):
         except Exception as exc:                       # noqa: BLE001
             self.etat = "echoue"
             self.detail = "Resultats illisibles : %s" % exc
+            self.avancement["restant_s"] = None
             return
         self.etat = "fini"
+        self.avancement["pourcent"] = 100.0
+        self.avancement["restant_s"] = 0.0
         # UNE SIMULATION SEULE MERITE LE MEME DIAGNOSTIC QU'UN POINT DE
         # BALAYAGE. Elle est meme le cas le plus frequent : c'est par elle
         # qu'on commence, et c'est donc elle qui rend pour la premiere fois un
@@ -666,12 +675,22 @@ class Tache(object):
         return "Le calcul s'est arrete (code %d). Voir le journal." % code
 
     def arreter(self):
+        self.etat = "arrete"
+        self.detail = "Arrete a la demande."
+        self.avancement["restant_s"] = None
         if self.proc and self.proc.poll() is None:
-            self.etat = "arrete"
             try:
-                self.proc.terminate()
+                if sys.platform == "win32":
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(self.proc.pid)],
+                        capture_output=True, timeout=5)
+                else:
+                    self.proc.terminate()
             except Exception:                          # noqa: BLE001
-                pass
+                try:
+                    self.proc.kill()
+                except Exception:                      # noqa: BLE001
+                    pass
             return True
         return False
 
@@ -740,6 +759,16 @@ class TacheBalayage(Tache):
     # -- vue -------------------------------------------------------------
     def vue(self, depuis=0):
         out = Tache.vue(self, depuis)
+        if self.points and self.courant > 0:
+            total_pts = len(self.points)
+            pct_pt = out.get("avancement", {}).get("pourcent", 0.0)
+            if out.get("etat") == "fini":
+                out["avancement"]["pourcent"] = 100.0
+            elif out.get("etat") in ("arrete", "echoue"):
+                out["avancement"]["restant_s"] = None
+            else:
+                composite = ((self.courant - 1) + (pct_pt / 100.0)) / total_pts * 100.0
+                out["avancement"]["pourcent"] = max(0.0, min(99.0, composite))
         out[self.CLEF] = {
             "nom": self.balayage["nom"],
             "unite": self.balayage["unite"],
@@ -964,11 +993,21 @@ class TacheBalayage(Tache):
         lancer les suivants. Ne tuer que le processus laisserait la sequence
         enchainer sur le point d'apres — l'inverse de ce qu'on demande."""
         self.etat = "arrete"
+        self.detail = "Arrete a la demande."
+        self.avancement["restant_s"] = None
         if self.proc and self.proc.poll() is None:
             try:
-                self.proc.terminate()
+                if sys.platform == "win32":
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(self.proc.pid)],
+                        capture_output=True, timeout=5)
+                else:
+                    self.proc.terminate()
             except Exception:                          # noqa: BLE001
-                pass
+                try:
+                    self.proc.kill()
+                except Exception:                      # noqa: BLE001
+                    pass
         return True
 
 

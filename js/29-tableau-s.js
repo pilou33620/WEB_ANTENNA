@@ -190,8 +190,14 @@ async function antLancerTableauS(){
   antJournalRendre();
   antBoutonsEtat();
   await oeSuivre(function(){ antJournalRendre(); antBoutonsEtat(); });
+  antJournalRendre();
+  antBoutonsEtat();
   antResultatsRendre();
   antAssistantRendre();
+  antBoutonsEtat();
+  if(ANT.tache&&ANT.tache.etat==="arrete"){
+    typeof wsHint==="function"&&wsHint("Tableau S arrêté. Les fichiers de calcul ont été conservés.");
+  }
 }
 
 /* ==========================================================================

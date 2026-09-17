@@ -81,7 +81,8 @@ function extraire(nom,fn){
     if(src[k]==="{")n++;
     else if(src[k]==="}"&&!--n){ j=k+1; break; }
   }
-  (0,eval)(src.slice(i,j).replace(/^function /,"var "+fn+"=function "));
+  let deb=(i>=6&&src.slice(i-6,i)==="async ")?i-6:i;
+  (0,eval)(src.slice(deb,j).replace(/^(async\s+)?function /,"var "+fn+"=$1function "));
 }
 
 charger("25-polygones.js");
@@ -1198,6 +1199,85 @@ verifie("la carte montre l'avant en face de l'apres",
         IA_H.indexOf("cellules de PML")>=0&&IA_H.indexOf("10")>=0);
 verifie("un bloc casse est ignore sans emporter la reponse",
         IA_H.indexOf("Voici.")>=0&&IA_H.indexOf("bloc casse")>=0);
+
+/* ==========================================================================
+   10. La barre de chargement et le bouton d'arret de simulation
+   ========================================================================== */
+console.log("");
+console.log("10. La barre de chargement et le bouton d'arret");
+
+extraire("13-assistant.js","aE");
+extraire("13-assistant.js","antDuree");
+extraire("13-assistant.js","aEsc");
+extraire("13-assistant.js","aEnt");
+extraire("13-assistant.js","aNb");
+extraire("13-assistant.js","antBoutonsEtat");
+extraire("13-assistant.js","antArreter");
+
+const elements = {};
+function fakeEl(id){
+  return (elements[id] = elements[id] || {
+    id, style:{display:""}, classList:{add(){},remove(){}},
+    disabled:false, textContent:"", innerHTML:"", className:""
+  });
+}
+global.document.getElementById = function(id){ return fakeEl(id); };
+
+ANT.etatServeur = { lancer: true };
+V.modele = {};
+ANT.modele = {};
+
+// 1. Au repos (aucun calcul en cours)
+ANT.tache = null;
+antBoutonsEtat();
+verifie("au repos, le bouton lancer affiche ▶ Lancer",
+        fakeEl("bLancer").textContent === "▶ Lancer");
+verifie("au repos, le bouton arreter est masque",
+        fakeEl("bArreter").style.display === "none");
+verifie("au repos, la barre de chargement est masquee",
+        fakeEl("simProgression").style.display === "none");
+
+// 2. Pendant un calcul (etat calcule)
+ANT.tache = {
+  id: "sim-123",
+  etat: "calcule",
+  avancement: { pas: 4500, pourcent: 42.0, restant_s: 180, energie_dB: -22.5, vitesse: 45.0 },
+  duree: 35
+};
+antBoutonsEtat();
+verifie("en cours, le bouton lancer est desactive",
+        fakeEl("bLancer").disabled === true);
+verifie("en cours, le bouton arreter principal est affiche",
+        fakeEl("bArreter").style.display === "inline-flex");
+verifie("en cours, la barre de chargement est visible",
+        fakeEl("simProgression").style.display === "inline-flex");
+verifie("en cours, la jauge affiche la bonne largeur",
+        fakeEl("simProgFill").style.width === "42%");
+verifie("en cours, le texte affiche 42 %",
+        fakeEl("simProgTxt").textContent === "42 %");
+verifie("en cours, le temps restant est annonce",
+        fakeEl("simProgReste").textContent.indexOf("3 min") >= 0);
+verifie("en cours, la boite assistant est active et affiche l'etat",
+        fakeEl("assistSimBox").style.display === "block" &&
+        fakeEl("assistSimBox").innerHTML.indexOf("Calcul en cours") >= 0);
+
+// 3. Apres arret (etat arrete)
+ANT.tache = {
+  id: "sim-123",
+  etat: "arrete",
+  avancement: { pas: 4500, pourcent: 42.0, restant_s: null },
+  duree: 36
+};
+antBoutonsEtat();
+verifie("apres arret, le bouton lancer est reactive",
+        fakeEl("bLancer").disabled === false && fakeEl("bLancer").textContent === "▶ Lancer");
+verifie("apres arret, le bouton arreter est masque",
+        fakeEl("bArreter").style.display === "none");
+verifie("apres arret, la barre affiche Arrete",
+        fakeEl("simProgTxt").textContent === "Arrêté");
+verifie("apres arret, le pied de page confirme l'arret",
+        fakeEl("fAvancement").textContent.indexOf("arrêtée") >= 0);
+
 
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")

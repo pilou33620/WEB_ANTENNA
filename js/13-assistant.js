@@ -923,7 +923,9 @@ ${typeof antTableauSHtml==="function"?antTableauSHtml():""}
 <div class="champ actions">
   <button class="tb" id="bScript2">⤓ Écrire le script Python</button>
   <button class="tb on" id="bLancer2"${peut?"":" disabled"}>▶ Lancer openEMS</button>
+  <button class="tb danger" id="bArret2" style="display:none">■ Arrêter la simulation</button>
 </div>
+<div class="sim-assist-box" id="assistSimBox" style="display:none"></div>
 
 ${typeof antVoirHtml==="function"?antVoirHtml():""}
 ${peut?"":`<p class="note alerte">openEMS n'est pas utilisable sur ce poste :
@@ -953,6 +955,8 @@ ANT_LIER.calcul=function(box){
   box.querySelector("#bScript2").onclick=antTelechargerScript;
   const l=box.querySelector("#bLancer2");
   if(l&&!l.disabled)l.onclick=antLancer;
+  const a2=box.querySelector("#bArret2");
+  if(a2)a2.onclick=antArreter;
   if(typeof antChampsLier==="function")antChampsLier(box);
   if(typeof antBalayageLier==="function")antBalayageLier(box);
   if(typeof antTableauSLier==="function")antTableauSLier(box);
@@ -987,8 +991,35 @@ async function antLancer(){
   antJournalRendre();
   antBoutonsEtat();
   await oeSuivre(function(){ antJournalRendre(); antBoutonsEtat(); });
+  antJournalRendre();
+  antBoutonsEtat();
   antResultatsRendre();
   antAssistantRendre();
+  antBoutonsEtat();
+  if(ANT.tache&&ANT.tache.etat==="arrete"){
+    typeof wsHint==="function"&&wsHint("Simulation arrêtée. Les fichiers de calcul ont été conservés.");
+  }
+}
+
+/* ==========================================================================
+   L'arrêt propre d'une simulation (sans quitter l'outil)
+   ========================================================================== */
+async function antArreter(){
+  if(!ANT.tache)return;
+  const ba=aE("bArreter"), ba2=aE("bArret2"), baj=aE("bArret");
+  if(ba){ ba.disabled=true; ba.textContent="⏳ Arrêt…"; }
+  if(ba2){ ba2.disabled=true; ba2.textContent="⏳ Arrêt…"; }
+  if(baj){ baj.disabled=true; baj.textContent="⏳ Arrêt…"; }
+  const bl=aE("bLancer"), bl2=aE("bLancer2");
+  if(bl){ bl.disabled=true; bl.textContent="⏳ Arrêt…"; }
+  if(bl2){ bl2.disabled=true; }
+  if(typeof wsHint==="function")wsHint("Arrêt de la simulation demandé…");
+  try{
+    await oeArreter();
+  }catch(e){
+    if(typeof wsHint==="function")wsHint("Erreur lors de l'arrêt : "+(e.message||e));
+    antBoutonsEtat();
+  }
 }
 
 /* ==========================================================================
@@ -1030,7 +1061,7 @@ function antJournalRendre(){
       ? '<span class="mes">reste <b>≈ '+antDuree(a.restant_s)+'</b>'+
         (a.cause?' <i>('+aEsc(ANT_CAUSES[a.cause]||a.cause)+')</i>':"")+'</span>'
       : "")+
-    (encours?'<button class="tb mini" id="bArret">■ Arrêter</button>':"")+
+    (encours?'<button class="tb mini danger" id="bArret">■ Arrêter</button>':"")+
     (t.dossier?'<span class="dossier" title="'+aEsc(t.dossier)+'">'+
        'fichiers de calcul conservés</span>':"");
 
@@ -1045,29 +1076,141 @@ function antJournalRendre(){
       '<div class="echec">'+aEsc(t.detail)+'</div>');
   }
   const arr=aE("bArret");
-  if(arr)arr.onclick=async function(){
-    arr.disabled=true;
-    try{ await oeArreter(); }catch(e){}
-  };
+  if(arr)arr.onclick=antArreter;
 }
 
 /* ==========================================================================
-   L'état des boutons de la barre d'outils
+   L'état des boutons de la barre d'outils et de l'avancement global
    ========================================================================== */
 function antBoutonsEtat(){
   const pret=!!(V.modele&&ANT.modele);
-  const encours=ANT.tache&&(ANT.tache.etat==="calcule"||ANT.tache.etat==="prepare");
-  const bs=aE("bScript"), bl=aE("bLancer");
+  const t=ANT.tache;
+  const encours=t&&(t.etat==="calcule"||t.etat==="prepare");
+  const av=(t&&t.avancement)||{};
+  const pct=Math.max(0,Math.min(100,Math.round(av.pourcent||0)));
+  const bal=t&&t.balayage;
+
+  /* 1. Boutons du lanceur */
+  const bs=aE("bScript"), bl=aE("bLancer"), bl2=aE("bLancer2");
   if(bs)bs.disabled=!pret;
   if(bl){
     bl.disabled=!pret||!(ANT.etatServeur&&ANT.etatServeur.lancer)||!!encours;
-    /* Le bouton porte le temps restant : c'est le seul endroit visible depuis
-       n'importe quel panneau, journal fermé compris. */
-    const av=(ANT.tache&&ANT.tache.avancement)||{};
     bl.textContent=encours
       ? (av.restant_s!=null ? "⏳ ≈ "+antDuree(av.restant_s) : "⏳ En cours…")
       : "▶ Lancer";
   }
+  if(bl2){
+    bl2.disabled=!pret||!(ANT.etatServeur&&ANT.etatServeur.lancer)||!!encours;
+  }
+
+  /* 2. Boutons d'arrêt */
+  const ba=aE("bArreter"), ba2=aE("bArret2");
+  if(ba){
+    ba.style.display=encours?"inline-flex":"none";
+    if(encours){ ba.disabled=false; ba.textContent="■ Stop"; }
+  }
+  if(ba2){
+    ba2.style.display=encours?"inline-flex":"none";
+    if(encours){ ba2.disabled=false; ba2.textContent="■ Arrêter la simulation"; }
+  }
+
+  /* 3. Barre de chargement d'en-tête et ligne supérieure */
+  const sp=aE("simProgression"), st=aE("simTopLine");
+  const spf=aE("simProgFill"), spt=aE("simProgTxt"), spr=aE("simProgReste");
+  const stf=aE("simTopLineFill");
+  if(sp&&spf&&spt){
+    if(encours){
+      sp.style.display="inline-flex";
+      sp.className="sim-header-prog";
+      spf.style.width=pct+"%";
+      spt.textContent=bal ? (bal.courant+"/"+bal.total+" ("+pct+"%)") : (pct+" %");
+      if(spr)spr.textContent=av.restant_s!=null ? ("≈ "+antDuree(av.restant_s)) : "";
+    }else if(t&&t.etat==="arrete"){
+      sp.style.display="inline-flex";
+      sp.className="sim-header-prog arrete";
+      spf.style.width=pct+"%";
+      spt.textContent="Arrêté";
+      if(spr)spr.textContent="";
+    }else if(t&&t.etat==="echoue"){
+      sp.style.display="inline-flex";
+      sp.className="sim-header-prog echoue";
+      spf.style.width=pct+"%";
+      spt.textContent="Échec";
+      if(spr)spr.textContent="";
+    }else{
+      sp.style.display="none";
+    }
+  }
+  if(st&&stf){
+    if(encours){
+      st.style.display="block";
+      st.className="sim-top-line";
+      stf.style.width=pct+"%";
+    }else if(t&&t.etat==="arrete"){
+      st.style.display="block";
+      st.className="sim-top-line arrete";
+      stf.style.width=pct+"%";
+    }else{
+      st.style.display="none";
+    }
+  }
+
+  /* 4. Avancement dans le pied de page */
+  const fa=aE("fAvancement");
+  if(fa){
+    if(encours){
+      fa.style.display="inline";
+      let msg=bal
+        ? ("⏳ "+(bal.nom||"Balayage")+" "+bal.courant+"/"+bal.total+" ("+pct+"%)")
+        : ("⏳ Simulation : "+pct+"%");
+      if(av.restant_s!=null)msg+=" · reste ≈ "+antDuree(av.restant_s);
+      fa.textContent=msg;
+    }else if(t&&t.etat==="arrete"){
+      fa.style.display="inline";
+      fa.textContent="■ Simulation arrêtée";
+    }else{
+      fa.style.display="none";
+    }
+  }
+
+  /* 5. Boîte d'avancement dans l'Assistant */
+  const boxSim=aE("assistSimBox");
+  if(boxSim){
+    if(encours||(t&&(t.etat==="arrete"||t.etat==="fini"||t.etat==="echoue"))){
+      boxSim.style.display="block";
+      boxSim.className="sim-assist-box"+(t.etat==="arrete"?" arrete":t.etat==="echoue"?" echoue":"");
+      const etatLabel={prepare:"Préparation",calcule:"Calcul en cours",fini:"Terminé",
+                       echoue:"Échec",arrete:"Arrêté",perdu:"Suivi perdu"}[t.etat]||t.etat;
+      let resteInfo="";
+      if(encours&&av.restant_s!=null){
+        resteInfo='<span>Reste : <b>≈ '+antDuree(av.restant_s)+'</b>'+
+                  (av.cause?' <i>('+aEsc(ANT_CAUSES[av.cause]||av.cause)+')</i>':'')+'</span>';
+      }
+      boxSim.innerHTML=
+        '<div class="sim-assist-head">'+
+          '<span class="sim-assist-titre">'+
+            (bal?aEsc(bal.nom)+' (point '+bal.courant+'/'+bal.total+
+                 (bal.points[bal.courant-1]?' · '+aEsc(bal.points[bal.courant-1].etiquette)+' '+aEsc(bal.unite):'')+')'
+                :'Simulation openEMS')+
+          '</span>'+
+          '<span class="etat '+t.etat+'">'+etatLabel+'</span>'+
+        '</div>'+
+        '<div class="sim-assist-jauge"><i class="sim-assist-fill" style="width:'+pct+'%"></i></div>'+
+        '<div class="sim-assist-stats">'+
+          '<span>Avancement : <b>'+pct+' %</b></span>'+
+          resteInfo+
+          '<span>Pas : <b>'+aEnt(av.pas||0)+'</b></span>'+
+          '<span>Énergie : <b>'+(av.energie_dB!=null?aNb(av.energie_dB,1)+' dB':'—')+'</b></span>'+
+          '<span>Vitesse : <b>'+aNb(av.vitesse||0,1)+' MC/s</b></span>'+
+          '<span>Durée : <b>'+antDuree(t.duree||0)+'</b></span>'+
+        '</div>';
+    }else{
+      boxSim.style.display="none";
+      boxSim.innerHTML="";
+    }
+  }
+
+  /* 6. Indicateur solveur */
   const f=aE("fSolveur");
   if(f&&ANT.etatServeur){
     f.textContent="openEMS : "+(ANT.etatServeur.lancer?"prêt":"indisponible");
