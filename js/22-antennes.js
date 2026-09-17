@@ -197,12 +197,17 @@ const CON_MOTIF_PATCH={
           "fréquence"},
     {id:"y0", nom:"encastrement",
      aide:"la profondeur d'entrée de la ligne dans le patch : c'est le "+
-          "réglage d'adaptation"},
+          "réglage d'adaptation, et la cote la moins sûre du motif. Mesuré "+
+          "sur FR-4 1,6 mm à 2,45 GHz, il faut l'écourter d'un bon quart : "+
+          "le calcul proposait 11,5 mm pour −2,5 dB, 8,5 mm en rend −13. "+
+          "Balayez-le"},
     {id:"wf", nom:"largeur de la ligne",
      aide:"synthétisée pour 50 Ω sur ce substrat"},
     {id:"g",  nom:"largeur des encoches",
      aide:"le vide qui isole la ligne du cuivre du patch sur toute la "+
-          "profondeur d'encastrement"},
+          "profondeur d'encastrement. Elles ajoutent une capacité que le "+
+          "modèle de cavité ignore : plus serrées, mieux adapté — 8 dB "+
+          "gagnés de 3,5 à 1,5 mm sur le cas mesuré"},
     {id:"Lf", nom:"longueur de ligne",
      aide:"entre le bord de la carte, où est le port, et le patch"},
     {id:"marge", nom:"marge de carte",
@@ -291,7 +296,17 @@ const CON_MOTIF_PATCH={
                        " · h = "+conLong(c.h,3)],
           ["εr effectif", ee.toFixed(3)],
           ["Allongement des bords ΔL", conLong(dL,3)+" (×2)"],
-          ["Impédance au bord", Rin.toFixed(0)+" Ω"],
+          /* LA RÉSISTANCE DE BORD EST LE TERME LE PLUS FRAGILE DU MOTIF, et
+             c'est celui dont dépend l'encastrement. Elle sort du modèle de
+             cavité, qui suppose un patch NU : ni la ligne qui entre, ni les
+             deux fentes qui l'isolent n'y figurent. Mesurée sur le patch de
+             ce gabarit — FR-4 1,6 mm, 2,45 GHz —, elle est surestimée d'un
+             facteur trois et demi, et l'encastrement s'en trouve trop
+             profond d'un bon quart. On l'affiche donc avec ce qu'elle vaut
+             plutôt que de la corriger : un relevé sur un substrat ne fait
+             pas une loi, et c'est le balayage qui tranche. */
+          ["Impédance au bord", Rin.toFixed(0)+" Ω  (modèle de cavité, "+
+                                "surestimé — balayez y₀)"],
           ["Impédance à l'encastrement", Zin.toFixed(1)+" Ω"],
           ["Ligne d'alimentation", conLong(p.wf,3)+" → "+
            conZ0Microruban(c.er,c.h,p.wf).toFixed(1)+" Ω"],

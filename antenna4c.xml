@@ -1,0 +1,1214 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<IPC-2581 revision="C" xmlns="http://webstds.ipc.org/2581" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+ <Content roleRef="owner">
+  <FunctionMode mode="USERDEF" comment=""/>
+  <StepRef name="antenna4c"/>
+  <LayerRef name="Conductor-1"/>
+  <LayerRef name="Conductor-2"/>
+  <LayerRef name="Conductor-3"/>
+  <LayerRef name="Conductor-4"/>
+  <LayerRef name="Symbol-A"/>
+  <LayerRef name="Resist-A"/>
+  <LayerRef name="MetalMask-A"/>
+  <LayerRef name="HeightLimit-A"/>
+  <LayerRef name="CompArea-A"/>
+  <LayerRef name="Symbol-B"/>
+  <LayerRef name="Resist-B"/>
+  <LayerRef name="MetalMask-B"/>
+  <LayerRef name="HeightLimit-B"/>
+  <LayerRef name="CompArea-B"/>
+  <LayerRef name="All_Layers_Track_and_Via_Keepout"/>
+  <LayerRef name="All_Layers_Track_Keepout"/>
+  <LayerRef name="All_Layers_Via_Keepout"/>
+  <LayerRef name="Top_Assembly"/>
+  <LayerRef name="Bottom_Assembly"/>
+  <LayerRef name="Bottom_Component_Keepout"/>
+  <LayerRef name="Bottom_Template"/>
+  <LayerRef name="Bottom_Track_and_Via_Keepout"/>
+  <LayerRef name="Bottom_Track_Keepout"/>
+  <LayerRef name="Bottom_Via_Keepout"/>
+  <LayerRef name="Documentation"/>
+  <LayerRef name="Manufacturing_Drawing"/>
+  <LayerRef name="Mechanical_Drawing"/>
+  <LayerRef name="Top_Component_Keepout"/>
+  <LayerRef name="Top_Template"/>
+  <LayerRef name="Top_Track_and_Via_Keepout"/>
+  <LayerRef name="Top_Track_Keepout"/>
+  <LayerRef name="Top_Via_Keepout"/>
+  <LayerRef name="RulesByArea"/>
+  <LayerRef name="Inner_Signal3_Template"/>
+  <LayerRef name="Inner_Signal2_Template"/>
+  <LayerRef name="Inner_Signal2_Track_and_Via_Keepout"/>
+  <LayerRef name="Inner_Signal2_Track_Keepout"/>
+  <LayerRef name="Inner_Signal2_Via_Keepout"/>
+  <LayerRef name="Inner_Signal3_Track_and_Via_Keepout"/>
+  <LayerRef name="Inner_Signal3_Track_Keepout"/>
+  <LayerRef name="Inner_Signal3_Via_Keepout"/>
+  <LayerRef name="Symbol-A-1"/>
+  <LayerRef name="Symbol-B-1"/>
+  <LayerRef name="ID_IN1"/>
+  <LayerRef name="ID_IN2"/>
+  <LayerRef name="ID_IN3"/>
+  <LayerRef name="ID_IN4"/>
+  <LayerRef name="ID_RESIST_A"/>
+  <LayerRef name="ID_RESIST_B"/>
+  <LayerRef name="ID_BRASSAGE_A"/>
+  <LayerRef name="ID_BRASSAGE_B"/>
+  <LayerRef name="ID_EQ1"/>
+  <LayerRef name="ID_EQ2"/>
+  <LayerRef name="ID_COT"/>
+  <LayerRef name="ID_PERSAGE"/>
+  <LayerRef name="ID_SYMB1"/>
+  <LayerRef name="ID_SYMB2"/>
+  <LayerRef name="ID_PERCAGE"/>
+  <LayerRef name="ID_PTST"/>
+  <LayerRef name="PTST_TOP"/>
+  <LayerRef name="PTST_BOT"/>
+  <LayerRef name="ID_BOARD"/>
+  <LayerRef name="Symbol-A-2"/>
+  <LayerRef name="Symbol-B-2"/>
+  <LayerRef name="ID_PTST_TOP"/>
+  <LayerRef name="ID_PTST_BOTTOM"/>
+  <LayerRef name="BoardShape"/>
+  <LayerRef name="Component-1-A"/>
+  <LayerRef name="NewNonCircularHoleLayer"/>
+  <LayerRef name="Hole1-4"/>
+  <LayerRef name="DielectricLayer-1-2"/>
+  <LayerRef name="DielectricLayer-2-3"/>
+  <LayerRef name="DielectricLayer-3-4"/>
+  <BomRef name="antenna4c"/>
+  <DictionaryColor>
+   <EntryColor id="Conductor-1">
+    <Color r="153" g="255" b="153"/>
+   </EntryColor>
+   <EntryColor id="Conductor-2">
+    <Color r="153" g="255" b="153"/>
+   </EntryColor>
+   <EntryColor id="Conductor-3">
+    <Color r="255" g="204" b="102"/>
+   </EntryColor>
+   <EntryColor id="Conductor-4">
+    <Color r="255" g="204" b="102"/>
+   </EntryColor>
+   <EntryColor id="Symbol-A">
+    <Color r="255" g="255" b="102"/>
+   </EntryColor>
+   <EntryColor id="Resist-A">
+    <Color r="153" g="255" b="0"/>
+   </EntryColor>
+   <EntryColor id="MetalMask-A">
+    <Color r="51" g="153" b="255"/>
+   </EntryColor>
+   <EntryColor id="HeightLimit-A">
+    <Color r="255" g="153" b="255"/>
+   </EntryColor>
+   <EntryColor id="CompArea-A">
+    <Color r="51" g="102" b="102"/>
+   </EntryColor>
+   <EntryColor id="Symbol-B">
+    <Color r="204" g="204" b="51"/>
+   </EntryColor>
+   <EntryColor id="Resist-B">
+    <Color r="0" g="128" b="0"/>
+   </EntryColor>
+   <EntryColor id="MetalMask-B">
+    <Color r="153" g="153" b="255"/>
+   </EntryColor>
+   <EntryColor id="HeightLimit-B">
+    <Color r="204" g="0" b="204"/>
+   </EntryColor>
+   <EntryColor id="CompArea-B">
+    <Color r="102" g="51" b="153"/>
+   </EntryColor>
+   <EntryColor id="All_Layers_Track_and_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="All_Layers_Track_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="All_Layers_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Top_Assembly">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Bottom_Assembly">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Bottom_Component_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Bottom_Template">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Bottom_Track_and_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Bottom_Track_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Bottom_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Documentation">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Manufacturing_Drawing">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Mechanical_Drawing">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Top_Component_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Top_Template">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Top_Track_and_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Top_Track_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Top_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="RulesByArea">
+    <Color r="153" g="51" b="255"/>
+   </EntryColor>
+   <EntryColor id="Inner_Signal3_Template">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Inner_Signal2_Template">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Inner_Signal2_Track_and_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Inner_Signal2_Track_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Inner_Signal2_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Inner_Signal3_Track_and_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Inner_Signal3_Track_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Inner_Signal3_Via_Keepout">
+    <Color r="204" g="204" b="255"/>
+   </EntryColor>
+   <EntryColor id="Symbol-A-1">
+    <Color r="255" g="255" b="102"/>
+   </EntryColor>
+   <EntryColor id="Symbol-B-1">
+    <Color r="204" g="204" b="51"/>
+   </EntryColor>
+   <EntryColor id="ID_IN1">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_IN2">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_IN3">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_IN4">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_RESIST_A">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_RESIST_B">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_BRASSAGE_A">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_BRASSAGE_B">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_EQ1">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_EQ2">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_COT">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_PERSAGE">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_SYMB1">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_SYMB2">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_PERCAGE">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_PTST">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="PTST_TOP">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="PTST_BOT">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_BOARD">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="Symbol-A-2">
+    <Color r="255" g="255" b="102"/>
+   </EntryColor>
+   <EntryColor id="Symbol-B-2">
+    <Color r="204" g="204" b="51"/>
+   </EntryColor>
+   <EntryColor id="ID_PTST_TOP">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="ID_PTST_BOTTOM">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="BoardShape">
+    <Color r="0" g="0" b="0"/>
+   </EntryColor>
+   <EntryColor id="Component-1-A">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="NewNonCircularHoleLayer">
+    <Color r="255" g="51" b="51"/>
+   </EntryColor>
+   <EntryColor id="Hole1-4">
+    <Color r="0" g="0" b="0"/>
+   </EntryColor>
+   <EntryColor id="DielectricLayer-1-2">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="DielectricLayer-2-3">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+   <EntryColor id="DielectricLayer-3-4">
+    <Color r="255" g="255" b="255"/>
+   </EntryColor>
+  </DictionaryColor>
+  <DictionaryStandard units="MILLIMETER">
+   <EntryStandard id="c55">
+    <Circle diameter="0.55"/>
+   </EntryStandard>
+   <EntryStandard id="c55{B}X">
+    <Circle diameter="0.55"/>
+   </EntryStandard>
+   <EntryStandard id="c30">
+    <Circle diameter="0.3"/>
+   </EntryStandard>
+   <EntryStandard id="c50">
+    <Circle diameter="0.5"/>
+   </EntryStandard>
+   <EntryStandard id="c30{B}X">
+    <Circle diameter="0.3"/>
+   </EntryStandard>
+   <EntryStandard id="c50{B}X">
+    <Circle diameter="0.5"/>
+   </EntryStandard>
+   <EntryStandard id="c20">
+    <Circle diameter="0.2"/>
+   </EntryStandard>
+   <EntryStandard id="c20{B}X">
+    <Circle diameter="0.2"/>
+   </EntryStandard>
+   <EntryStandard id="c40">
+    <Circle diameter="0.4"/>
+   </EntryStandard>
+   <EntryStandard id="c60">
+    <Circle diameter="0.6"/>
+   </EntryStandard>
+   <EntryStandard id="c40{B}X">
+    <Circle diameter="0.4"/>
+   </EntryStandard>
+   <EntryStandard id="c60{B}X">
+    <Circle diameter="0.6"/>
+   </EntryStandard>
+   <EntryStandard id="c45">
+    <Circle diameter="0.45"/>
+   </EntryStandard>
+   <EntryStandard id="c65">
+    <Circle diameter="0.5"/>
+   </EntryStandard>
+   <EntryStandard id="c45{B}X">
+    <Circle diameter="0.45"/>
+   </EntryStandard>
+   <EntryStandard id="c65{B}X">
+    <Circle diameter="0.5"/>
+   </EntryStandard>
+   <EntryStandard id="c70">
+    <Circle diameter="0.7"/>
+   </EntryStandard>
+   <EntryStandard id="c70{B}X">
+    <Circle diameter="0.7"/>
+   </EntryStandard>
+   <EntryStandard id="c80">
+    <Circle diameter="0.8"/>
+   </EntryStandard>
+   <EntryStandard id="c80{B}X">
+    <Circle diameter="0.8"/>
+   </EntryStandard>
+   <EntryStandard id="c100">
+    <Circle diameter="1"/>
+   </EntryStandard>
+   <EntryStandard id="c100{B}X">
+    <Circle diameter="1"/>
+   </EntryStandard>
+   <EntryStandard id="s52">
+    <RectRound width="0.52" height="0.52" radius="0" upperRight="true" upperLeft="true" lowerLeft="true" lowerRight="true"/>
+   </EntryStandard>
+   <EntryStandard id="s52{B}X">
+    <RectRound width="0.52" height="0.52" radius="0" upperRight="true" upperLeft="true" lowerLeft="true" lowerRight="true"/>
+   </EntryStandard>
+  </DictionaryStandard>
+  <DictionaryUser units="MILLIMETER">
+   <EntryUser id="tc40">
+    <UserSpecial>
+     <Arc startX="0.0167" startY="0.29954" endX="-0.0167" endY="0.29954" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.29954" startY="0.0167" endX="-0.29954" endY="-0.0167" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.0167" startY="-0.29954" endX="0.0167" endY="-0.29954" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.29954" startY="-0.0167" endX="0.29954" endY="0.0167" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+    </UserSpecial>
+   </EntryUser>
+   <EntryUser id="tc40{B}X">
+    <UserSpecial>
+     <Arc startX="-0.0167" startY="0.29954" endX="0.0167" endY="0.29954" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.29954" startY="0.0167" endX="0.29954" endY="-0.0167" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.0167" startY="-0.29954" endX="-0.0167" endY="-0.29954" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.29954" startY="-0.0167" endX="-0.29954" endY="0.0167" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+    </UserSpecial>
+   </EntryUser>
+   <EntryUser id="tc45">
+    <UserSpecial>
+     <Arc startX="0.03972" startY="0.32256" endX="-0.03972" endY="0.32256" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.32256" startY="0.03972" endX="-0.32256" endY="-0.03972" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.03972" startY="-0.32256" endX="0.03972" endY="-0.32256" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.32256" startY="-0.03972" endX="0.32256" endY="0.03972" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+    </UserSpecial>
+   </EntryUser>
+   <EntryUser id="tc45{B}X">
+    <UserSpecial>
+     <Arc startX="-0.03972" startY="0.32256" endX="0.03972" endY="0.32256" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.32256" startY="0.03972" endX="0.32256" endY="-0.03972" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.03972" startY="-0.32256" endX="-0.03972" endY="-0.32256" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.32256" startY="-0.03972" endX="-0.32256" endY="0.03972" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+    </UserSpecial>
+   </EntryUser>
+   <EntryUser id="tc60">
+    <UserSpecial>
+     <Arc startX="0.10353" startY="0.38637" endX="-0.10353" endY="0.38637" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.38637" startY="0.10353" endX="-0.38637" endY="-0.10353" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.10353" startY="-0.38637" endX="0.10353" endY="-0.38637" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.38637" startY="-0.10353" endX="0.38637" endY="0.10353" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+    </UserSpecial>
+   </EntryUser>
+   <EntryUser id="tc60{B}X">
+    <UserSpecial>
+     <Arc startX="-0.10353" startY="0.38637" endX="0.10353" endY="0.38637" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.38637" startY="0.10353" endX="0.38637" endY="-0.10353" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.10353" startY="-0.38637" endX="-0.10353" endY="-0.38637" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.38637" startY="-0.10353" endX="-0.38637" endY="0.10353" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+    </UserSpecial>
+   </EntryUser>
+   <EntryUser id="tc80">
+    <UserSpecial>
+     <Arc startX="0.18262" startY="0.46546" endX="-0.18262" endY="0.46546" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.46546" startY="0.18262" endX="-0.46546" endY="-0.18262" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.18262" startY="-0.46546" endX="0.18262" endY="-0.46546" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.46546" startY="-0.18262" endX="0.46546" endY="0.18262" centerX="0" centerY="0" clockwise="false">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+    </UserSpecial>
+   </EntryUser>
+   <EntryUser id="tc80{B}X">
+    <UserSpecial>
+     <Arc startX="-0.18262" startY="0.46546" endX="0.18262" endY="0.46546" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.46546" startY="0.18262" endX="0.46546" endY="-0.18262" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="0.18262" startY="-0.46546" endX="-0.18262" endY="-0.46546" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+     <Arc startX="-0.46546" startY="-0.18262" endX="-0.46546" endY="0.18262" centerX="0" centerY="0" clockwise="true">
+      <LineDesc lineEnd="ROUND" lineWidth="0.2"/>
+     </Arc>
+    </UserSpecial>
+   </EntryUser>
+  </DictionaryUser>
+ </Content>
+ <LogisticHeader>
+  <Role id="owner" roleFunction="OWNER"/>
+  <Enterprise id="dummy" code="NONE"/>
+  <Person name="pierre-louis.renaud" enterpriseRef="dummy" roleRef="owner"/>
+ </LogisticHeader>
+ <HistoryRecord number="1" origination="2026-06-19T15:54:59" software="DFipc2581out.exe" lastChange="2026-06-19T15:54:59">
+  <FileRevision fileRevisionId="1" comment="">
+   <SoftwarePackage name="DFipc2581out.exe" vendor="Zuken Inc." revision="V2024.010">
+    <Certification certificationStatus="CERTIFIED"/>
+   </SoftwarePackage>
+  </FileRevision>
+ </HistoryRecord>
+ <Bom name="antenna4c">
+  <BomHeader assembly="" revision="1.0">
+   <StepRef name="antenna4c"/>
+  </BomHeader>
+  <BomItem OEMDesignNumberRef="ANTENNE_PCB_IFA_868_Top" quantity="1" pinCount="2" category="ELECTRICAL" internalPartNumber="">
+   <RefDes name="A0" packageRef="Antenne_PCB_IFA_868MHz+-_TOP" populate="true"/>
+   <Characteristics category="ELECTRICAL"/>
+  </BomItem>
+ </Bom>
+ <Ecad name="antenna4c">
+  <CadHeader units="MILLIMETER">
+   <Spec name="Conductor-1_Material">
+    <General type="MATERIAL">
+     <Property text="Cu"/>
+    </General>
+   </Spec>
+   <Spec name="DielectricLayer-1-2_Material">
+    <General type="MATERIAL">
+     <Property text="FR4 2x7628"/>
+    </General>
+   </Spec>
+   <Spec name="DielectricLayer-1-2_Dielectric">
+    <Dielectric type="DIELECTRIC_CONSTANT">
+     <Property value="4.37"/>
+    </Dielectric>
+   </Spec>
+   <Spec name="DielectricLayer-1-2_LossTangent">
+    <Dielectric type="LOSS_TANGENT">
+     <Property value="0.022"/>
+    </Dielectric>
+   </Spec>
+   <Spec name="Conductor-2_Material">
+    <General type="MATERIAL">
+     <Property text="Cu"/>
+    </General>
+   </Spec>
+   <Spec name="DielectricLayer-2-3_Material">
+    <General type="MATERIAL">
+     <Property text="FR4 Core"/>
+    </General>
+   </Spec>
+   <Spec name="DielectricLayer-2-3_Dielectric">
+    <Dielectric type="DIELECTRIC_CONSTANT">
+     <Property value="4.37"/>
+    </Dielectric>
+   </Spec>
+   <Spec name="DielectricLayer-2-3_LossTangent">
+    <Dielectric type="LOSS_TANGENT">
+     <Property value="0.022"/>
+    </Dielectric>
+   </Spec>
+   <Spec name="Conductor-3_Material">
+    <General type="MATERIAL">
+     <Property text="Cu"/>
+    </General>
+   </Spec>
+   <Spec name="DielectricLayer-3-4_Material">
+    <General type="MATERIAL">
+     <Property text="FR4 2x7628"/>
+    </General>
+   </Spec>
+   <Spec name="DielectricLayer-3-4_Dielectric">
+    <Dielectric type="DIELECTRIC_CONSTANT">
+     <Property value="4.37"/>
+    </Dielectric>
+   </Spec>
+   <Spec name="DielectricLayer-3-4_LossTangent">
+    <Dielectric type="LOSS_TANGENT">
+     <Property value="0.022"/>
+    </Dielectric>
+   </Spec>
+   <Spec name="Conductor-4_Material">
+    <General type="MATERIAL">
+     <Property text="Cu"/>
+    </General>
+   </Spec>
+   <Spec name="Resist-A_Material">
+    <General type="MATERIAL">
+     <Property text="Resist Screen Print"/>
+    </General>
+   </Spec>
+   <Spec name="Resist-A_Dielectric">
+    <Dielectric type="DIELECTRIC_CONSTANT">
+     <Property value="3.7"/>
+    </Dielectric>
+   </Spec>
+   <Spec name="Resist-A_LossTangent">
+    <Dielectric type="LOSS_TANGENT">
+     <Property value="0.029"/>
+    </Dielectric>
+   </Spec>
+   <Spec name="Resist-B_Material">
+    <General type="MATERIAL">
+     <Property text="Resist Screen Print"/>
+    </General>
+   </Spec>
+   <Spec name="Resist-B_Dielectric">
+    <Dielectric type="DIELECTRIC_CONSTANT">
+     <Property value="3.7"/>
+    </Dielectric>
+   </Spec>
+   <Spec name="Resist-B_LossTangent">
+    <Dielectric type="LOSS_TANGENT">
+     <Property value="0.029"/>
+    </Dielectric>
+   </Spec>
+  </CadHeader>
+  <CadData>
+   <Layer name="Conductor-1" layerFunction="SIGNAL" side="TOP" polarity="POSITIVE">
+    <SpecRef id="Conductor-1_Material"/>
+   </Layer>
+   <Layer name="Conductor-2" layerFunction="SIGNAL" side="INTERNAL" polarity="POSITIVE">
+    <SpecRef id="Conductor-2_Material"/>
+   </Layer>
+   <Layer name="Conductor-3" layerFunction="SIGNAL" side="INTERNAL" polarity="POSITIVE">
+    <SpecRef id="Conductor-3_Material"/>
+   </Layer>
+   <Layer name="Conductor-4" layerFunction="SIGNAL" side="BOTTOM" polarity="POSITIVE">
+    <SpecRef id="Conductor-4_Material"/>
+   </Layer>
+   <Layer name="Symbol-A" layerFunction="SILKSCREEN" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Resist-A" layerFunction="SOLDERMASK" side="TOP" polarity="POSITIVE">
+    <SpecRef id="Resist-A_Material"/>
+    <SpecRef id="Resist-A_Dielectric"/>
+    <SpecRef id="Resist-A_LossTangent"/>
+   </Layer>
+   <Layer name="MetalMask-A" layerFunction="SOLDERPASTE" side="TOP" polarity="POSITIVE"/>
+   <Layer name="HeightLimit-A" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="CompArea-A" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Symbol-B" layerFunction="SILKSCREEN" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="Resist-B" layerFunction="SOLDERMASK" side="BOTTOM" polarity="POSITIVE">
+    <SpecRef id="Resist-B_Material"/>
+    <SpecRef id="Resist-B_Dielectric"/>
+    <SpecRef id="Resist-B_LossTangent"/>
+   </Layer>
+   <Layer name="MetalMask-B" layerFunction="SOLDERPASTE" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="HeightLimit-B" layerFunction="GRAPHIC" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="CompArea-B" layerFunction="GRAPHIC" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="All_Layers_Track_and_Via_Keepout" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="All_Layers_Track_Keepout" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="All_Layers_Via_Keepout" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Top_Assembly" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Bottom_Assembly" layerFunction="GRAPHIC" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="Bottom_Component_Keepout" layerFunction="GRAPHIC" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="Bottom_Template" layerFunction="GRAPHIC" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="Bottom_Track_and_Via_Keepout" layerFunction="GRAPHIC" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="Bottom_Track_Keepout" layerFunction="GRAPHIC" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="Bottom_Via_Keepout" layerFunction="GRAPHIC" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="Documentation" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="Manufacturing_Drawing" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="Mechanical_Drawing" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="Top_Component_Keepout" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Top_Template" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Top_Track_and_Via_Keepout" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Top_Track_Keepout" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Top_Via_Keepout" layerFunction="GRAPHIC" side="TOP" polarity="POSITIVE"/>
+   <Layer name="RulesByArea" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="Inner_Signal3_Template" layerFunction="GRAPHIC" side="INTERNAL" polarity="POSITIVE"/>
+   <Layer name="Inner_Signal2_Template" layerFunction="GRAPHIC" side="INTERNAL" polarity="POSITIVE"/>
+   <Layer name="Inner_Signal2_Track_and_Via_Keepout" layerFunction="GRAPHIC" side="INTERNAL" polarity="POSITIVE"/>
+   <Layer name="Inner_Signal2_Track_Keepout" layerFunction="GRAPHIC" side="INTERNAL" polarity="POSITIVE"/>
+   <Layer name="Inner_Signal2_Via_Keepout" layerFunction="GRAPHIC" side="INTERNAL" polarity="POSITIVE"/>
+   <Layer name="Inner_Signal3_Track_and_Via_Keepout" layerFunction="GRAPHIC" side="INTERNAL" polarity="POSITIVE"/>
+   <Layer name="Inner_Signal3_Track_Keepout" layerFunction="GRAPHIC" side="INTERNAL" polarity="POSITIVE"/>
+   <Layer name="Inner_Signal3_Via_Keepout" layerFunction="GRAPHIC" side="INTERNAL" polarity="POSITIVE"/>
+   <Layer name="Symbol-A-1" layerFunction="SILKSCREEN" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Symbol-B-1" layerFunction="SILKSCREEN" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="ID_IN1" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_IN2" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_IN3" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_IN4" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_RESIST_A" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_RESIST_B" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_BRASSAGE_A" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_BRASSAGE_B" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_EQ1" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_EQ2" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_COT" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_PERSAGE" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_SYMB1" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_SYMB2" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_PERCAGE" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_PTST" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="PTST_TOP" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="PTST_BOT" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_BOARD" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="Symbol-A-2" layerFunction="SILKSCREEN" side="TOP" polarity="POSITIVE"/>
+   <Layer name="Symbol-B-2" layerFunction="SILKSCREEN" side="BOTTOM" polarity="POSITIVE"/>
+   <Layer name="ID_PTST_TOP" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="ID_PTST_BOTTOM" layerFunction="GRAPHIC" side="NONE" polarity="POSITIVE"/>
+   <Layer name="BoardShape" layerFunction="BOARD_OUTLINE" side="NONE" polarity="POSITIVE"/>
+   <Layer name="Component-1-A" layerFunction="COMPONENT_TOP" side="TOP" polarity="POSITIVE"/>
+   <Layer name="NewNonCircularHoleLayer" layerFunction="ROUT" side="NONE" polarity="POSITIVE"/>
+   <Layer name="Hole1-4" layerFunction="DRILL" side="NONE" polarity="POSITIVE"/>
+   <Layer name="DielectricLayer-1-2" layerFunction="DIELCORE" side="NONE" polarity="POSITIVE">
+    <SpecRef id="DielectricLayer-1-2_Material"/>
+    <SpecRef id="DielectricLayer-1-2_Dielectric"/>
+    <SpecRef id="DielectricLayer-1-2_LossTangent"/>
+   </Layer>
+   <Layer name="DielectricLayer-2-3" layerFunction="DIELCORE" side="NONE" polarity="POSITIVE">
+    <SpecRef id="DielectricLayer-2-3_Material"/>
+    <SpecRef id="DielectricLayer-2-3_Dielectric"/>
+    <SpecRef id="DielectricLayer-2-3_LossTangent"/>
+   </Layer>
+   <Layer name="DielectricLayer-3-4" layerFunction="DIELCORE" side="NONE" polarity="POSITIVE">
+    <SpecRef id="DielectricLayer-3-4_Material"/>
+    <SpecRef id="DielectricLayer-3-4_Dielectric"/>
+    <SpecRef id="DielectricLayer-3-4_LossTangent"/>
+   </Layer>
+   <Stackup name="antenna4c" overallThickness="1.62" tolPlus="0" tolMinus="0" whereMeasured="OTHER" stackupStatus="SPECIFIED">
+    <StackupGroup name="AllStackupLayers" thickness="1.62" tolPlus="0" tolMinus="0">
+     <StackupLayer layerOrGroupRef="Resist-A" thickness="0.015" tolPlus="0" tolMinus="0" sequence="1"/>
+     <StackupLayer layerOrGroupRef="Conductor-1" thickness="0.035" tolPlus="0" tolMinus="0" sequence="2"/>
+     <StackupLayer layerOrGroupRef="DielectricLayer-1-2" thickness="0.37" tolPlus="0" tolMinus="0" sequence="3"/>
+     <StackupLayer layerOrGroupRef="Conductor-2" thickness="0.035" tolPlus="0" tolMinus="0" sequence="4"/>
+     <StackupLayer layerOrGroupRef="DielectricLayer-2-3" thickness="0.71" tolPlus="0" tolMinus="0" sequence="5"/>
+     <StackupLayer layerOrGroupRef="Conductor-3" thickness="0.035" tolPlus="0" tolMinus="0" sequence="6"/>
+     <StackupLayer layerOrGroupRef="DielectricLayer-3-4" thickness="0.37" tolPlus="0" tolMinus="0" sequence="7"/>
+     <StackupLayer layerOrGroupRef="Conductor-4" thickness="0.035" tolPlus="0" tolMinus="0" sequence="8"/>
+     <StackupLayer layerOrGroupRef="Resist-B" thickness="0.015" tolPlus="0" tolMinus="0" sequence="9"/>
+    </StackupGroup>
+   </Stackup>
+   <Step name="antenna4c">
+    <PadStackDef name="s52_copper">
+     <PadstackPadDef layerRef="Conductor-1" padUse="REGULAR">
+      <Location x="0" y="0"/>
+      <StandardPrimitiveRef id="s52"/>
+     </PadstackPadDef>
+    </PadStackDef>
+    <PadStackDef name="v55h25no_epargne">
+     <PadstackHoleDef name="HOLE_1" diameter="0.25" platingStatus="PLATED" plusTol="0" minusTol="0" x="0" y="0"/>
+     <PadstackPadDef layerRef="Conductor-1" padUse="REGULAR">
+      <Location x="0" y="0"/>
+      <StandardPrimitiveRef id="c55"/>
+     </PadstackPadDef>
+     <PadstackPadDef layerRef="Conductor-2" padUse="REGULAR">
+      <Location x="0" y="0"/>
+      <StandardPrimitiveRef id="c55"/>
+     </PadstackPadDef>
+     <PadstackPadDef layerRef="Conductor-3" padUse="REGULAR">
+      <Location x="0" y="0"/>
+      <StandardPrimitiveRef id="c55"/>
+     </PadstackPadDef>
+     <PadstackPadDef layerRef="Conductor-4" padUse="REGULAR">
+      <Location x="0" y="0"/>
+      <StandardPrimitiveRef id="c55"/>
+     </PadstackPadDef>
+    </PadStackDef>
+    <Datum x="0" y="0"/>
+    <Profile>
+     <Polygon>
+      <PolyBegin x="0" y="0"/>
+      <PolyStepSegment x="0" y="70"/>
+      <PolyStepSegment x="2.5" y="70"/>
+      <PolyStepSegment x="2.5" y="79.8"/>
+      <PolyStepSegment x="21" y="79.8"/>
+      <PolyStepSegment x="21" y="122.2"/>
+      <PolyStepSegment x="28" y="122.2"/>
+      <PolyStepSegment x="28" y="79.8"/>
+      <PolyStepSegment x="39.5" y="79.8"/>
+      <PolyStepSegment x="39.5" y="70"/>
+      <PolyStepSegment x="42" y="70"/>
+      <PolyStepSegment x="42" y="19"/>
+      <PolyStepSegment x="41" y="19"/>
+      <PolyStepSegment x="41" y="8"/>
+      <PolyStepSegment x="35.6" y="8"/>
+      <PolyStepSegment x="35.6" y="0"/>
+      <PolyStepSegment x="0" y="0"/>
+     </Polygon>
+    </Profile>
+    <Package name="Antenne_PCB_IFA_868MHz+-_TOP" type="CHIP" pinOneOrientation="OTHER" height="0">
+     <Outline>
+      <Polygon>
+       <PolyBegin x="0.26" y="1.71"/>
+       <PolyStepSegment x="0.26" y="-0.26"/>
+       <PolyStepSegment x="-4.035" y="-0.26"/>
+       <PolyStepSegment x="-4.035" y="1.71"/>
+       <PolyStepSegment x="0.26" y="1.71"/>
+      </Polygon>
+      <LineDesc lineEnd="ROUND" lineWidth="0"/>
+     </Outline>
+     <LandPattern>
+      <Pad padstackDefRef="s52_copper">
+       <Location x="0" y="0"/>
+       <StandardPrimitiveRef id="s52"/>
+       <PinRef pin="1"/>
+      </Pad>
+      <Pad padstackDefRef="s52_copper">
+       <Location x="-3.775" y="1.45"/>
+       <StandardPrimitiveRef id="s52"/>
+       <PinRef pin="2"/>
+      </Pad>
+     </LandPattern>
+     <SilkScreen>
+      <Marking markingUsage="NONE">
+       <Location x="0" y="0"/>
+       <Polyline>
+        <PolyBegin x="19.9" y="52.9"/>
+        <PolyStepSegment x="19.9" y="-1.15"/>
+        <PolyStepSegment x="-4.95" y="-1.15"/>
+        <PolyStepSegment x="-4.95" y="52.9"/>
+        <PolyStepSegment x="19.9" y="52.9"/>
+        <LineDesc lineEnd="ROUND" lineWidth="0.05"/>
+       </Polyline>
+      </Marking>
+     </SilkScreen>
+     <Pin number="1" name="1" type="SURFACE">
+      <Location x="0" y="0"/>
+      <StandardPrimitiveRef id="s52"/>
+     </Pin>
+     <Pin number="2" name="2" type="SURFACE">
+      <Location x="-3.775" y="1.45"/>
+      <StandardPrimitiveRef id="s52"/>
+     </Pin>
+    </Package>
+    <Component refDes="A0" packageRef="Antenne_PCB_IFA_868MHz+-_TOP" part="ANTENNE_PCB_IFA_868_Top" layerRef="Component-1-A" mountType="OTHER" height="0">
+     <Location x="8.1" y="67.9"/>
+    </Component>
+    <LayerFeature layerRef="Conductor-1">
+     <Set padUsage="TERMINATION" geometry="s52_copper" componentRef="A0">
+      <Pad padstackDefRef="s52_copper">
+       <Location x="8.1" y="67.9"/>
+       <StandardPrimitiveRef id="s52"/>
+       <PinRef componentRef="A0" pin="1"/>
+      </Pad>
+     </Set>
+     <Set padUsage="TERMINATION" geometry="s52_copper" componentRef="A0">
+      <Pad padstackDefRef="s52_copper">
+       <Location x="4.325" y="69.35"/>
+       <StandardPrimitiveRef id="s52"/>
+       <PinRef componentRef="A0" pin="2"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="0.9" y="69.1"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="41.1" y="69.1"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="34.7" y="0.9"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="0.9" y="0.9"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="3.4" y="69.6"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="5.3" y="69.7"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="4.3" y="68.7"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set componentRef="A0">
+      <Features>
+       <Contour>
+        <Polygon>
+         <PolyBegin x="7.85" y="67.65"/>
+         <PolyStepSegment x="7.85" y="68.85"/>
+         <PolyStepSegment x="7.6" y="69.35"/>
+         <PolyStepSegment x="7.6" y="77.16"/>
+         <PolyStepSegment x="4.83" y="77.16"/>
+         <PolyStepSegment x="4.83" y="69.35"/>
+         <PolyStepSegment x="3.82" y="69.35"/>
+         <PolyStepSegment x="3.82" y="78.15"/>
+         <PolyStepSegment x="12.18" y="78.15"/>
+         <PolyStepSegment x="12.18" y="74.65"/>
+         <PolyStepSegment x="15.18" y="74.65"/>
+         <PolyStepSegment x="15.18" y="78.15"/>
+         <PolyStepSegment x="20.18" y="78.15"/>
+         <PolyStepSegment x="20.18" y="74.65"/>
+         <PolyStepSegment x="26.18" y="74.65"/>
+         <PolyStepSegment x="26.18" y="120.45"/>
+         <PolyStepSegment x="27.18" y="120.45"/>
+         <PolyStepSegment x="27.18" y="73.65"/>
+         <PolyStepSegment x="19.18" y="73.65"/>
+         <PolyStepSegment x="19.18" y="77.15"/>
+         <PolyStepSegment x="16.18" y="77.15"/>
+         <PolyStepSegment x="16.18" y="73.65"/>
+         <PolyStepSegment x="11.18" y="73.65"/>
+         <PolyStepSegment x="11.18" y="77.16"/>
+         <PolyStepSegment x="8.6" y="77.16"/>
+         <PolyStepSegment x="8.6" y="69.35"/>
+         <PolyStepSegment x="8.35" y="68.85"/>
+         <PolyStepSegment x="8.35" y="67.65"/>
+         <PolyStepSegment x="7.85" y="67.65"/>
+        </Polygon>
+       </Contour>
+      </Features>
+     </Set>
+     <Set>
+      <Features>
+       <Contour>
+        <Polygon>
+         <PolyBegin x="0.61004" y="0.61004"/>
+         <PolyStepSegment x="0.61004" y="69.38996"/>
+         <PolyStepSegment x="2.52214" y="69.38996"/>
+         <PolyStepCurve x="3.05817" y="69.75155" centerX="2.52214" centerY="69.96806" clockwise="false"/>
+         <PolyStepSegment x="3.08019" y="69.80607"/>
+         <PolyStepCurve x="3.36767" y="70" centerX="3.36767" centerY="69.68996" clockwise="true"/>
+         <PolyStepSegment x="7.28996" y="70"/>
+         <PolyStepSegment x="7.28996" y="69.35"/>
+         <PolyStepCurve x="7.32269" y="69.21135" centerX="7.6" centerY="69.35" clockwise="false"/>
+         <PolyStepSegment x="7.53996" y="68.77681"/>
+         <PolyStepSegment x="7.53996" y="67.65"/>
+         <PolyStepCurve x="7.85" y="67.33996" centerX="7.85" centerY="67.65" clockwise="false"/>
+         <PolyStepSegment x="8.35" y="67.33996"/>
+         <PolyStepCurve x="8.66004" y="67.65" centerX="8.35" centerY="67.65" clockwise="false"/>
+         <PolyStepSegment x="8.66004" y="68.77681"/>
+         <PolyStepSegment x="8.87731" y="69.21135"/>
+         <PolyStepCurve x="8.91004" y="69.35" centerX="8.6" centerY="69.35" clockwise="false"/>
+         <PolyStepSegment x="8.91004" y="70"/>
+         <PolyStepSegment x="38.88996" y="70"/>
+         <PolyStepCurve x="39.5" y="69.38996" centerX="39.5" centerY="70" clockwise="false"/>
+         <PolyStepSegment x="41.38996" y="69.38996"/>
+         <PolyStepSegment x="41.38996" y="19.61004"/>
+         <PolyStepSegment x="41" y="19.61004"/>
+         <PolyStepCurve x="40.38996" y="19" centerX="41" centerY="19" clockwise="false"/>
+         <PolyStepSegment x="40.38996" y="8.61004"/>
+         <PolyStepSegment x="35.6" y="8.61004"/>
+         <PolyStepCurve x="34.98996" y="8" centerX="35.6" centerY="8" clockwise="false"/>
+         <PolyStepSegment x="34.98996" y="0.61004"/>
+         <PolyStepSegment x="0.61004" y="0.61004"/>
+        </Polygon>
+       </Contour>
+      </Features>
+     </Set>
+    </LayerFeature>
+    <LayerFeature layerRef="Conductor-2">
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="0.9" y="69.1"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="41.1" y="69.1"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="34.7" y="0.9"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="0.9" y="0.9"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="3.4" y="69.6"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="5.3" y="69.7"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="4.3" y="68.7"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set>
+      <Features>
+       <Contour>
+        <Polygon>
+         <PolyBegin x="0.61004" y="0.61004"/>
+         <PolyStepSegment x="0.61004" y="69.38996"/>
+         <PolyStepSegment x="2.5" y="69.38996"/>
+         <PolyStepCurve x="3.11004" y="70" centerX="2.5" centerY="70" clockwise="false"/>
+         <PolyStepSegment x="38.88996" y="70"/>
+         <PolyStepCurve x="39.5" y="69.38996" centerX="39.5" centerY="70" clockwise="false"/>
+         <PolyStepSegment x="41.38996" y="69.38996"/>
+         <PolyStepSegment x="41.38996" y="19.61004"/>
+         <PolyStepSegment x="41" y="19.61004"/>
+         <PolyStepCurve x="40.38996" y="19" centerX="41" centerY="19" clockwise="false"/>
+         <PolyStepSegment x="40.38996" y="8.61004"/>
+         <PolyStepSegment x="35.6" y="8.61004"/>
+         <PolyStepCurve x="34.98996" y="8" centerX="35.6" centerY="8" clockwise="false"/>
+         <PolyStepSegment x="34.98996" y="0.61004"/>
+         <PolyStepSegment x="0.61004" y="0.61004"/>
+        </Polygon>
+       </Contour>
+      </Features>
+     </Set>
+    </LayerFeature>
+    <LayerFeature layerRef="Conductor-3">
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="0.9" y="69.1"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="41.1" y="69.1"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="34.7" y="0.9"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="0.9" y="0.9"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="3.4" y="69.6"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="5.3" y="69.7"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="4.3" y="68.7"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+    </LayerFeature>
+    <LayerFeature layerRef="Conductor-4">
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="0.9" y="69.1"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="41.1" y="69.1"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="34.7" y="0.9"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="0.9" y="0.9"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="3.4" y="69.6"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="5.3" y="69.7"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+     <Set geometry="v55h25no_epargne">
+      <Pad padstackDefRef="v55h25no_epargne">
+       <Location x="4.3" y="68.7"/>
+       <StandardPrimitiveRef id="c55"/>
+      </Pad>
+     </Set>
+    </LayerFeature>
+    <LayerFeature layerRef="Symbol-A">
+     <Set componentRef="A0">
+      <Features>
+       <Polyline>
+        <PolyBegin x="28" y="120.8"/>
+        <PolyStepSegment x="28" y="66.75"/>
+        <PolyStepSegment x="3.15" y="66.75"/>
+        <PolyStepSegment x="3.15" y="120.8"/>
+        <PolyStepSegment x="28" y="120.8"/>
+        <LineDesc lineEnd="ROUND" lineWidth="0.05"/>
+       </Polyline>
+      </Features>
+     </Set>
+    </LayerFeature>
+    <LayerFeature layerRef="CompArea-A">
+     <Set componentRef="A0">
+      <Features>
+       <Contour>
+        <Polygon>
+         <PolyBegin x="8.36" y="69.61"/>
+         <PolyStepSegment x="8.36" y="67.64"/>
+         <PolyStepSegment x="4.065" y="67.64"/>
+         <PolyStepSegment x="4.065" y="69.61"/>
+         <PolyStepSegment x="8.36" y="69.61"/>
+        </Polygon>
+       </Contour>
+      </Features>
+     </Set>
+    </LayerFeature>
+    <LayerFeature layerRef="BoardShape">
+     <Set>
+      <Features>
+       <Contour>
+        <Polygon>
+         <PolyBegin x="0" y="0"/>
+         <PolyStepSegment x="0" y="70"/>
+         <PolyStepSegment x="2.5" y="70"/>
+         <PolyStepSegment x="2.5" y="79.8"/>
+         <PolyStepSegment x="21" y="79.8"/>
+         <PolyStepSegment x="21" y="122.2"/>
+         <PolyStepSegment x="28" y="122.2"/>
+         <PolyStepSegment x="28" y="79.8"/>
+         <PolyStepSegment x="39.5" y="79.8"/>
+         <PolyStepSegment x="39.5" y="70"/>
+         <PolyStepSegment x="42" y="70"/>
+         <PolyStepSegment x="42" y="19"/>
+         <PolyStepSegment x="41" y="19"/>
+         <PolyStepSegment x="41" y="8"/>
+         <PolyStepSegment x="35.6" y="8"/>
+         <PolyStepSegment x="35.6" y="0"/>
+         <PolyStepSegment x="0" y="0"/>
+        </Polygon>
+       </Contour>
+      </Features>
+     </Set>
+    </LayerFeature>
+    <LayerFeature layerRef="Hole1-4">
+     <Set padUsage="TOOLING_HOLE" geometry="v55h25no_epargne">
+      <Hole name="R0.125" diameter="0.25" platingStatus="PLATED" plusTol="0" minusTol="0" x="0.9" y="69.1"/>
+     </Set>
+     <Set padUsage="TOOLING_HOLE" geometry="v55h25no_epargne">
+      <Hole name="R0.125" diameter="0.25" platingStatus="PLATED" plusTol="0" minusTol="0" x="41.1" y="69.1"/>
+     </Set>
+     <Set padUsage="TOOLING_HOLE" geometry="v55h25no_epargne">
+      <Hole name="R0.125" diameter="0.25" platingStatus="PLATED" plusTol="0" minusTol="0" x="34.7" y="0.9"/>
+     </Set>
+     <Set padUsage="TOOLING_HOLE" geometry="v55h25no_epargne">
+      <Hole name="R0.125" diameter="0.25" platingStatus="PLATED" plusTol="0" minusTol="0" x="0.9" y="0.9"/>
+     </Set>
+     <Set padUsage="TOOLING_HOLE" geometry="v55h25no_epargne">
+      <Hole name="R0.125" diameter="0.25" platingStatus="PLATED" plusTol="0" minusTol="0" x="3.4" y="69.6"/>
+     </Set>
+     <Set padUsage="TOOLING_HOLE" geometry="v55h25no_epargne">
+      <Hole name="R0.125" diameter="0.25" platingStatus="PLATED" plusTol="0" minusTol="0" x="5.3" y="69.7"/>
+     </Set>
+     <Set padUsage="TOOLING_HOLE" geometry="v55h25no_epargne">
+      <Hole name="R0.125" diameter="0.25" platingStatus="PLATED" plusTol="0" minusTol="0" x="4.3" y="68.7"/>
+     </Set>
+    </LayerFeature>
+   </Step>
+  </CadData>
+ </Ecad>
+ <Avl name="antenna4c">
+  <AvlHeader title="" source="" author="" datetime="2026-06-19T15:54:59" version="1"/>
+  <AvlItem OEMDesignNumber="ANTENNE_PCB_IFA_868_Top">
+   <AvlVmpn chosen="false" qualified="false">
+    <AvlMpn name="dummy"/>
+    <AvlVendor enterpriseRef="dummy"/>
+   </AvlVmpn>
+  </AvlItem>
+ </Avl>
+</IPC-2581>

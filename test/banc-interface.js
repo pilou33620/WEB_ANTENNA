@@ -1059,6 +1059,146 @@ verifie("l'echantillon de legende reprend le motif du trait",
         antTiretsCss([],"#fff")==="background:#fff",
         antTiretsCss([7,4],"#fff"));
 
+/* ==========================================================================
+   9. Le mode IA — la liste blanche, et rien d'autre
+   --------------------------------------------------------------------------
+   POURQUOI CETTE SECTION EXISTE. Tout le reste du banc eprouve des calculs :
+   une conversion fausse rend un mauvais nombre, et on finit par le voir. Ici
+   on eprouve une BARRIERE, et une barriere qui laisse passer ne se voit
+   jamais — le reglage change, la simulation tourne, le resultat a l'air d'un
+   resultat. C'est le seul endroit de l'outil ou du texte venu du reseau
+   touche a l'etat, et c'est donc celui qui doit etre verifie ligne a ligne.
+
+   `js/30-ia.js` est une fermeture, comme l'assistant de WEB_CAO dont il
+   reprend l'interface : ce qui suit passe par les fonctions qu'il expose sur
+   `window`, c'est-a-dire exactement celles dont la justesse doit etre prouvee.
+   ========================================================================== */
+console.log("");
+console.log("9. Le mode IA");
+
+global.hint=function(){};
+global.antMaj=function(){};
+global.antAssistantRendre=function(){};
+global.btoa=s=>Buffer.from(s,"binary").toString("base64");
+global.atob=s=>Buffer.from(s,"base64").toString("binary");
+charger("30-ia.js");
+
+const iaResoudre=window.iaResoudre, iaValider=window.iaValider,
+      iaProposition=window.iaProposition, iaAppliquer=window.iaAppliquer,
+      iaAnnuler=window.iaAnnuler, iaControles=window.iaControles,
+      iaGrammaire=window.iaGrammaire, iaMd=window.iaFormaterMarkdown,
+      IA_CHAMPS=window.IA_CHAMPS;
+
+verifie("le module expose ce qu'il faut pour l'eprouver",
+        [iaResoudre,iaValider,iaProposition,iaAppliquer,iaAnnuler,
+         iaControles,iaGrammaire,iaMd].every(f=>typeof f==="function")&&
+        !!IA_CHAMPS);
+
+/* -- ce qui est refuse --------------------------------------------------- */
+verifie("un chemin hors de la liste blanche est refuse",
+        !!iaResoudre("arret.secret").refus);
+verifie("un chemin qui ressemble a un vrai est refuse aussi",
+        !!iaResoudre("bande.f3").refus);
+verifie("on ne peut pas ecrire dans la selection de cuivre",
+        !!iaResoudre("nets").refus&&!!iaResoudre("formes").refus);
+verifie("un port qui n'existe pas est refuse",
+        !!iaResoudre("ports.7.x").refus);
+CON.actif=false;
+verifie("les chemins du mode conception sont refuses hors de ce mode",
+        !!iaResoudre("con.carte.L").refus);
+
+/* -- ce qui est accepte, et borne ---------------------------------------- */
+ANT.bande={f1:2.4e9, f2:2.5e9, n:401, fcible:2.45e9};
+ANT.balayage.actif=false;
+const IA_CIBLE=iaResoudre("bande.f1");
+verifie("un chemin de la liste blanche se resout",
+        !IA_CIBLE.refus&&IA_CIBLE.obj===ANT.bande&&IA_CIBLE.cle==="f1");
+verifie("une valeur hors bornes est refusee en disant laquelle",
+        iaValider(IA_CIBLE.descr,1e15).ok===false&&
+        iaValider(IA_CIBLE.descr,1e15).pourquoi.indexOf("borne haute")>=0);
+verifie("un nombre ecrit a la virgule passe quand meme",
+        iaValider(IA_CHAMPS["arret.energie"],"-45,5").v===-45.5);
+verifie("un entier reste entier",
+        iaValider(IA_CHAMPS["boite.pml"],"8,4").v===8);
+verifie("un choix hors liste est refuse",
+        iaValider(IA_CHAMPS["pertes.mode"],"debye").ok===true&&
+        iaValider(IA_CHAMPS["pertes.mode"],"lorentz").ok===false);
+
+/* -- « port. » vise le port en cours de reglage -------------------------- */
+antPortAjouter();
+ANT.portActif=1;
+verifie("« port.x » vise le port courant, pas le premier",
+        iaResoudre("port.x").obj===ANT.ports[1]);
+ANT.portActif=0;
+antPortRetirer(1);
+
+/* -- une proposition : l'avant, l'apres, et l'aller-retour ---------------- */
+const IA_P=iaProposition({type:"reglages", titre:"Recentrer",
+                          valeurs:{"bande.f1":2.08e9, "bande.f2":2.82e9,
+                                   "bande.f9":1, "boite.pml":99}});
+verifie("une proposition garde l'avant en face de l'apres",
+        IA_P.lignes.length===2&&IA_P.lignes[0].avant===2.4e9&&
+        IA_P.lignes[0].apres===2.08e9);
+verifie("et elle dit ce qu'elle a refuse au lieu de le taire",
+        IA_P.refus.length===2);
+verifie("preparer une proposition n'ecrit rien",
+        ANT.bande.f1===2.4e9);
+iaAppliquer(IA_P);
+verifie("l'appliquer ecrit, et seulement ce qui etait valide",
+        ANT.bande.f1===2.08e9&&ANT.bande.f2===2.82e9&&ANT.boite.pml!==99);
+iaAnnuler(IA_P);
+verifie("l'annuler remet exactement ce qui etait la",
+        ANT.bande.f1===2.4e9&&ANT.bande.f2===2.5e9);
+
+/* -- les verifications locales ------------------------------------------- */
+/* Elles doivent marcher sans reseau NI clef : c'est leur raison d'etre. */
+V.modele={};
+ANT.bande.fcible=5.8e9;
+const IA_C=iaControles();
+const IA_HORS=IA_C.find(a=>a.titre.indexOf("hors de la bande")>=0);
+verifie("une cible hors de la bande est relevee comme grave",
+        !!IA_HORS&&IA_HORS.rang==="grave");
+verifie("et la remarque porte sa correction",
+        !!IA_HORS.prop&&IA_HORS.prop.valeurs["bande.f1"]>4.9e9);
+iaAppliquer(iaProposition(IA_HORS.prop));
+verifie("appliquer la correction remet la cible dans la bande",
+        ANT.bande.fcible>ANT.bande.f1&&ANT.bande.fcible<ANT.bande.f2);
+verifie("et la faute ne se releve plus",
+        !iaControles().some(a=>a.titre.indexOf("hors de la bande")>=0));
+
+/* -- la consigne envoyee au modele ne peut pas deriver -------------------- */
+/* Elle est ENGENDREE depuis la liste blanche. Un champ ajoute a IA_CHAMPS
+   sans toucher a la consigne y apparait donc tout seul ; sans cela, le modele
+   proposerait des reglages que la page refuse — ce qui ressemble beaucoup a
+   un modele qui se trompe, et n'en est pas un. */
+const IA_G=iaGrammaire();
+verifie("la consigne liste tous les chemins de la liste blanche, et eux seuls",
+        Object.keys(IA_CHAMPS).every(c=>IA_G.indexOf(c+"  (")>=0)&&
+        IA_G.split("\n").length===Object.keys(IA_CHAMPS).length);
+
+/* -- ce qui revient du reseau est une donnee, jamais du HTML -------------- */
+verifie("le texte du modele est echappe avant d'etre rendu",
+        iaMd("<img src=x onerror=alert(1)>").indexOf("<img")<0);
+
+/* -- les blocs d'action deviennent des cartes ---------------------------- */
+/* Le rendu est celui de WEB_CAO : un bloc ```action devient une carte, et un
+   bloc casse est ignore SANS emporter la reponse qui l'entoure. */
+/* Le bloc casse fait ecrire un avertissement a la console : c'est ce qu'on
+   veut de l'outil, pas ce qu'on veut du banc. On le tait le temps de l'appel,
+   sans quoi une trace de pile au milieu des « ok » ferait croire a une panne. */
+const _warn=console.warn; console.warn=function(){};
+const IA_H=iaMd("Voici.\n```action\n{\"type\":\"reglages\",\"titre\":\"Essai\","+
+                "\"valeurs\":{\"boite.pml\":10}}\n```\nEt un bloc casse :\n"+
+                "```action\n{ pas du json\n```\n");
+console.warn=_warn;
+verifie("un bloc d'action devient une carte cliquable",
+        IA_H.indexOf("ia-action-card")>=0&&
+        IA_H.indexOf("data-ia-appliquer")>=0);
+verifie("la carte montre l'avant en face de l'apres",
+        IA_H.indexOf("cellules de PML")>=0&&IA_H.indexOf("10")>=0);
+verifie("un bloc casse est ignore sans emporter la reponse",
+        IA_H.indexOf("Voici.")>=0&&IA_H.indexOf("bloc casse")>=0);
+
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")
                                             :"toutes passees."));

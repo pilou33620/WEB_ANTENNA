@@ -31,9 +31,17 @@ const WS_CONFIG={
     /* Le projet est masqué d'usine comme la conception, et pour la même
        raison : son bouton de barre d'outils le rend trouvable, et il n'a
        rien à occuper dans un dock pendant qu'on règle une simulation. */
-    hidden:["projet","conception","carte","nets","composants","detail"],
+    /* L'IA est masquée d'usine, comme la conception et le projet : c'est un
+       relecteur qu'on appelle, pas une étape du travail. Son bouton de barre
+       d'outils — et Alt+I — sont ce qui la rendent trouvable, et un panneau
+       qui occuperait le dock de droite à côté de l'assistant laisserait
+       croire qu'il faut passer par lui, alors que l'outil marche entièrement
+       sans. Ses cotes sont celles du même panneau dans WEB_CAO : c'est la
+       même section, on lui garde la même place. */
+    hidden:["projet","conception","ia","carte","nets","composants","detail"],
     panels:{
       assistant :{grow:2  ,collapsed:false,x:260,y:120,w:440,h:640,last:"dockR"},
+      ia        :{grow:1.5,collapsed:false,x:250,y:140,w:440,h:580,last:"dockR"},
       conception:{grow:2  ,collapsed:false,x:200,y:100,w:460,h:700,last:"dockR"},
       projet    :{grow:1.4,collapsed:false,x:240,y:120,w:460,h:560,last:"dockR"},
       couches   :{grow:1  ,collapsed:false,x:80 ,y:140,w:250,h:520,last:"dockL"},

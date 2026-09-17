@@ -23,6 +23,14 @@
 #      dit, et le stockage local d'un navigateur n'est ni un dossier, ni
 #      partageable, ni sauvegarde.
 #
+# Et une quatrieme, minuscule, qui tient a la meme raison que la troisieme :
+#
+#   4. RELIRE LA CLE DU MODE IA. Une page ne lit pas un fichier du disque, et
+#      la seule autre facon de ne pas retaper une cle a chaque seance serait
+#      de l'ecrire dans le stockage local du navigateur -- en clair, pour
+#      toujours, dans un dossier que personne ne surveille. Le serveur ne la
+#      garde pas et ne s'en sert pas : il la relit et la rend. Voir _ia_cle.
+#
 # Tout le reste -- l'affichage, la designation du cuivre, l'assistant, la 3D,
 # les courbes -- est dans le navigateur et n'a besoin de personne.
 #
@@ -459,6 +467,48 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         return self._pr_action(lambda: projet.ouvrir_explorateur(nom or None))
 
     # ==================================================================
+    # La cle du mode IA
+    # ==================================================================
+    # POURQUOI LE SERVEUR TOUCHE A CA, alors qu'il ne sert que ce qu'un
+    # navigateur ne sait pas faire. Justement : une page ne lit pas un
+    # fichier du disque, et la seule autre facon de ne pas retaper une cle
+    # a chaque seance serait de l'ecrire dans le stockage local du
+    # navigateur -- c'est-a-dire en clair, dans un dossier de profil que
+    # personne ne surveille, pour toujours. Un fichier a la racine du
+    # depot, ignore par git, se voit, se lit, et se supprime.
+    #
+    # LA CLE N'EST PAS UN SECRET DE CE SERVEUR : il ne la garde pas, ne
+    # l'utilise pas, et n'appelle personne avec. Il la relit a chaque
+    # demande et la rend a la page, qui la garde en memoire vive le temps
+    # de la session (voir js/30-ia.js). Le serveur n'ecoute que sur la
+    # boucle locale ; une cle rendue ici ne sort pas du poste autrement
+    # que par l'appel que la page fait elle-meme a Google AI Studio.
+    CLE_IA = "api_key_free_ia_studio.txt"
+
+    def _ia_cle(self):
+        """GET /api/ia/cle : la cle Google AI Studio posee sur ce poste."""
+        cle = (os.environ.get("GEMINI_API_KEY")
+               or os.environ.get("GOOGLE_API_KEY") or "").strip()
+        origine = "environnement"
+        if not cle:
+            chemin = os.path.join(ROOT, self.CLE_IA)
+            if os.path.isfile(chemin):
+                try:
+                    with open(chemin, "r", encoding="utf-8") as f:
+                        txt = f.read().strip()
+                    # Un gabarit laisse en place n'est pas une cle. Le
+                    # rendre ferait echouer l'appel avec un message de
+                    # Google, et on chercherait la panne du mauvais cote.
+                    if txt and not txt.upper().startswith(("YOUR_", "AIZA_")):
+                        cle = txt
+                        origine = "fichier"
+                except OSError:
+                    pass
+        return {"dispo": bool(cle), "cle": cle,
+                "origine": origine if cle else "",
+                "fichier": self.CLE_IA}
+
+    # ==================================================================
     # Aiguillage
     # ==================================================================
     API = ("/api/ipc2581", "/api/openems", "/api/openems/script",
@@ -469,7 +519,8 @@ class Poste(http.server.SimpleHTTPRequestHandler):
            "/api/openems/dossier",
            "/api/projet", "/api/projet/ouvrir", "/api/projet/racine",
            "/api/projet/enregistrer", "/api/projet/fermer",
-           "/api/projet/dossier")
+           "/api/projet/dossier",
+           "/api/ia/cle")
 
     def do_GET(self):
         route = self._route()
@@ -487,6 +538,9 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             return
         if route == "/api/projet/ouvrir":
             self._api(self._pr_ouvrir)
+            return
+        if route == "/api/ia/cle":
+            self._api(self._ia_cle)
             return
         if route.startswith("/api/"):
             self._json({"detail": "Route inconnue : %s" % route}, 404)
@@ -737,7 +791,45 @@ def _pourquoi(exc):
     return msg
 
 
+def _reexecuter_dans_env():
+    """Relance serveur.py dans l'environnement virtuel du projet s'il existe.
+
+    Sur Windows, lancer « python serveur.py » depuis une invite ordinaire
+    utilise le Python du systeme (ex: 3.12 ou 3.13), alors que les paquets
+    compiles d'openEMS sont installes dans le venv « env/ » (Python 3.10 ou 3.11).
+    Cette fonction detecte l'interpreteur du venv et s'y relance directement.
+    """
+    if os.environ.get("_ANTENNE_REEXEC") == "1":
+        return
+
+    for nom in ("env", ".venv", "venv"):
+        for sous in (("Scripts", "python.exe"), ("bin", "python")):
+            exe = os.path.join(ROOT, nom, *sous)
+            if os.path.isfile(exe):
+                try:
+                    if os.path.samefile(sys.executable, exe):
+                        return
+                except (OSError, ValueError):
+                    if os.path.abspath(sys.executable).lower() == os.path.abspath(exe).lower():
+                        return
+
+                env = dict(os.environ)
+                env["_ANTENNE_REEXEC"] = "1"
+                import subprocess
+                cmd = [exe, os.path.abspath(__file__)] + sys.argv[1:]
+                print("  [*] Bascule vers l'environnement virtuel : %s" % exe)
+                try:
+                    code = subprocess.call(cmd, env=env)
+                    sys.exit(code)
+                except KeyboardInterrupt:
+                    sys.exit(0)
+                except Exception as exc:
+                    print("  [!] Echec de la bascule vers le venv (%s), poursuite..." % exc)
+                    return
+
+
 def main(argv=None):
+    _reexecuter_dans_env()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=PORT_DEFAUT,
                     help="port d'ecoute (defaut : %d)" % PORT_DEFAUT)

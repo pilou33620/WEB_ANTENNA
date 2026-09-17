@@ -7,23 +7,30 @@
 # fichiers IPC-2581 se lisent, les modèles se préparent et se vérifient, et
 # leurs scripts s'exportent. Seul le bouton « Lancer » est éteint.
 #
+# PRÉREQUIS D'INSTALLATION :
+# 1. Utiliser Python 3.10 ou 3.11 (64 bits) impérativement.
+# 2. Avoir extrait l'archive binaire openEMS pour Windows dans le dossier
+#    « openEMS/ » à côté de serveur.py AVANT de lancer pip.
+#
 #   pip install -r requirements.txt
 #
 # Ce que chaque paquet apporte :
 #   - numpy    : le dépouillement (S11, impédance, ROE) et le champ lointain
-#   - openEMS  : les liaisons Python du solveur FDTD
-#   - CSXCAD   : la description de géométrie qu'openEMS consomme
+#   - openEMS  : les liaisons Python du solveur FDTD (roue .whl dans openEMS/python/)
+#   - CSXCAD   : la description de géométrie qu'openEMS consomme (roue .whl)
 #   - h5py     : la lecture des champs enregistrés par la boîte NF2FF
 #
-# LES BINAIRES NE SONT PAS DANS CETTE LISTE, et c'est le piège d'installation
-# le plus courant : `pip install openEMS CSXCAD` pose les modules Python, pas
-# les DLL. Il faut en plus l'archive binaire d'openEMS, dans un dossier
-# « openEMS/ » à côté de serveur.py — `openems_run.py` y cherche CSXCAD.dll et
-# l'ajoute lui-même au chemin de recherche. Sans cela, « import CSXCAD »
-# échoue sur un « DLL load failed » qui ne nomme pas le fichier manquant.
+# LES ROUES WINDOWS D'OPENEMS ET CSXCAD NE SONT PAS SUR PYPI :
+# Elles sont fournies dans le sous-dossier openEMS/python/ de l'archive binaire.
+# La directive « --find-links openEMS/python » ci-dessous indique à pip d'y
+# chercher directement les roues compatibles (cp310 / cp311).
 # =============================================================================
 
+# Dépendances standards hébergées sur PyPI
 numpy>=1.24.0
-openEMS>=0.0.35
-CSXCAD>=0.6.2
 h5py>=3.0.0
+
+# Liaisons Python openEMS & CSXCAD (recherchées dans l'archive binaire locale)
+--find-links openEMS/python
+CSXCAD>=0.6.2
+openEMS>=0.0.35

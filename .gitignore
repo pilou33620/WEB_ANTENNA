@@ -50,6 +50,14 @@ scratch_*.json
 *.hdf5
 
 # =============================================================================
+# Le secret du mode IA
+# =============================================================================
+# La clé Google AI Studio que le serveur rend à la page (GET /api/ia/cle).
+# Elle est personnelle et facturable : elle n'a rien à faire dans l'historique
+# d'un dépôt, d'où qu'il soit cloné ensuite.
+api_key_free_ia_studio.txt
+
+# =============================================================================
 # IDEs, éditeurs et OS
 # =============================================================================
 .vscode/

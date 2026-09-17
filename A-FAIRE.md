@@ -1,87 +1,119 @@
 # Ce qui reste à faire
 
-État relevé le **15/09/2026**, après la séance qui a traité les cinq chantiers
-de la version précédente de ce fichier. Le banc passe :
-`python python/test/banc-openems.py` → **374 vérifications, toutes passées**,
+État relevé le **15/09/2026**, après la séance qui a traité les quatre
+chantiers ouverts de la version précédente et qui a mené la mesure que le
+premier réclamait. Le banc passe :
+`python python/test/banc-openems.py` → **466 vérifications, toutes passées**,
 bancs JavaScript compris. Aucun `TODO` ni `FIXME` dans le code.
 
-Ce qui a été fait — et qui ne se redécouvre donc plus ici : l'**annuler /
-refaire** du mode conception, le **banc du dessin à la main**, la **calibration
-de la durée annoncée** sur le débit réel du poste, le **tableau S complet** avec
-son export `.sNp`, et le **croisement de deux cotes** au balayage. Le README les
-décrit ; ce fichier ne garde que ce qui reste ouvert.
+Ce qui a été fait — et qui ne se redécouvre donc plus ici : le **balayage
+d'une cote de motif** (c'est lui qui a rendu la mesure possible), le
+**diagramme de rayonnement de chaque colonne** d'un tableau S, la **famille de
+courbes d'un croisement** lisible sur deux codes, le **diagnostic d'un calcul
+qui ne rend rien**, et le **désembedage d'une ligne d'alimentation**. Le README
+les décrit ; ce fichier ne garde que ce qui reste ouvert.
 
-Les deux premiers chapitres sont ce qui **manque** — vérifié dans le code,
-références de lignes à l'appui. Le troisième reprend les « Limites connues » du
-README au complet, triées par ce qu'on en fait : celles déjà en travaux plus
-haut, celles qui tiennent à une brique en dessous, et celles qui sont des choix
-et ne se rouvrent pas. Une limite écrite sans cette mention se redécouvre à
-chaque relecture, et on la traite une fois de trop.
+Le premier chapitre est ce qui **manque**, vérifié dans le code. Le second
+reprend les « Limites connues » du README au complet, triées par ce qu'on en
+fait : celles déjà en travaux plus haut, celles qui tiennent à une brique en
+dessous, et celles qui sont des choix et ne se rouvrent pas. Une limite écrite
+sans cette mention se redécouvre à chaque relecture, et on la traite une fois
+de trop.
 
 ---
 
 ## 1. Ce qui manque, et qui se voit à l'usage
 
-### L'adaptation du patch — ce que la mesure a tranché, ce qu'elle laisse ouvert
+### L'adaptation du patch — la mesure a tranché, et ce n'est pas ce qu'on croyait
 
-C'était la question restée ouverte du diagnostic du 15/09 : même bien maillé,
-le patch du gabarit s'adapte mal, et son impédance garde une forte partie
-réactive. Deux candidats étaient en lice, et ils sont **maintenant séparés**.
+La question restée ouverte du diagnostic précédent : même bien maillé, le patch
+du gabarit s'adapte mal, et son impédance garde une forte partie réactive. Deux
+suspects étaient nommés — les **fentes de l'encastrement** (`g`) et la
+**profondeur d'encastrement** (`y₀`). Un croisement 3 × 3 les a séparés.
 
-**Le plan de référence n'y est pour rien, et c'est démontrable.** Une ligne
-sans perte dont l'impédance caractéristique est celle de référence ne change
-pas |Γ| : elle le fait TOURNER. Le désembedage ne peut donc pas améliorer
-d'un dixième de décibel une adaptation mesurée au bord de la carte.
+**Neuf simulations, sur le document que la page produit vraiment** — c'est le
+balayage d'une cote de motif qui l'a permis, écrit pour l'occasion. 464 000 à
+492 000 cellules par point, arrêt à −40 dB, deux heures de calcul. `g` et `y₀`
+encadrent chacun la valeur du gabarit à ± 3 mm et ± 1 mm.
 
-Deux simulations le confirment sur le patch du gabarit (458 000 puis 511 000
-cellules, arrêt à −40 dB) — la seconde avec la ligne d'alimentation
-**doublée**, ce qui est la façon expérimentale de poser la question : si le
-plan de référence était en cause, allonger la ligne changerait l'adaptation.
-
-| à 2,45 GHz | S₁₁ | Z au port | Z ramené au patch |
+| S₁₁ min · résonance · Z au port | y₀ = 8,51 | y₀ = 11,51 *(gabarit)* | y₀ = 14,51 |
 |---|---|---|---|
-| ligne du gabarit, 6,4 mm | −0,64 dB | 9,0 − 98,9 j Ω | 50,1 + 252,2 j Ω |
-| ligne doublée, 12,8 mm | −1,20 dB | 4,3 − 24,2 j Ω | 82,6 + 226,2 j Ω |
+| **g = 1,49** | **−16,02 dB** · 2,3306 GHz · 68,4 − 3,5 j | −2,60 dB · 2,3012 GHz · 43,5 − 103,0 j | −0,91 dB · 2,2681 GHz · 6,8 − 63,5 j |
+| **g = 2,49** *(gabarit)* | −13,19 dB · 2,3434 GHz · 75,3 − 10,9 j | −2,50 dB · 2,3159 GHz · 36,5 − 96,0 j | −0,61 dB · 2,2957 GHz · 4,5 − 62,0 j |
+| **g = 3,49** | −8,08 dB · 2,3379 GHz · 100,3 − 34,1 j | −0,80 dB · 2,2901 GHz · 11,7 − 100,5 j | −2,18 dB · 2,2442 GHz · 16,0 − 61,1 j |
 
-L'impédance lue change du tout au tout ; l'adaptation, elle, bouge d'un demi-
-décibel — l'ordre de grandeur de ce que 6,4 mm de FR-4 à tanδ = 0,02
-dissipent, et rien de plus. **`AddMSLPort` n'aurait donc rien corrigé** : on
-cherchait une désadaptation de 7 en ROE, on trouve une perte de ligne.
+Quatre choses en sortent, et la première renverse le diagnostic précédent.
 
-*Au passage, la même mesure justifie l'autre moitié du chantier suivant* : les
-deux impédances ramenées au patch devraient coïncider et ne coïncident pas
-(50 + 252 j contre 83 + 226 j). Le désembedage a été fait ici avec le Z₀ et
-l'εᵣ effectif du **calcul analytique** — 50,2 Ω et 3,992 —, qui ne sont pas
-tout à fait ceux de la ligne telle qu'elle est maillée. `MSLPort`, lui, mesure
-son propre `Z_ref`.
+**1. C'est `y₀` qui fabrique la réactance, et le calcul de `y₀` est faux.**
+Remonter l'encastrement de 11,51 à 8,51 mm — trois millimètres — fait passer le
+S₁₁ de −2,5 à −13,2 dB *à `g` inchangé*, et la réactance de −96 à −11 Ω. La
+bande à −10 dB, qui n'existait dans aucun point à `y₀` nominal, apparaît :
+35 à 44 MHz. Le diagnostic précédent concluait que « la partie réelle est celle
+que l'encastrement visait, le calcul de `y₀` tombe donc juste » — c'était lire
+une coïncidence. La formule `y₀ = (L/π)·acos(√(50/R_bord))` part de la
+résistance de bord du modèle de cavité, **477 Ω** ici. Pour que l'adaptation
+tombe à 8,5 mm, il faudrait `R_bord ≈ 135 Ω` : le modèle la surestime d'un
+facteur **trois et demi**.
 
-**Ce qui reste, et où chercher.** À sa propre résonance (2,315 GHz, soit 5,5 %
-sous la cible — davantage que les 2 à 5 % annoncés), le patch présente au port
-**49,7 − 119,6 j Ω**. La partie réelle est celle que l'encastrement visait :
-le calcul de `y0` sur la résistance de bord du modèle de cavité (477 Ω) **tombe
-juste**. C'est la réactance de −120 Ω qui ruine tout — un ROE de 7,6 pour une
-résistance parfaite.
+**2. Les fentes comptent, dans le sens attendu, et au second rang.** À `y₀`
+tenu, resserrer `g` de 3,49 à 1,49 mm gagne 8 dB (−8,08 → −16,02) et fait
+tomber la réactance de −34 à −3,5 Ω. C'est bien une **capacité de fente**, et
+elle s'ajoute à celle de l'encastrement. Le premier suspect du diagnostic
+précédent était donc réel — simplement second.
 
-*À faire* : trouver d'où vient cette réactance. Les deux pistes, dans l'ordre
-du plus probable :
+**3. Le meilleur point est un COIN du tableau.** L'optimum est *hors* de la
+plage balayée, vers des `g` et des `y₀` encore plus petits. C'est la première
+chose à refaire, et elle est maintenant bon marché : le balayage sait varier
+ces deux cotes-là.
 
-1. **Les deux fentes de l'encastrement.** Le modèle de cavité les ignore : il
-   donne la résistance au bord d'un patch nu et suppose qu'on y entre sans rien
-   perturber. Or elles font ici `g` = 2,49 mm, soit huit dixièmes de la largeur
-   de ligne, sur une profondeur de 11,5 mm. Un croisement `g` × `y0` le dirait
-   en neuf simulations — c'est exactement ce que le balayage croisé sait faire
-   depuis cette séance, et c'est le premier usage à lui donner.
-2. **La résonance basse de 5,5 %**, qui déplace tout le reste. L'allongement
-   des bords ΔL vaut 0,741 mm par bord dans le calcul ; s'il est sous-estimé,
-   la longueur posée est trop grande.
+**4. Le champ lointain suit exactement l'adaptation** — ce qui est la seule
+façon de vérifier qu'on n'a pas seulement déplacé de l'énergie dans une perte :
+1,89 dBi et 40 % de rendement au meilleur point, contre −7,67 dBi et **5 %** au
+pire. Un patch désadapté ne rayonne pas, il chauffe.
 
-*Attention* : les valeurs absolues relevées ici (−2,29 dB au creux, −3,35 dB
-avec la ligne doublée) ont été obtenues
-sur un document **reconstruit à la main** à partir des cotes du gabarit — mêmes
-cuivres, mêmes fentes, même port, mais la ligne d'alimentation est un rectangle
-au lieu d'une polyligne à bouts ronds. L'argument sur le plan de référence n'en
-dépend pas ; la profondeur du creux, elle, est à reprendre sur le document que
-la page produit vraiment avant d'en conclure quoi que ce soit.
+*Ce que cela ferme.* La réserve du diagnostic précédent — « les valeurs
+absolues viennent d'un document reconstruit à la main » — est **levée** : le
+document réel donne 2,3159 GHz et −2,50 dB au point du gabarit, contre
+2,315 GHz et −2,29 dB sur la reconstruction. La polyligne à bouts ronds ne
+changeait rien.
+
+*À faire*, dans cet ordre :
+
+1. **Prolonger le croisement vers le bas** : `y₀` de 5 à 9 mm, `g` de 0,5 à
+   2 mm. Neuf points de plus, et l'optimum sera dans la plage.
+2. **Puis croiser `L` × `y₀`.** La résonance reste 4,5 % sous la cible dans
+   tout le tableau : `L` doit raccourcir, et cela déplacera l'adaptation.
+   Les deux cotes ne se lisent pas l'une sans l'autre — c'est le cas d'école
+   du croisement.
+3. **Ne pas corriger la formule de `y₀` sur ce seul relevé.** Un facteur 3,5
+   mesuré sur un substrat, une fréquence et une largeur de patch ne fait pas
+   une loi ; et un motif reste un point de départ que la simulation corrige,
+   ce qui est exactement ce qui vient de se passer. Ce qui vaut, en revanche,
+   c'est de le **dire** dans la fiche du motif — c'est fait.
+
+Le croisement complet est dans `croisement-g-y0.json`, à la racine.
+
+**Une dixième simulation confirme le meilleur point, hors balayage** — gabarit
+posé avec `g` = 1,49 et `y₀` = 8,51, maillage refait pour lui seul, ligne
+d'alimentation déclarée :
+
+| | |
+|---|---|
+| résonance | 2,3306 GHz |
+| S₁₁ minimal | **−15,89 dB** (le balayage donnait −16,02) |
+| bande à −10 dB | **44,1 MHz**, soit 1,89 % |
+| Z au port | 68,7 − 3,6 j Ω |
+| Z **au pied de l'antenne** | 57,9 + 15,5 j Ω |
+| directivité · gain réalisé · rendement | 5,84 dBi · 1,86 dBi · 40,0 % |
+
+Deux choses valent d'être notées. D'abord l'écart au point correspondant du
+balayage est de **0,13 dB** : c'est le prix du maillage figé sur le point de
+départ, et il est négligeable — la précaution qui rend la famille de courbes
+comparable ne fausse pas les courbes. Ensuite l'impédance ramenée au pied du
+patch, 57,9 + 15,5 j, est *plus proche de 50 Ω que celle du port* : rien
+d'étonnant, la ligne fait tourner. C'est bien à ce plan-là que se lit ce qu'il
+reste à corriger **sur l'antenne** — un reste inductif de 15 Ω, qu'un
+encastrement un peu plus court compenserait.
 
 ### Le port microruban désembedé (`AddMSLPort`) — le prix, désormais chiffré
 
@@ -127,16 +159,50 @@ livré avec le solveur :
 Ce n'est pas le cas aujourd'hui — l'écart entre les deux est justement ce que
 la réserve écrite à côté du nombre annonce.
 
+### L'assistant IA — posé, et ce qu'il lui manque
+
+`js/30-ia.js` et le bouton **✨ IA** : l'**interface de WEB_CAO reprise telle
+quelle** — barre de connexion, barre d'état, bulles, puces, manuel local,
+cartes d'action, menu du clic droit, Alt+I —, avec deux commandes exécutées en
+local (`help` et `verifier`) et, si l'on veut, un modèle de langage qui lit les
+mêmes réglages et propose des corrections. Rien ne s'écrit sans un clic, tout
+passe par la liste blanche `IA_CHAMPS`, et le banc en éprouve la barrière
+(section 9 de `test/banc-interface.js`). Le README le décrit en entier ; ce qui
+suit est ce qui reste ouvert.
+
+**1. Les règles locales ne connaissent qu'un motif sur six.** Deux d'entre
+elles sont écrites pour le patch : le pas de maillage face à la largeur de
+ligne, et l'encastrement `y₀`. Le monopôle, l'IFA, le MIFA et le dipôle n'ont
+rien d'équivalent — or chacun a sa cote la moins sûre, et aucune n'est
+chiffrée comme celle du patch l'est. *Le travail* : une mesure par motif, comme
+le croisement `g` × `y₀` en a fait une. C'est du temps de calcul, pas du code.
+
+**2. Rien ne relit un balayage terminé.** La règle la plus utile serait celle
+qu'on ne peut pas encore écrire : « vos quarante courbes disent que l'optimum
+est hors de la plage balayée, du côté des petites valeurs ». `ANT.resultat`
+porte les points, la lecture reste à faire.
+
+**3. Le contexte est un texte, pas des données.** Il se lit très bien et tient
+en soixante lignes, mais un modèle qui devrait comparer neuf points d'un
+croisement les recevrait en prose. Si cela devient utile, c'est un tableau
+qu'il faudra joindre — pas une phrase de plus.
+
+**4. `css/ia.css` est une copie, et une copie diverge.** La feuille vient de
+`commun/ia-assistant.css` de WEB_CAO, et ce qui est propre à cet outil-ci est
+ajouté **en fin de fichier**, jamais au milieu — pour qu'une version suivante
+de WEB_CAO se reprenne par un `cp` et non par une fusion. Le jour où les deux
+dépôts auront trois feuilles communes, ce sera un dossier partagé qu'il faudra,
+pas une troisième copie.
+
+**5. Un seul fournisseur.** L'appel est écrit pour Google AI Studio, en dur.
+Un poste sans accès réseau n'a que les vérifications locales — ce qui est
+délibéré, mais un modèle local (Ollama et consorts) tiendrait dans la même
+fonction : c'est une URL et une forme de corps de requête, le reste ne bouge
+pas.
+
 ---
 
-## 2. Confort, à décider avant d'écrire
-
-*(Les deux chantiers de cette section — la lisibilité d'un croisement et le
-diagnostic d'un calcul qui ne rend rien — ont été traités. Voir le README.)*
-
----
-
-## 3. Les limites connues, et ce qu'on en fait
+## 2. Les limites connues, et ce qu'on en fait
 
 La liste complète, telle que le README l'établit — mais triée ici par la seule
 question qui intéresse une liste de travaux : **est-ce que ça se traite ?**

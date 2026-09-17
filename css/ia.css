@@ -1,0 +1,874 @@
+/* =============================================================================
+   Antenne openEMS — css/ia.css
+   Assistant IA technique (Google AI Studio), section de l'espace de travail
+   (data-pnl="ia"). Voir js/30-ia.js.
+
+   REPRISE TELLE QUELLE DE commun/ia-assistant.css DE WEB_CAO
+   (https://github.com/pilou33620/WEB_CAO), comme les modules 00 a 06 de cet
+   outil viennent de sa visionneuse : meme espace de travail, meme theme, meme
+   panneau. Ce qui est propre a cet outil-ci est ajoute EN FIN DE FICHIER, et
+   seulement la, pour que la reprise d'une version suivante de WEB_CAO reste
+   une copie et non une fusion.
+   ============================================================================= */
+
+/* Règle globale pour respecter l'attribut hidden */
+[hidden] {
+  display: none !important;
+}
+
+/* ---------- Bouton dans la barre d'outils ---------- */
+.tb.tb-ia {
+  background: linear-gradient(135deg, rgba(63, 160, 234, 0.15), rgba(242, 199, 68, 0.15));
+  border-color: rgba(63, 160, 234, 0.45);
+  color: #fff;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+.tb.tb-ia:hover, .tb.tb-ia.on {
+  background: linear-gradient(135deg, rgba(63, 160, 234, 0.3), rgba(242, 199, 68, 0.3));
+  border-color: var(--blue, #3fa0ea);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(63, 160, 234, 0.25);
+}
+.tb.tb-ia .ia-sparkle {
+  color: var(--yellow, #f2c744);
+  font-size: 13px;
+}
+
+/* ---------- Corps de la section dans l'espace de travail ---------- */
+.pnl[data-pnl="ia"] .pnl-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--panel, #17181b);
+}
+
+/* Repliement complet du panneau IA (seul l'en-tête reste visible) */
+.pnl[data-pnl="ia"].collapsed {
+  flex: 0 0 auto !important;
+  height: auto !important;
+}
+.pnl[data-pnl="ia"].collapsed > .pnl-body,
+.pnl[data-pnl="ia"].collapsed #iaPanneau {
+  display: none !important;
+}
+
+.ia-panneau-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--ui, "Segoe UI", system-ui, sans-serif);
+  color: var(--txt, #e6e8ec);
+  color-scheme: dark;
+}
+
+/* Scrollbars raccord avec le thème sombre de l'éditeur CAO */
+.ia-panneau-wrap,
+.ia-messages,
+.ia-textarea,
+.ia-code-block {
+  color-scheme: dark;
+  scrollbar-width: thin;
+  scrollbar-color: #31343a transparent;
+}
+
+.ia-panneau-wrap ::-webkit-scrollbar,
+.ia-messages::-webkit-scrollbar,
+.ia-textarea::-webkit-scrollbar,
+.ia-code-block::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.ia-panneau-wrap ::-webkit-scrollbar-track,
+.ia-messages::-webkit-scrollbar-track,
+.ia-textarea::-webkit-scrollbar-track,
+.ia-code-block::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ia-panneau-wrap ::-webkit-scrollbar-thumb,
+.ia-messages::-webkit-scrollbar-thumb,
+.ia-textarea::-webkit-scrollbar-thumb,
+.ia-code-block::-webkit-scrollbar-thumb {
+  background: #31343a;
+  border-radius: 4px;
+}
+.ia-panneau-wrap ::-webkit-scrollbar-thumb:hover,
+.ia-messages::-webkit-scrollbar-thumb:hover,
+.ia-textarea::-webkit-scrollbar-thumb:hover,
+.ia-code-block::-webkit-scrollbar-thumb:hover {
+  background: #5c6370;
+}
+
+/* ---------- Barre de connexion compacte (Saisie de la clé) ---------- */
+.ia-panel-connect {
+  background: rgba(0, 0, 0, 0.28);
+  border-bottom: 1px solid var(--border, #2b2e34);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.ia-panel-connect[hidden] {
+  display: none !important;
+}
+.ia-connect-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ia-lock-ico {
+  font-size: 13px;
+  color: var(--yellow, #f2c744);
+  flex-shrink: 0;
+}
+.ia-key-input-compact {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg, #0f1012);
+  border: 1px solid var(--border2, #3a3e46);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: #fff;
+  transition: border-color 0.15s;
+}
+.ia-key-input-compact:focus {
+  outline: none;
+  border-color: var(--blue, #3fa0ea);
+}
+.ia-btn-eye-compact {
+  background: none;
+  border: none;
+  color: var(--txt-dim, #8b919c);
+  cursor: pointer;
+  padding: 3px 5px;
+  font-size: 13px;
+}
+.ia-btn-eye-compact:hover {
+  color: var(--txt, #e6e8ec);
+}
+.ia-btn-ok-compact {
+  background: var(--blue, #3fa0ea);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.ia-btn-ok-compact:hover {
+  background: var(--blue-deep, #2b7fbf);
+}
+.ia-connect-hint {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 9.5px;
+  color: var(--txt-dim, #8b919c);
+  line-height: 1.3;
+}
+.ia-connect-hint span {
+  color: #c99c3d;
+}
+.ia-connect-hint a {
+  color: var(--blue, #3fa0ea);
+  text-decoration: none;
+}
+.ia-connect-hint a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- Barre de statut quand connecté ---------- */
+.ia-panel-status {
+  background: rgba(0, 0, 0, 0.22);
+  border-bottom: 1px solid var(--border, #2b2e34);
+  padding: 5px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--txt-dim, #8b919c);
+  gap: 8px;
+  flex-shrink: 0;
+}
+.ia-panel-status[hidden] {
+  display: none !important;
+}
+.ia-status-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ia-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #44cf6c;
+  flex-shrink: 0;
+}
+.ia-status-model,
+.ia-model-select {
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  color: var(--blue, #3fa0ea);
+  background: rgba(63, 160, 234, 0.12);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid rgba(63, 160, 234, 0.25);
+  cursor: pointer;
+  outline: none;
+}
+.ia-model-select:hover {
+  border-color: var(--blue, #3fa0ea);
+}
+.ia-status-ctx {
+  font-family: var(--mono, monospace);
+  font-size: 10px;
+  color: var(--txt, #e6e8ec);
+}
+.ia-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.ia-subbar-btn {
+  background: transparent;
+  border: 1px solid var(--border2, #3a3e46);
+  border-radius: 3px;
+  color: var(--txt-dim, #8b919c);
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ia-subbar-btn:hover {
+  border-color: var(--blue, #3fa0ea);
+  color: var(--txt, #e6e8ec);
+}
+.ia-subbar-btn.danger:hover {
+  border-color: var(--red, #e8443a);
+  color: #ff6b60;
+}
+
+/* ---------- Liste des messages (Occupe tout l'espace disponible) ---------- */
+.ia-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Message Bubble */
+.ia-msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 96%;
+  animation: iaFadeIn 0.15s ease-out;
+}
+@keyframes iaFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.ia-msg.user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+.ia-msg.model {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+.ia-msg-role {
+  font-family: var(--mono, monospace);
+  font-size: 9.5px;
+  color: var(--txt-dim, #8b919c);
+  margin-bottom: 3px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.ia-msg-bubble {
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  position: relative;
+  word-break: break-word;
+}
+.ia-msg.user .ia-msg-bubble {
+  background: #1d334a;
+  border: 1px solid #28547e;
+  color: #f0f6fc;
+  border-bottom-right-radius: 2px;
+}
+.ia-msg.model .ia-msg-bubble {
+  background: var(--panel2, #1c1e22);
+  border: 1px solid var(--border2, #3a3e46);
+  color: var(--txt, #e6e8ec);
+  border-bottom-left-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Formattage Markdown dans la bulle */
+.ia-msg-bubble p {
+  margin: 0 0 8px;
+}
+.ia-msg-bubble p:last-child {
+  margin-bottom: 0;
+}
+.ia-msg-bubble strong, .ia-msg-bubble b {
+  color: #fff;
+  font-weight: 600;
+}
+.ia-msg-bubble ul, .ia-msg-bubble ol {
+  margin: 4px 0 8px 16px;
+  padding: 0;
+}
+.ia-msg-bubble li {
+  margin-bottom: 3px;
+}
+.ia-msg-bubble code {
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: #79c0ff;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ia-code-wrap {
+  margin: 8px 0;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--border2, #3a3e46);
+  background: #0d1117;
+}
+.ia-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  background: #161b22;
+  border-bottom: 1px solid #21262d;
+  font-family: var(--mono, monospace);
+  font-size: 10.5px;
+  color: var(--txt-dim, #8b919c);
+}
+.ia-btn-copy {
+  background: transparent;
+  border: 1px solid #30363d;
+  border-radius: 3px;
+  color: var(--txt-dim, #8b919c);
+  font-size: 10px;
+  padding: 1px 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ia-btn-copy:hover {
+  background: #21262d;
+  color: #fff;
+  border-color: #8b949e;
+}
+.ia-code-block {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-family: var(--mono, monospace);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: #e6edf3;
+  white-space: pre;
+}
+
+/* Tableau */
+.ia-msg-bubble table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+  font-size: 11.5px;
+}
+.ia-msg-bubble th, .ia-msg-bubble td {
+  border: 1px solid var(--border2, #3a3e46);
+  padding: 5px 8px;
+  text-align: left;
+}
+.ia-msg-bubble th {
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* Suggestions chips */
+.ia-chips-wrap {
+  margin: 6px 0 4px;
+}
+.ia-chips-title {
+  font-size: 11px;
+  color: var(--txt-dim, #8b919c);
+  margin-bottom: 6px;
+}
+.ia-chips-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.ia-chip {
+  background: var(--panel, #17181b);
+  border: 1px solid var(--border2, #3a3e46);
+  border-radius: 12px;
+  padding: 4px 9px;
+  font-size: 11px;
+  color: var(--txt, #e6e8ec);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  text-align: left;
+}
+.ia-chip:hover {
+  border-color: var(--blue, #3fa0ea);
+  background: #202630;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+/* Indicateur de chargement */
+.ia-loading-bubble {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  background: var(--panel2, #1c1e22);
+  border: 1px solid var(--border2, #3a3e46);
+  border-radius: 6px;
+  font-size: 11.5px;
+  color: var(--txt-dim, #8b919c);
+  width: fit-content;
+}
+.ia-dots {
+  display: flex;
+  gap: 4px;
+}
+.ia-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--blue, #3fa0ea);
+  animation: iaPulse 1.2s infinite ease-in-out;
+}
+.ia-dot:nth-child(2) { animation-delay: 0.2s; }
+.ia-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes iaPulse {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* Zone d'erreur */
+.ia-error-banner {
+  background: rgba(232, 68, 58, 0.14);
+  border: 1px solid rgba(232, 68, 58, 0.4);
+  border-radius: 4px;
+  padding: 7px 10px;
+  margin: 6px 10px;
+  font-size: 11px;
+  color: #ff9189;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.ia-error-banner[hidden] {
+  display: none !important;
+}
+.ia-error-banner button {
+  background: rgba(232, 68, 58, 0.25);
+  border: 1px solid rgba(232, 68, 58, 0.5);
+  border-radius: 3px;
+  color: #fff;
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+/* Pied de discussion & saisie */
+.ia-footer {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--panel2, #1c1e22);
+  border-top: 1px solid var(--border, #2b2e34);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+.ia-input-row {
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  box-sizing: border-box;
+}
+.ia-textarea {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  background: var(--bg, #0f1012);
+  border: 1px solid var(--border2, #3a3e46);
+  border-radius: 5px;
+  padding: 8px 10px;
+  color: #fff;
+  font-family: var(--ui, "Segoe UI", system-ui, sans-serif);
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 56px;
+  max-height: 160px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  transition: border-color 0.15s;
+}
+.ia-textarea:focus {
+  outline: none;
+  border-color: var(--blue, #3fa0ea);
+}
+.ia-btn-send {
+  background: var(--blue, #3fa0ea);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.1s, opacity 0.15s;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+}
+.ia-btn-send:hover {
+  background: var(--blue-deep, #2b7fbf);
+}
+.ia-btn-send:active {
+  transform: scale(0.94);
+}
+.ia-btn-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ia-btn-send svg {
+  width: 15px;
+  height: 15px;
+  margin-left: 1px;
+}
+.ia-footer-hints {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--txt-dim, #8b919c);
+  gap: 8px;
+  box-sizing: border-box;
+}
+.ia-footer-hints label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.ia-footer-hints input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--blue, #3fa0ea);
+}
+.ia-footer-hints span {
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+/* ---------- Menu Contextuel au Clic Droit ---------- */
+.ia-context-menu {
+  position: fixed;
+  z-index: 99998;
+  background: var(--panel2, #1c1e22);
+  border: 1px solid var(--border2, #3a3e46);
+  border-radius: 6px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65), 0 0 1px rgba(255, 255, 255, 0.15);
+  padding: 5px;
+  min-width: 250px;
+  max-width: 340px;
+  font-family: var(--ui, sans-serif);
+  color: var(--txt, #e6e8ec);
+  user-select: none;
+  animation: iaMenuIn 0.12s cubic-bezier(0, 0, 0.2, 1);
+}
+@keyframes iaMenuIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.ia-context-menu[hidden] {
+  display: none !important;
+}
+.ia-menu-head {
+  padding: 5px 8px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--txt-dim, #8b919c);
+  border-bottom: 1px solid var(--border, #2b2e34);
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ia-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--txt, #e6e8ec);
+  transition: background 0.12s, color 0.12s;
+}
+.ia-menu-item:hover {
+  background: #252b35;
+  color: #fff;
+}
+.ia-menu-item.primary {
+  color: #79c0ff;
+  font-weight: 500;
+}
+.ia-menu-item.primary:hover {
+  background: rgba(63, 160, 234, 0.18);
+  color: #fff;
+}
+.ia-menu-item-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ia-menu-ico {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.ia-menu-badge {
+  font-family: var(--mono, monospace);
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--txt-dim, #8b919c);
+}
+.ia-menu-subtext {
+  font-size: 10px;
+  color: var(--txt-dim, #8b919c);
+  margin-left: 21px;
+  margin-top: 1px;
+}
+.ia-menu-sep {
+  height: 1px;
+  background: var(--border, #2b2e34);
+  margin: 4px 0;
+}
+
+/* ---------- Manuel d'Aide Local ---------- */
+.ia-msg-role.local-tool {
+  color: var(--yellow, #f2c744);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.ia-msg-bubble.ia-manual-bubble {
+  border-left: 3px solid var(--yellow, #f2c744);
+  background: rgba(242, 199, 68, 0.04);
+}
+.ia-chip.ia-chip-help {
+  border-color: rgba(242, 199, 68, 0.4);
+  color: var(--yellow, #f2c744);
+  background: rgba(242, 199, 68, 0.08);
+  font-weight: 500;
+}
+.ia-chip.ia-chip-help:hover {
+  background: rgba(242, 199, 68, 0.2);
+  border-color: var(--yellow, #f2c744);
+  color: #fff;
+}
+
+/* ---------- Cartes d'Action Interactive IA ---------- */
+.ia-action-card {
+  margin: 10px 0 6px;
+  background: #14171c;
+  border: 1px solid rgba(63, 160, 234, 0.45);
+  border-radius: 6px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ia-action-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ia-action-icon {
+  color: var(--yellow, #f2c744);
+  font-size: 14px;
+}
+.ia-action-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: #fff;
+}
+.ia-action-desc {
+  font-size: 11px;
+  color: var(--txt-dim, #8b919c);
+  font-family: var(--mono, monospace);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 5px 8px;
+  border-radius: 4px;
+  border-left: 2px solid var(--blue, #3fa0ea);
+}
+.ia-action-footer {
+  margin-top: 4px;
+  display: flex;
+  justify-content: flex-end;
+}
+.ia-btn-action {
+  background: linear-gradient(135deg, #2b7fbf, #3fa0ea);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(63, 160, 234, 0.3);
+}
+.ia-btn-action:hover:not(:disabled) {
+  background: linear-gradient(135deg, #3fa0ea, #56b2f7);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(63, 160, 234, 0.45);
+}
+.ia-btn-action:active:not(:disabled) {
+  transform: translateY(0);
+}
+.ia-btn-action.done, .ia-btn-action:disabled {
+  background: rgba(68, 207, 108, 0.16);
+  border-color: rgba(68, 207, 108, 0.45);
+  color: #44cf6c;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+
+/* =============================================================================
+   Ce que l'outil « Antenne openEMS » ajoute à l'assistant de WEB_CAO.
+
+   RIEN DE NOUVEAU EN APPARENCE : ce sont les mêmes cartes, les mêmes puces et
+   la même barre de connexion. Ce qui suit habille trois choses que WEB_CAO
+   n'avait pas à montrer — ce qu'une proposition REFUSE, ce qu'elle changerait
+   quand il n'y a rien à changer, et le fait que ce panneau sert aussi sans
+   clé du tout.
+   ============================================================================= */
+
+/* L'avant en face de l'après, dans le bloc monospace de la carte d'action.
+   L'après est en gras et en vert : c'est lui qu'on relit avant de presser. */
+.ia-action-desc b {
+  color: #44cf6c;
+  font-weight: 600;
+}
+
+/* Ce qu'une proposition n'a PAS le droit d'écrire. Affiche, jamais passe
+   sous silence :
+   une proposition à moitié valable dont la moitié fautive disparaîtrait
+   donnerait une carte qui ne fait pas ce que le texte à côté vient
+   d'expliquer. */
+.ia-action-refus {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--yellow, #f2c744);
+  background: rgba(242, 199, 68, 0.07);
+  border-left: 2px solid var(--yellow, #f2c744);
+  border-radius: 4px;
+  padding: 5px 8px;
+}
+
+/* Une carte dont toutes les valeurs sont déjà en place. Elle reste visible —
+   savoir qu'une préconisation est DÉJÀ appliquée vaut mieux que de ne rien
+   voir et de se demander si le bloc a été perdu. */
+.ia-action-vide {
+  font-size: 11px;
+  color: var(--txt-dim, #8b919c);
+  font-style: italic;
+}
+
+/* Le bouton d'annulation, à côté du « ✓ appliqué ». Un réglage de simulation
+   n'a pas d'historique comme le dessin : sans lui, revenir en arrière
+   demanderait de retrouver la valeur d'avant à la main. */
+.ia-action-footer .ia-subbar-btn {
+  margin-left: 8px;
+}
+
+/* Sans clé, le panneau n'est pas inutile — et c'est le seul endroit où
+   quelqu'un qui n'en a pas regardera. */
+.ia-connect-local {
+  font-size: 10px;
+  line-height: 1.45;
+  color: var(--txt-dim, #8b919c);
+  border-top: 1px dashed var(--border, #2b2e34);
+  padding-top: 5px;
+}
+.ia-connect-local b {
+  color: var(--txt, #e6e8ec);
+  font-weight: 600;
+}
+
+/* La puce de vérification, en vert : elle ne coûte rien et ne sort pas du
+   poste, à la différence de toutes les autres. */
+.ia-chip.ia-chip-audit {
+  border-color: rgba(68, 207, 108, 0.45);
+  color: #44cf6c;
+  background: rgba(68, 207, 108, 0.08);
+  font-weight: 500;
+}
+.ia-chip.ia-chip-audit:hover {
+  background: rgba(68, 207, 108, 0.2);
+  border-color: #44cf6c;
+  color: #fff;
+}

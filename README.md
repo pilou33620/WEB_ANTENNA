@@ -18,8 +18,8 @@ Interface en HTML / CSS / JavaScript, traitement en Python.
 ## Prérequis & Démarrage rapide
 
 L'outil nécessite trois éléments essentiels :
-1. **L'environnement virtuel Python (`env/`)** avec les dépendances (`pip install -r requirements.txt`).
-2. **Les binaires openEMS (`openEMS/`)** contenant le solveur et ses DLL (`CSXCAD.dll`, `openEMS.exe`).
+1. **Les binaires openEMS (`openEMS/`)** contenant le solveur, ses DLL (`CSXCAD.dll`, `openEMS.exe`) et les roues Python dans `openEMS/python/`.
+2. **L'environnement virtuel Python (`env/`)** créé impérativement avec **Python 3.10 ou 3.11 (64 bits)** avec les dépendances (`pip install -r requirements.txt`).
 3. **ParaView** (optionnel mais recommandé) pour la visualisation 3D des champs électromagnétiques.
 
 *(Voir la section détaillée [Installation complète des prérequis](#installation-complète-des-prérequis) en bas de page pour les liens de téléchargement).*
@@ -27,10 +27,7 @@ L'outil nécessite trois éléments essentiels :
 ### Lancement
 
 ```bash
-# 1. Activer l'environnement virtuel (Windows PowerShell)
-.\env\Scripts\activate
-
-# 2. Démarrer le serveur
+# Démarrer le serveur (détecte et bascule automatiquement dans env/ s'il existe)
 python serveur.py
 ```
 
@@ -96,7 +93,8 @@ essais figure dans l'état renvoyé à la page.
 ├── css/
 │   ├── theme.css           le thème « dashboard nocturne »
 │   ├── workspace.css       les panneaux détachables
-│   └── antenne.css         ce que cet outil ajoute
+│   ├── antenne.css         ce que cet outil ajoute
+│   └── ia.css              le panneau de l'assistant IA, repris de WEB_CAO
 ├── js/
 │   ├── 00 … 06             lire et afficher la carte IPC-2581
 │   ├── 10 … 16             l'outil : état, géométrie, assistant, 3D, résultats
@@ -110,6 +108,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── 27-apercu-motif.js  le dessin coté d'un motif d'antenne, avant de le poser
 │   ├── 28-projet.js        capturer la séance, et la reprendre
 │   ├── 29-tableau-s.js     le tableau S complet, et son fichier Touchstone
+│   ├── 30-ia.js            l'assistant IA : vérification locale, et le modèle si on veut
 │   ├── 90-workspace.js     les panneaux détachables
 │   └── vendor/three.min.js three.js r134, posé ici et non pris sur un CDN
 ├── python/
@@ -124,7 +123,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── carte-antenne.py    fabrique une carte d'essai IPC-2581
 │   ├── patch-2450.xml      … celle qu'elle produit
 │   ├── banc-polygones.js   le découpage des découpes, cas dégénérés compris
-│   └── banc-interface.js   ports, balayage, unités : la logique de la page
+│   └── banc-interface.js   ports, balayage, unités, liste blanche de l'IA
 ├── env/                    l'environnement virtuel Python (dépendances pip)
 ├── openEMS/                les binaires du solveur (à télécharger, voir « Installation »)
 └── ParaView-…/             le visualiseur 3D des champs (à télécharger, optionnel)
@@ -132,7 +131,7 @@ essais figure dans l'état renvoyé à la page.
 
 ## Ce que le serveur fait, et pourquoi il existe
 
-Il ne sert que **trois choses qu'un navigateur ne sait pas faire** :
+Il ne sert que ce **qu'un navigateur ne sait pas faire** :
 
 1. **lire un fichier IPC-2581.** Le parseur est en Python, il fait soixante-dix
    kilo-octets de code, et aucun navigateur ne l'exécutera. La page envoie le
@@ -144,6 +143,12 @@ Il ne sert que **trois choses qu'un navigateur ne sait pas faire** :
    choisissez — voir « Les projets » ci-dessous. Une page web n'écrit pas là
    où on lui dit, et le stockage local d'un navigateur n'est ni un dossier,
    ni sauvegardable, ni partageable.
+
+Et une quatrième, minuscule, qui tient à la même raison que la troisième :
+
+4. **relire la clé du mode IA.** `GET /api/ia/cle` rend ce qu'il trouve dans
+   `api_key_free_ia_studio.txt` ou dans `GEMINI_API_KEY`. Il ne la garde pas,
+   ne s'en sert pas, et n'appelle personne avec — voir « Le mode IA ».
 
 Tout le reste — l'affichage, la désignation du cuivre, l'assistant, la 3D, les
 courbes — est dans le navigateur et n'a besoin de personne.
@@ -708,6 +713,26 @@ résonance** — soit 120 MHz à 2,45 GHz, la largeur de toute la bande ISM. Sur
 un MIFA serré, compter davantage : les brins repliés se couplent, et la fiche
 prévient dès que leur écartement descend sous deux largeurs de bras.
 
+**Sur le patch, c'est l'encastrement qui est le plus faux, et de loin.** La
+résonance tombe à quelques pour cent ; l'*adaptation*, elle, est manquée. Le
+calcul de `y₀` part de la résistance de bord du modèle de cavité, qui suppose
+un patch **nu** — ni la ligne qui entre, ni les deux fentes qui l'isolent n'y
+figurent. Un croisement `g` × `y₀` de neuf simulations, sur FR-4 1,6 mm à
+2,45 GHz, le chiffre :
+
+| S₁₁ minimal | y₀ = 8,51 mm | y₀ = 11,51 mm *(calculé)* | y₀ = 14,51 mm |
+|---|---|---|---|
+| g = 1,49 mm | **−16,0 dB** | −2,6 dB | −0,9 dB |
+| g = 2,49 mm *(calculé)* | −13,2 dB | −2,5 dB | −0,6 dB |
+| g = 3,49 mm | −8,1 dB | −0,8 dB | −2,2 dB |
+
+Soit une résistance de bord surestimée d'un facteur trois et demi, et un
+encastrement trop profond d'un bon quart. Les fentes comptent aussi, dans le
+sens attendu — elles ajoutent une capacité, et plus serrées valent mieux — mais
+au second rang. Les deux cotes le **disent** maintenant dans leur aide, et la
+fiche marque l'impédance de bord comme surestimée : c'est le balayage qui
+tranche, et l'écart n'est pas corrigé en douce sur la foi d'un seul relevé.
+
 Un motif n'est donc pas une antenne : c'est un dessin qui tombe assez près
 pour que la **première** simulation soit exploitable. Sans lui, elle part d'un
 dessin au hasard et ne dit rien ; avec lui, elle dit de combien il faut
@@ -795,6 +820,142 @@ Une décision explicite l'emporte sur une supposition.
 
 Ouvrir un fichier fait sortir du mode : un dessin et une carte réelle ne
 cohabitent pas, et le premier coup de crayon effacerait la seconde.
+
+## L'assistant IA — un relecteur, et rien de plus
+
+Sept étapes, une soixantaine de nombres, et deux d'entre eux suffisent à rendre
+un résultat faux sans qu'aucun message ne le dise : une marge d'air trop
+courte, un maillage qui ne met que deux cellules en travers d'une ligne.
+L'assistant des étapes sait déjà **refuser** ce qui ne se calcule pas, et le
+serveur sait déjà **chiffrer** ce que ça va coûter. Ni l'un ni l'autre ne sait
+dire « votre encastrement est trois millimètres trop profond, et c'est pour ça
+que votre patch ne s'adapte pas ».
+
+Le bouton **✨ IA** ouvre un panneau qui sait le dire. Il ne décide de rien : il
+lit, il explique, il propose — et **aucune valeur ne s'écrit sans un clic**.
+
+### C'est le panneau de WEB_CAO
+
+Même espace de travail, même thème, même panneau : `js/30-ia.js` reprend
+l'interface de `commun/ia-assistant.js` de
+[WEB_CAO](https://github.com/pilou33620/WEB_CAO), comme les modules `00` à `06`
+de cet outil viennent de sa visionneuse. On y retrouve, à l'identique :
+
+* la **barre de connexion** qui demande la clé, avec son œil pour la relire et
+  son lien vers la clé gratuite ;
+* la **barre d'état** une fois connecté : le modèle (Gemini 2.5 Flash, Gemini
+  2.5 Pro, Gemma 4 31B), le contexte détecté, « Vider », « Oublier clé » ;
+* les **bulles** de discussion, les **puces de questions**, le **manuel local**
+  sur fond jaune, les **cartes d'action** bleues ;
+* le **menu du clic droit** sur la carte — `js/04-interaction.js` appelait déjà
+  `iaAfficherMenuContextuel`, il attendait ce fichier ;
+* **Alt+I** pour ouvrir et fermer, **Échap** dans le panneau, **Entrée** pour
+  envoyer, **Maj+Entrée** pour aller à la ligne.
+
+### Deux commandes locales, et elles ne demandent rien à personne
+
+Comme `help` dans WEB_CAO, elles sont exécutées par l'outil : **zéro requête,
+zéro jeton, et aucune donnée ne sort du poste**. Elles marchent sans clé, et
+sur une machine débranchée.
+
+`help` rend le manuel. **`verifier`** — la puce verte, le bouton « 🔎 Vérifier »
+de la barre d'état, ou le premier élément du menu du clic droit — lance l'audit
+des réglages :
+
+| Ce qui est vérifié | Ce qui est attrapé |
+|---|---|
+| la bande et la cible | une fréquence visée hors de la bande simulée ; une bande trop étroite pour qu'un creux y apparaisse ; une bande hors du vraisemblable, c'est-à-dire une faute d'unité |
+| le cuivre, l'empilage | rien de désigné ; un intervalle sans épaisseur saisie |
+| les ports | aucun port posé ; un port qui relie une couche à elle-même ; un coaxial qui ne fait pas son impédance de référence |
+| l'arrêt | un garde-fou qui coupera avant que l'énergie soit descendue — ce qui rend une descente tronquée, et une transformée sur une descente tronquée n'est pas une mesure |
+| le maillage | moins de trois cellules en travers de la ligne d'alimentation : le cas exact qui fait disparaître la résonance du patch de cet outil |
+| le motif patch | un encastrement `y₀` laissé au calcul du gabarit, dont **on sait qu'il est faux** (voir plus bas) |
+| le dernier résultat | une résonance au bord de la bande ; un écart à la cible, avec le sens de la correction ; une désadaptation, en séparant ce qui vient de la réactance de ce qui vient de la partie réelle |
+
+L'audit sort en markdown, avec ses corrections en blocs `action` — c'est-à-dire
+**par le même rendu que la réponse du modèle**. Une correction locale et une
+correction proposée par l'IA donnent la même carte, avec la même barrière
+derrière : deux chemins de rendu auraient fini par diverger, et c'est celui qui
+écrit dans l'état qu'on ne veut pas voir diverger.
+
+**Poser une question**, en revanche, appelle Google AI Studio. C'est pour tout
+ce qu'une règle ne sait pas faire : *pourquoi* la résonance est 80 MHz trop
+basse, *quoi* balayer en premier, ce diagramme est-il crédible.
+
+### Ce qui sort du poste, et il faut le dire
+
+Le reste de l'outil ne dépend d'aucun service tiers — three.js est dans le
+dépôt pour cette raison, et une simulation qui dépendrait d'un serveur
+extérieur ne serait pas reproductible. Ce mode-ci fait exception, et il
+l'annonce : quand la case **« Contexte projet »** est cochée, un résumé des
+réglages part chez Google.
+
+Le **résumé**, et rien d'autre : la bande, l'empilage, le cuivre retenu en
+nombre d'objets, les ports, la boîte, le maillage, l'arrêt, les chiffres que
+le serveur a rendus, le motif ouvert avec ses cotes, les cotes balayables, et
+le dernier résultat. **Ni le fichier IPC-2581, ni les polygones de cuivre, ni
+les courbes.** La case se décoche, et le mode reste utilisable en questions
+générales.
+
+### La clé
+
+Elle vient du poste : `GET /api/ia/cle` rend celle que le serveur trouve dans
+`api_key_free_ia_studio.txt` à la racine du dépôt, ou dans la variable
+d'environnement `GEMINI_API_KEY`. Le fichier est dans `.gitignore`.
+
+Sans elle, la barre de connexion la demande. Elle ne vit alors qu'**en mémoire
+vive et dans le `sessionStorage` de cet onglet** : ni stockage local, ni
+cookie, ni projet — et **fermer le panneau l'efface**, par le ✕, par Alt+I, par
+Échap ou par « Oublier clé ». Le serveur, lui, ne la garde pas, ne s'en sert
+pas, et n'appelle personne avec : il la relit à chaque demande et la rend à la
+page, qui fait l'appel elle-même.
+
+### La liste blanche, et pourquoi elle est étroite
+
+C'est la seule barrière entre un texte venu du réseau et l'état de la
+simulation, et c'est le seul endroit de l'outil où une faute **ne se verrait
+pas** : le réglage changerait, la simulation tournerait, et le résultat aurait
+l'air d'un résultat.
+
+Une proposition arrive dans un bloc `action` — que le modèle écrit, ou que
+l'audit local produit. La page le relit, valide **chemin par chemin** contre
+`IA_CHAMPS`, borne chaque valeur, et affiche l'avant en face de l'après :
+
+```
+⚡ Affiner le maillage
+   pas de maillage dans le diélectrique : 0 (au mailleur de décider) → 0,78 mm
+   cellules de PML                      : 8 → 10
+   ⚠ « arret.energie » : en dessous de la borne basse (-80).
+                                                      [ ⚡ Appliquer ]
+```
+
+Ce qui est **refusé est affiché aussi** : une proposition à moitié valable dont
+la moitié fautive disparaîtrait donnerait une carte qui ne fait pas ce que le
+texte à côté vient d'expliquer. Ce qui est appliqué devient `✓ 2 réglage(s)
+appliqué(s)` et **reste annulable** tant que la conversation est ouverte — un
+réglage de simulation n'a pas d'historique comme le dessin, et sans ce bouton
+il faudrait retrouver la valeur d'avant à la main.
+
+Trois genres de cartes, et rien d'autre : des **réglages** (bande, boîte,
+maillage, arrêt, pertes, ports), des **cotes de motif** du mode conception, et
+l'**armement d'un balayage**. Jamais la sélection de cuivre, jamais l'empilage
+lu dans le fichier, jamais un chemin qui ferait disparaître un travail.
+
+La consigne envoyée au modèle **est engendrée depuis cette liste** : une liste
+recopiée à la main aurait dérivé dès le premier champ ajouté, et le modèle
+aurait proposé des réglages que la page refuse — ce qui ressemble beaucoup à un
+modèle qui se trompe, et n'en est pas un. Le banc d'essai le vérifie
+(`test/banc-interface.js`, section 9).
+
+### Ce que le modèle sait de cet outil
+
+Sa consigne porte ce que les mesures de ce dépôt ont tranché, et qu'on ne lit
+nulle part ailleurs : que le gabarit patch surestime la résistance de bord d'un
+facteur 3,5 et propose donc un encastrement trop profond d'un quart ; que
+resserrer les encoches gagne 8 dB ; que λ/20 dans le diélectrique ne suffit pas
+face à une ligne étroite ; qu'allonger une ligne d'alimentation **n'adapte
+pas**, elle fait tourner Γ sans changer son module. Un modèle générique
+proposerait le contraire de chacune de ces quatre choses.
 
 ## L'aperçu 3D
 
@@ -913,7 +1074,7 @@ tous les outils liraient sans broncher et dont la moitié serait inventée.
 python python/test/banc-openems.py
 ```
 
-440 vérifications sans solveur : cotes en z, sens des polygones, maillage,
+466 vérifications sans solveur : cotes en z, sens des polygones, maillage,
 refus attendus, conversion pouces/millimètres, script généré, les deux
 modèles de pertes, les quatre primitives, la conductivité déclarée d'un
 conducteur, le poids des enregistrements, les ports multiples et leurs refus,
@@ -922,17 +1083,26 @@ compris, où le garde-fou porte sur le produit —, l'assemblage des colonnes
 d'un tableau S et le résultat complet que chacune garde, ce qu'un calcul qui
 ne rend rien dit de lui-même, le désembedage d'une ligne d'alimentation, la
 calibration de la durée sur le débit du poste, et les refus d'un nom de
-projet — le seul endroit de l'outil où une chaîne venue du réseau touche le
-système de fichiers.
+projet — et la **liste blanche du mode IA**, qui sont les deux seuls endroits
+de l'outil où une chaîne venue du réseau touche quelque chose : le système de
+fichiers pour l'un, l'état de la simulation pour l'autre.
 
-Deux de ces sections méritent d'être signalées parce qu'elles n'éprouvent pas
+Trois de ces sections méritent d'être signalées parce qu'elles n'éprouvent pas
 du code de ce dépôt au sens ordinaire. Celle du **calcul qui ne rend rien**
 fabrique des journaux d'openEMS ligne à ligne — avec son signe détaché,
 « (- 7.32dB) », qui avait déjà fait manquer une lecture — et vérifie que les
 trois cas se distinguent : une divergence, une descente tronquée, une descente
 propre. Celle du **désembedage** extrait du script généré le bloc de calcul et
 l'**exécute** : ce bloc est du texte écrit dans le script, pas une fonction du
-dépôt, et en tenir une seconde copie dans le banc ne prouverait rien. Elle
+dépôt, et en tenir une seconde copie dans le banc ne prouverait rien. Celle de
+la **liste blanche du mode IA** éprouve une *barrière* et non un calcul : un
+calcul faux rend un mauvais nombre et finit par se voir, une barrière qui
+laisse passer ne se voit jamais — le réglage change, la simulation tourne, et
+le résultat a l'air d'un résultat. Elle vérifie donc qu'un chemin hors liste
+est refusé, qu'une valeur hors bornes l'est en disant laquelle, qu'aller puis
+revenir remet exactement ce qui était là, que la consigne envoyée au modèle ne
+peut pas s'écarter de la liste que la page applique, et que ce qui revient du
+réseau est échappé avant d'être affiché. Elle
 vérifie l'aller-retour sur la ligne, la demi-onde guidée qui ramène
 l'impédance sur elle-même, et un repère chiffré — celui-là même où une manip
 antérieure s'était trompée d'εᵣ effectif en prenant la largeur du patch pour
@@ -1026,6 +1196,12 @@ découpes de versement l'ont toujours été.
   sur la résonance, davantage sur substrat épais ou εᵣ élevé. C'est un point
   de départ que la simulation corrige, jamais un résultat — et c'est
   exactement ce que le balayage sert à rattraper.
+* **L'encastrement d'un patch est franchement faux**, et c'est la seule cote
+  dont l'écart soit chiffré ici : mesuré sur FR-4 1,6 mm à 2,45 GHz, il est
+  trop profond d'un bon quart, et le patch s'en trouve désadapté (−2,5 dB au
+  lieu de −13). La résistance de bord du modèle de cavité en est la cause, et
+  la fiche du motif le dit. Ce n'est pas corrigé : un relevé sur un substrat
+  ne fait pas une loi.
 * **Un méandre serré sort du modèle** : le MIFA pose le développé exact, mais
   deux brins repliés plus proches que deux largeurs de piste se couplent, et
   la résonance remonte au-dessus du calcul. La fiche le signale ; elle ne le
@@ -1054,37 +1230,35 @@ découpes de versement l'ont toujours été.
   une piste. C'est fidèle parce que la carte est enregistrée *avec* le projet
   et rouverte telle quelle ; remplacer `carte.json` à la main par un autre
   fichier ferait désigner autre chose, en silence.
+* **Le mode IA ne vérifie pas la physique**, il vérifie des **réglages**. Ses
+  règles locales attrapent ce qui est incohérent — une cible hors bande, un
+  garde-fou qui coupera trop tôt, trois cellules en travers d'une ligne — et
+  elles se taisent sur une antenne parfaitement réglée qui ne rayonnera jamais
+  dans la bonne direction. « Rien à redire » veut dire « rien ne m'alerte »,
+  pas « c'est bon ».
+* **Un modèle de langage se trompe, et il se trompe avec aplomb.** Ce qu'il
+  propose passe par une liste blanche bornée et ne s'applique qu'au clic, mais
+  aucune borne ne rattrape un raisonnement faux : la valeur sera dans les
+  limites, et elle pourra être la mauvaise. Ce qu'il dit se relit, et se
+  vérifie par une simulation — c'est-à-dire par l'outil, pas par lui.
+* **Le mode IA est le seul morceau de cet outil qui dépende d'un service
+  tiers**, et le seul qui ait besoin d'un accès réseau. Les vérifications
+  locales, elles, n'en demandent aucun : c'est pour cela qu'elles existent.
+* **La conversation ne va pas dans le projet.** Elle vit le temps de la page,
+  la clé comprise. Ce qui reste d'une séance, ce sont les réglages qu'on a
+  appliqués — et ceux-là, le projet les garde comme les autres.
 
 ## Installation complète des prérequis
 
-Le solveur et l'outil s'articulent autour de trois briques qu'il convient de mettre en place :
+Le solveur et l'outil s'articulent autour de trois briques qu'il convient de mettre en place dans l'ordre suivant :
 
-### 1. L'environnement virtuel Python (`env/`)
+### 1. Les binaires openEMS (`openEMS/`)
 
-Il est fortement recommandé d'utiliser **Python 3.10 (64 bits)**, version pour laquelle les bibliothèques et liaisons C++ d'openEMS sous Windows sont compilées et immédiatement fonctionnelles.
-
-```powershell
-# Créer l'environnement virtuel dans le dossier 'env'
-python -m venv env
-
-# Activer l'environnement
-.\env\Scripts\activate
-
-# Installer les dépendances Python
-pip install -r requirements.txt
-```
-
-> **Détection automatique :** `serveur.py` recherche automatiquement un interpréteur valide dans `env/`, `.venv/` ou `venv/` au démarrage. Si `env/` est présent à la racine, le serveur s'y connecte de lui-même pour exécuter les simulations.
-
----
-
-### 2. Les binaires openEMS (`openEMS/`)
-
-Les paquets pip installés précédemment (`openEMS`, `CSXCAD`) ne contiennent que les bindings Python, **pas les binaires du solveur ni les DLL associées**.
+L'archive officielle openEMS pour Windows contient **à la fois** les binaires C++ (`openEMS.exe`, `CSXCAD.dll`), et les roues d'installation Python (`.whl` pour `openEMS` et `CSXCAD`). **Cette archive doit être extraite en premier**, car `pip` en aura besoin à l'étape suivante.
 
 1. **Télécharger l'archive binaire openEMS pour Windows (64-bit)** :
    - Disponible sur le site officiel : [openems.de/download](https://www.openems.de/download/)
-   - Ou depuis les releases GitHub du projet : [openEMS-project Releases](https://github.com/thliebig/openEMS-project/releases)
+   - Ou depuis les releases GitHub du projet : [openEMS-project Releases](https://github.com/thliebig/openEMS-project/releases) (ex. `openEMS-v0.0.36-win64.zip`)
 2. **Extraire l'archive** dans un dossier nommé `openEMS/` placé **directement à la racine du projet** (à côté de `serveur.py`).
 3. **Vérifier l'arborescence** : le dossier `openEMS/` doit contenir directement :
    ```
@@ -1093,10 +1267,36 @@ Les paquets pip installés précédemment (`openEMS`, `CSXCAD`) ne contiennent q
    ├── openEMS.dll
    ├── openEMS.exe
    ├── AppCSXCAD.exe
+   ├── python/
+   │   ├── CSXCAD-0.6.3-cp310-cp310-win_amd64.whl
+   │   ├── openEMS-0.0.36-cp310-cp310-win_amd64.whl
+   │   └── ...
    └── ...
    ```
 
 > `openems_run.py` ajoute automatiquement ce dossier au chemin de recherche des DLL (`os.add_dll_directory`). Cela élimine l'erreur `DLL load failed` qui survient d'ordinaire lors de `import CSXCAD`.
+
+---
+
+### 2. L'environnement virtuel Python (`env/`)
+
+Il est **impératif d'utiliser Python 3.10 ou Python 3.11 (64 bits)**, versions pour lesquelles les liaisons C++ précompilées d'openEMS sous Windows sont fournies. Avec Python 3.12 ou supérieur, l'installation des roues openEMS échouera.
+
+```powershell
+# 1. Créer l'environnement virtuel avec Python 3.10 ou 3.11
+# Sur Windows avec plusieurs versions de Python, utiliser le sélecteur py :
+py -3.10 -m venv env
+# (ou : py -3.11 -m venv env)
+
+# 2. Activer l'environnement
+.\env\Scripts\activate
+
+# 3. Installer les dépendances Python
+# (requirements.txt va automatiquement chercher CSXCAD et openEMS dans openEMS/python/)
+pip install -r requirements.txt
+```
+
+> **Bascule automatique dans `env/` :** `serveur.py` détecte automatiquement si vous le lancez depuis une invite ordinaire avec le Python système. S'il trouve `env/` à la racine, il se relance de lui-même avec l'interpréteur de l'environnement virtuel.
 
 ---
 
@@ -1134,3 +1334,13 @@ de **WEB_CAO** (<https://github.com/pilou33620/WEB_CAO>), sous licence MIT.
 `js/06-ouverture.js` en est dérivé, réécrit pour ne plus dépendre des services
 propres à ce dépôt-là (profils d'utilisateur, dossiers de projet, reprise de
 session d'un outil à l'autre) : ici il n'y a qu'un outil.
+
+L'**assistant IA** en vient aussi. `css/ia.css` est une copie de
+`commun/ia-assistant.css`, et `js/30-ia.js` reprend l'interface de
+`commun/ia-assistant.js` telle quelle : barre de connexion, barre d'état,
+bulles, puces de questions, manuel local, cartes d'action et menu contextuel.
+C'est le même panneau, dans le même espace de travail — `js/04-interaction.js`
+appelait d'ailleurs déjà `iaAfficherMenuContextuel` sur le clic droit, en
+attendant ce fichier. Ce qui change est ce qui devait changer : le contexte
+transmis, ce que l'assistant sait du domaine, et ce qu'une carte d'action a le
+droit d'écrire.

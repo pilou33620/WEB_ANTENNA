@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="css/theme.css">
 <link rel="stylesheet" href="css/workspace.css">
 <link rel="stylesheet" href="css/antenne.css">
+<link rel="stylesheet" href="css/ia.css">
 </head>
 <body>
 
@@ -29,6 +30,11 @@
     <button class="tb" id="bConcevoir" title="Dessiner une antenne et sa carte au lieu d'en importer une : empilage, matériaux, gabarits">✏️ Concevoir</button>
     <button class="tb" id="bExemple" title="Poser un cas complet et déjà réglé — patch 2,45 GHz sur FR-4 — pour vérifier que toute la chaîne fonctionne">🧪 Exemple</button>
     <button class="tb" id="bAssistant" title="Ouvrir l'assistant : il mène de la carte au modèle FDTD en six étapes">🧭 Assistant</button>
+    <!-- Le relecteur. Il ne décide de rien : il vérifie, il explique, et ce
+         qu'il propose ne s'applique qu'au clic. « Vérifier les réglages » et
+         le manuel marchent sans réseau ni clé ; poser une question, non.
+         Même bouton et même panneau que dans WEB_CAO — voir js/30-ia.js. -->
+    <button class="tb tb-ia" id="bIaAssistant" title="Assistant IA technique — Google AI Studio. Vérification locale des réglages sans réseau ni clé ; rien ne s'applique sans un clic. (Alt+I)"><span class="ia-sparkle">✨</span> IA</button>
     <button class="tb" id="bScript" title="Écrire le script Python openEMS qui refait exactement cette simulation" disabled>⤓ Script .py</button>
     <button class="tb" id="bLancer" title="Lancer openEMS sur ce modèle" disabled>▶ Lancer</button>
     <button class="tb" id="bWs">Espace de travail ▾</button>
@@ -154,6 +160,29 @@
       <div class="scroll" id="conceptionCorps"></div>
       <div class="pnl-bar" id="conceptionBarre"></div>
     </div>
+  </section>
+
+  <!-- ===================================================================
+       L'ASSISTANT IA. Un relecteur, et rien de plus : il lit les réglages,
+       il dit ce qui cloche, il propose des valeurs — et AUCUNE ne s'écrit
+       sans un clic. « Vérifier les réglages » et le manuel sont exécutés en
+       local ; une question, elle, passe par Google AI Studio.
+
+       LE CORPS EST VIDE À DESSEIN : js/30-ia.js le remplit, exactement
+       comme commun/ia-assistant.js le fait dans WEB_CAO, et les deux
+       panneaux se ressemblent parce que c'est le même.
+       =================================================================== -->
+  <section class="pnl" data-pnl="ia" data-title="Assistant IA">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Assistant IA</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body" id="iaPanneau"></div>
   </section>
 
   <!-- ===================================================================
@@ -354,6 +383,10 @@
 <script src="js/26-exemple.js"></script>
 <script src="js/27-apercu-motif.js"></script>
 <script src="js/29-tableau-s.js"></script>
+<!-- 30 lit tout ce qui précède et n'écrit que par la liste blanche qu'il
+     porte : il vient donc après tout le monde parmi les modules métier, et
+     avant 28 qui, lui, enveloppe les fonctions de pose. -->
+<script src="js/30-ia.js"></script>
 <!-- 28 vient en dernier des modules métier : il enveloppe `poser`, `antMaj`
      et `conAppliquer`, et il ne peut le faire qu'une fois que 06, 13 et 20
      les ont posées. -->
