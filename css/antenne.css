@@ -261,7 +261,36 @@ table.bal-table td.ok{color:var(--green)}
 .ong:hover{color:var(--txt);border-color:var(--blue)}
 .ong.on{background:var(--blue-deep);border-color:var(--blue);color:#fff}
 .ong.mort{opacity:.35;cursor:default}
-#courbe{display:block;width:100%;border-radius:4px}
+/* ---------- interaction avec les courbes ---------- */
+.courbe-cadre{position:relative;margin-bottom:4px}
+#courbe{
+  display:block;width:100%;border-radius:4px;cursor:crosshair;
+  touch-action:none;outline:none;
+}
+#courbe.glisse{cursor:grabbing}
+.courbe-barre{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  margin-top:6px;font-size:11px;min-height:26px;
+}
+.courbe-marqueurs{
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+}
+.courbe-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--mono);font-size:10.5px;padding:2px 7px;
+  border-radius:4px;border:1px solid var(--border2);background:var(--panel2);
+  color:var(--txt);
+}
+.courbe-badge b{font-weight:700}
+.courbe-badge.m1{border-color:var(--yellow);color:var(--yellow)}
+.courbe-badge.m2{border-color:var(--blue);color:var(--blue)}
+.courbe-badge.delta{border-color:var(--cyan);color:var(--cyan);background:rgba(138,240,255,.08)}
+.courbe-boutons{
+  display:inline-flex;align-items:center;gap:5px;
+}
+.courbe-astuce{
+  font-size:10px;color:var(--txt-dim);margin-left:auto;
+}
 .legende{
   display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:7px;
   font-size:10.5px;color:var(--txt-dim);align-items:center;

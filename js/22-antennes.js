@@ -163,6 +163,7 @@ const CON_SYMBOLES={
   L:"L", W:"W", y0:"y₀", g:"g", Lf:"Lf", marge:"m",
   Lm:"Lm", wr:"wr", Lg:"Lg", Lb:"Lb", wf:"wf",
   La:"La", ha:"ha", wb:"wb", d:"d", sc:"sc", dVia:"⌀via",
+  ed:"ed", gd:"gd",
   Lx:"Lx", n:"n", wd:"wd", ov:"ov", Ll:"ℓ"
 };
 function conSymbole(ch){
@@ -449,6 +450,10 @@ const CON_MOTIF_IFA={
     {id:"sc", nom:"enfoncement du court-circuit",
      aide:"de combien le via entre dans la masse : cette longueur compte "+
           "dans le développé"},
+    {id:"ed", nom:"profondeur du décroché",
+     aide:"retrait de la masse sous le port : isole le brin d'alimentation"},
+    {id:"gd", nom:"dégagement du décroché",
+     aide:"largeur du vide de part et d'autre du brin d'alimentation"},
     {id:"Lg", nom:"plan de masse",
      aide:"il fait partie de l'antenne : un quart d'onde au moins"},
     {id:"wf", nom:"largeur du brin d'alimentation",
@@ -464,10 +469,13 @@ const CON_MOTIF_IFA={
        enfoncement ne descend donc jamais sous son propre rayon, augmenté
        d'un dégagement du même ordre. */
     const sc=Math.max(0.8,dVia);
+    const d=Math.max((quart-ha-sc)/4,1.5);
+    const ed=Math.max(0.8,sc);
+    const gd=Math.max(0.6,+(Math.min(c.wf,Math.max(0.6,(d-dVia)/2-0.2))).toFixed(3));
     return {
       La:quart-ha-sc, ha:ha, sc:sc,
       wb:Math.max(quart/12,1.0),
-      d:Math.max((quart-ha-sc)/4,1.5),
+      d:d, ed:ed, gd:gd,
       Lg:Math.max(quart,15),
       wf:c.wf,
       dVia:dVia,
@@ -481,19 +489,28 @@ const CON_MOTIF_IFA={
     const yg=p.Lg;             // bord de la masse
     const yb=yg+p.ha;          // axe du bras horizontal
     const ys=yg-p.sc;          // pied du court-circuit, sur la masse
+    const ed=Math.max(p.ed!=null?+p.ed:p.sc,0.2); // profondeur du décroché
+    const gd=Math.max(p.gd!=null?+p.gd:0.6,0.2); // dégagement latéral
+    const yd=yg-ed;            // fond du décroché
+    const xf=x0+p.d;           // axe du brin d'alimentation
+    const xg1=xf-p.wf/2-gd;    // bord gauche de l'encoche
+    const xg2=xf+p.wf/2+gd;    // bord droit de l'encoche
     const dev=p.La+p.ha+p.sc;
     const festim=CON_C0/(4*dev*Math.sqrt(c.eeffAir));
     return {
       carte:{L:Lb, W:Wb},
       formes:[
         gRect("bas","GND",0,0,Lb,p.Lg),
-        /* Le bras et son court-circuit : une seule piste coudée. Le brin
-           d'alimentation en est une seconde, plus fine. */
+        /* Décroché dans la masse sous le brin d'alimentation : le brin
+           n'est plus noyé dans le plan de masse */
+        gRect("bas","",xg1,yd,xg2,yg,true),
+        /* Le bras et son court-circuit : une seule piste coudée. */
         gPiste("haut","ANTENNE",[[x0,ys],[x0,yb],[x0+p.La,yb]],p.wb),
-        gPiste("haut","ANTENNE",[[x0+p.d,yb],[x0+p.d,ys]],p.wf),
+        /* Le brin d'alimentation descend dans le décroché jusqu'au fond */
+        gPiste("haut","ANTENNE",[[xf,yb],[xf,yd]],p.wf),
         gVia("ANTENNE",x0,ys,p.dVia)
       ],
-      port:{x:x0+p.d, y:ys+0.3, w:p.wf, l:0.6},
+      port:{x:xf, y:yd, w:p.wf, l:Math.min(ed,0.6)},
       cotes:[
         gCote("La",x0,Wb,x0+p.La,Wb,2.2,"La"),
         gCote("ha",0,yg,0,yb,-2.2,"ha"),
@@ -501,21 +518,25 @@ const CON_MOTIF_IFA={
         gCote("d",x0,yg,x0+p.d,yg,-1.4,"d"),
         gCote("marge",0,Wb,x0,Wb,2.2,"m",true),
         gRepere("wb",x0+p.La,yb+p.wb/2,Lb+3.5,yb+p.wb/2+2,"wb"),
-        gRepere("wf",x0+p.d+p.wf/2,(ys+yb)/2,x0+p.d+4,yg*0.62,"wf"),
+        gRepere("wf",xf+p.wf/2,(yd+yb)/2,xf+4,yg*0.62,"wf"),
         gRepere("sc",x0,(ys+yg)/2,-4.5,yg-4,"sc"),
+        gRepere("ed",xg2,(yd+yg)/2,xg2+5,(yd+yg)/2-2,"ed"),
+        gRepere("gd",xf+p.wf/2+gd/2,yg,xg2+5,yg*0.88,"gd"),
         gRepere("dVia",x0+p.dVia/2,ys-p.dVia/2,-4.5,yg-9,"⌀via")
       ],
       calcul:{
         titre:"F inversé imprimé",
         resume:"bras "+conLong(p.La,2)+" à "+conLong(p.ha,2)+
                " de la masse, alimentation à "+conLong(p.d,2)+
-               " du court-circuit",
+               " du court-circuit, décroché "+conLong(ed,2)+" × "+conLong(p.wf+2*gd,2),
         festim:festim,
         lignes:[
           ["Quart d'onde visé",
              conLong(CON_C0/(4*c.f*Math.sqrt(c.eeffAir)),3)],
           ["Développé dessiné (sc + ha + La)", conLong(dev,3)],
           ["Court-circuit → alimentation", conLong(p.d,3)],
+          ["Décroché de masse (ed × (wf + 2·gd))",
+             conLong(ed,2)+" × "+conLong(p.wf+2*gd,2)+" — isole l'alimentation"],
           ["Via de court-circuit", "⌀ "+conLong(p.dVia,2)+", traversant"],
           ["Plan de masse", conLong(p.Lg,1)+" — il fait partie de l'antenne"],
           ["Carte", conLong(Lb,2)+" × "+conLong(Wb,2)]
@@ -577,6 +598,10 @@ const CON_MOTIF_MIFA={
     {id:"sc", nom:"enfoncement du court-circuit",
      aide:"de combien le via entre dans la masse : cette longueur compte "+
           "dans le développé"},
+    {id:"ed", nom:"profondeur du décroché",
+     aide:"retrait de la masse sous le port : isole le brin d'alimentation"},
+    {id:"gd", nom:"dégagement du décroché",
+     aide:"largeur du vide de part et d'autre du brin d'alimentation"},
     {id:"Lg", nom:"plan de masse", aide:"il fait partie de l'antenne"},
     {id:"wf", nom:"largeur du brin d'alimentation",
      aide:"synthétisé pour 50 Ω"},
@@ -587,6 +612,10 @@ const CON_MOTIF_MIFA={
     const quart=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
     const ha=Math.max(quart*0.18,2.5);
     const dVia=Math.min(CON.diametreVia,0.8);
+    const sc=Math.max(0.8,dVia);
+    const d=Math.max(quart*0.35/4,1.0);
+    const ed=Math.max(0.8,sc);
+    const gd=Math.max(0.6,+(Math.min(c.wf,Math.max(0.6,(d-dVia)/2-0.2))).toFixed(3));
     return {
       /* Une empreinte au tiers du quart d'onde et deux replis : c'est le
          compromis des modules du commerce — assez court pour que le méandre
@@ -595,8 +624,8 @@ const CON_MOTIF_MIFA={
       n:2,
       ha:ha,
       wb:Math.max(quart/20,0.6),
-      d:Math.max(quart*0.35/4,1.0),
-      sc:Math.max(0.8,dVia),
+      d:d, ed:ed, gd:gd,
+      sc:sc,
       Lg:Math.max(quart,15),
       wf:c.wf,
       dVia:dVia,
@@ -613,6 +642,12 @@ const CON_MOTIF_MIFA={
     const hm=Math.max(0,(quart-p.ha-p.sc-p.Lx)/(2*n));
 
     const x0=p.marge, yg=p.Lg, yb=yg+p.ha, ys=yg-p.sc;
+    const ed=Math.max(p.ed!=null?+p.ed:p.sc,0.2);
+    const gd=Math.max(p.gd!=null?+p.gd:0.6,0.2);
+    const yd=yg-ed;
+    const xf=x0+p.d;
+    const xg1=xf-p.wf/2-gd;
+    const xg2=xf+p.wf/2+gd;
     /* Le tracé part du pied du court-circuit, monte à la hauteur du bras,
        puis pose n dents : chacune monte de hm, avance d'un demi-pas,
        redescend, et avance du demi-pas suivant. Développé d'une dent :
@@ -644,6 +679,9 @@ const CON_MOTIF_MIFA={
     const lignes=[
       ["Quart d'onde visé", conLong(quart,3)],
       ["Développé dessiné (sc + ha + Lx + 2·n·hm)", conLong(dev,3)],
+      ["Court-circuit → alimentation", conLong(p.d,3)],
+      ["Décroché de masse (ed × (wf + 2·gd))",
+         conLong(ed,2)+" × "+conLong(p.wf+2*gd,2)+" — isole l'alimentation"],
       ["Hauteur des dents hm",
          conLong(hm,3)+" ("+n+" repli"+(n>1?"s":"")+")"],
       ["Pas du méandre", conLong(pas,3)],
@@ -666,11 +704,14 @@ const CON_MOTIF_MIFA={
       carte:{L:Lb, W:Wb},
       formes:[
         gRect("bas","GND",0,0,Lb,p.Lg),
+        /* Décroché dans la masse sous le brin d'alimentation */
+        gRect("bas","",xg1,yd,xg2,yg,true),
         gPiste("haut","ANTENNE",pts,p.wb),
-        gPiste("haut","ANTENNE",[[x0+p.d,yb],[x0+p.d,ys]],p.wf),
+        /* Le brin d'alimentation descend dans le décroché jusqu'au fond */
+        gPiste("haut","ANTENNE",[[xf,yb],[xf,yd]],p.wf),
         gVia("ANTENNE",x0,ys,p.dVia)
       ],
-      port:{x:x0+p.d, y:ys+0.3, w:p.wf, l:0.6},
+      port:{x:xf, y:yd, w:p.wf, l:Math.min(ed,0.6)},
       cotes:[
         gCote("Lx",x0,Wb,x0+p.Lx,Wb,2.2,"Lx"),
         gCote("ha",0,yg,0,yb,-2.2,"ha"),
@@ -680,14 +721,17 @@ const CON_MOTIF_MIFA={
         gCote("marge",0,Wb,x0,Wb,2.2,"m",true),
         gRepere("wb",x0+(n-1)*pas+pas/4,yb+hm+p.wb/2,
                 Lb+3.5,yb+hm+2,"wb"),
-        gRepere("wf",x0+p.d+p.wf/2,(ys+yb)/2,x0+p.d+4,yg*0.62,"wf"),
+        gRepere("wf",xf+p.wf/2,(yd+yb)/2,xf+4,yg*0.62,"wf"),
         gRepere("sc",x0,(ys+yg)/2,-4.5,yg-4,"sc"),
+        gRepere("ed",xg2,(yd+yg)/2,xg2+5,(yd+yg)/2-2,"ed"),
+        gRepere("gd",xf+p.wf/2+gd/2,yg,xg2+5,yg*0.88,"gd"),
         gRepere("dVia",x0+p.dVia/2,ys-p.dVia/2,-4.5,yg-9,"⌀via")
       ],
       calcul:{
         titre:"F inversé à méandres",
         resume:"développé "+conLong(dev,2)+" replié sur "+conLong(p.Lx,2)+
-               " en "+n+" repli"+(n>1?"s":""),
+               " en "+n+" repli"+(n>1?"s":"")+
+               ", décroché "+conLong(ed,2)+" × "+conLong(p.wf+2*gd,2),
         festim:festim,
         lignes:lignes
       }

@@ -378,6 +378,12 @@ verifie("le developpe dessine de l'IFA vaut le quart d'onde",
         mesure(tIfa).toFixed(4)+" pour "+quart.toFixed(4)+" mm");
 verifie("l'alimentation est entre le court-circuit et le bout du bras",
         pIfa.d>0&&pIfa.d<pIfa.La);
+verifie("l'IFA a un decroche de masse sous l'alimentation",
+        tIfa.formes.some(f=>f.cu==="bas"&&f.trou&&f.type==="rect"));
+verifie("le port de l'IFA est au fond du decroche",
+        Math.abs(tIfa.port.y-(pIfa.Lg-pIfa.ed))<1e-4);
+verifie("le via de court-circuit reste hors du decroche",
+        via.x<(pIfa.marge+pIfa.d-pIfa.wf/2-pIfa.gd));
 
 /* -- le MIFA : replier ne raccourcit pas le fil -------------------------- */
 const pMifa=conGabaritDefauts(CON_MOTIF_MIFA,cx);
@@ -401,6 +407,10 @@ verifie("une empreinte egale au quart d'onde annule le meandre",
 const tN4=CON_MOTIF_MIFA.tracer(cx,Object.assign({},pMifa,{n:4}));
 verifie("doubler les replis ne change pas le developpe",
         Math.abs(mesure(tN4)-quart)<0.01, mesure(tN4).toFixed(4)+" mm");
+verifie("le MIFA a un decroche de masse sous l'alimentation",
+        tMifa.formes.some(f=>f.cu==="bas"&&f.trou&&f.type==="rect"));
+verifie("le port du MIFA est au fond du decroche",
+        Math.abs(tMifa.port.y-(pMifa.Lg-pMifa.ed))<1e-4);
 
 /* -- le dipole : un bras par face, aucune masse -------------------------- */
 conGabaritPoser("dipole");
@@ -456,6 +466,10 @@ const planche=apmPlanche(CON_MOTIF_PATCH,null);
 verifie("la planche porte ses cotes",
         planche.indexOf('data-cote="L"')>=0&&
         planche.indexOf('data-cote="y0"')>=0);
+const plancheIfa=apmPlanche(CON_MOTIF_IFA,null);
+verifie("la planche IFA porte ses cotes de decroche ed et gd",
+        plancheIfa.indexOf('data-cote="ed"')>=0&&
+        plancheIfa.indexOf('data-cote="gd"')>=0);
 verifie("la planche montre le port, et la vignette non",
         planche.indexOf("var(--red)")>=0&&
         apmVignette(CON_MOTIF_PATCH).indexOf("var(--red)")<0);
@@ -1277,6 +1291,49 @@ verifie("apres arret, la barre affiche Arrete",
         fakeEl("simProgTxt").textContent === "Arrêté");
 verifie("apres arret, le pied de page confirme l'arret",
         fakeEl("fAvancement").textContent.indexOf("arrêtée") >= 0);
+
+/* -- 11. L'exploration interactive des courbes (Sonde, Marqueurs, Zoom) ---- */
+console.log("");
+console.log("11. L'exploration interactive des courbes");
+charger("16-resultats.js");
+verifie("l'etat interactif ANT_COURBE_ETAT est initialise",
+        typeof ANT_COURBE_ETAT === "object" && ANT_COURBE_ETAT !== null);
+verifie("aucun marqueur n'est pose au depart",
+        ANT_COURBE_ETAT.m1 === null && ANT_COURBE_ETAT.m2 === null);
+verifie("le zoom par defaut est desactive (vue 100%)",
+        ANT_COURBE_ETAT.zoom === null);
+
+ANT.resultat = {
+  f: [2.40e9, 2.42e9, 2.45e9, 2.48e9, 2.50e9],
+  f0: 2.45e9,
+  s11_db: [-5.0, -8.0, -22.5, -9.0, -4.5]
+};
+verifie("antIndexF0 trouve l'indice exact de la resonance",
+        antIndexF0() === 2);
+
+ANT.resultat.f0 = 2.449e9; // pas exactement sur la grille
+verifie("antIndexF0 se rabat sur la frequence la plus proche",
+        antIndexF0() === 2);
+
+ANT_COURBE_ETAT.m1 = 1;
+ANT_COURBE_ETAT.m2 = 3;
+verifie("les marqueurs M1 et M2 se retiennent",
+        ANT_COURBE_ETAT.m1 === 1 && ANT_COURBE_ETAT.m2 === 3);
+
+const df = ANT.resultat.f[ANT_COURBE_ETAT.m2] - ANT.resultat.f[ANT_COURBE_ETAT.m1];
+verifie("l'ecart en frequence delta f est bien calcule",
+        Math.round(df / 1e6) === 60);
+
+ANT_COURBE_ETAT.zoom = { k0: 1, k1: 3 };
+verifie("le zoom enregistre la fenetre d'indices",
+        ANT_COURBE_ETAT.zoom.k0 === 1 && ANT_COURBE_ETAT.zoom.k1 === 3);
+
+// Rechargement des resultats et nettoyage de securite
+ANT_COURBE_ETAT.m1 = 99; // hors borne
+antResultatsRendre();
+verifie("un indice de marqueur hors borne est securise a null",
+        ANT_COURBE_ETAT.m1 === null);
+
 
 
 console.log("");

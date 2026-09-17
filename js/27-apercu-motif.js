@@ -140,11 +140,16 @@ function apmSVG(g,p,opts){
         Math.max(E(f.d/4),0.8)+'" fill="'+APM_COULEURS.via+'"/>');
     }
   };
+  /* 2. Le cuivre : la couche du dessous d'abord, puis ses éventuelles
+        découpes (décroché de masse), puis la couche du dessus et ses
+        découpes (encoches de patch), et enfin les vias. Découper le bas
+        avant de peindre le haut permet à une piste supérieure traversant un
+        décroché de masse de rester visible au-dessus du substrat. */
   t.formes.forEach(f=>{ if(f.cu==="bas"&&!f.trou)forme(f,APM_COULEURS.bas,0.45); });
+  t.formes.forEach(f=>{ if(f.cu==="bas"&&f.trou)forme(f,APM_COULEURS.substrat,1); });
   t.formes.forEach(f=>{ if(f.cu!=="bas"&&!f.trou&&f.type!=="via")
                           forme(f,APM_COULEURS.haut,0.9); });
-  /* Les découpes, en couleur de substrat — voir l'en-tête. */
-  t.formes.forEach(f=>{ if(f.trou)forme(f,APM_COULEURS.substrat,1); });
+  t.formes.forEach(f=>{ if(f.cu!=="bas"&&f.trou)forme(f,APM_COULEURS.substrat,1); });
   t.formes.forEach(f=>{ if(f.type==="via")forme(f,APM_COULEURS.via,1); });
 
   /* 3. Le port, que le motif pose lui-même. Le montrer est le seul moyen de

@@ -27,6 +27,31 @@ const ANT_ONGLETS=[
   {id:"ff",   titre:"Rayonnement",  unite:"dBi"}
 ];
 
+/* L'état interactif de la sonde, des marqueurs et du zoom sur les courbes. */
+let ANT_COURBE_ETAT={
+  survol:false,
+  k:null,           // indice du point sous la sonde (0 .. f.length-1)
+  x:null,           // position pixel en X
+  y:null,           // position pixel en Y
+  m1:null,          // indice du marqueur M1 posé
+  m2:null,          // indice du marqueur M2 posé
+  zoom:null,        // { k0, k1 } ou null si zoom 100%
+  glisse:null,      // { downX, downY, moved, k0, k1 } lors du déplacement
+  polarSurvol:false,
+  polarAngle:null,  // angle theta en degrés
+  polarR:null
+};
+
+/* Indice dans f de la résonance f0. */
+function antIndexF0(){
+  const r=antRes();
+  if(!r||!r.f||!r.f.length)return 0;
+  if(r.f0==null)return 0;
+  const i0=r.f.indexOf(r.f0);
+  return (i0>=0)?i0:antPlusProche(r.f,r.f0);
+}
+
+
 /* Le résultat du balayage, s'il y en a un. Il enveloppe les résultats
    ordinaires plutôt que de les remplacer : tout ce qui suit continue de
    travailler sur UN résultat, celui du point choisi. */
@@ -126,41 +151,65 @@ function antResultatsRendre(){
            'p</button>'
           :'<button class="tb mini" id="bS1p">⤓ .s1p</button>')+
     '</div>'+
-    '<canvas id="courbe"></canvas>'+
+    '<div class="courbe-cadre">'+
+      '<canvas id="courbe" tabindex="0" title="Survol : sonder · Clic : poser M1/M2 · Molette : zoomer · Glisser : défiler · Flèches : pas à pas"></canvas>'+
+      '<div class="courbe-barre" id="courbeBarre"></div>'+
+    '</div>'+
     '<div class="legende" id="legende"></div>'+
     (bal?(bal.croise?antBalMatrice(bal):antBalTableau(bal)):"")+
     (ts?antTsTableau(ts):"");
 
-  box.querySelectorAll("[data-ong]").forEach(function(b){
-    b.onclick=function(){ ANT_ONGLET=b.dataset.ong; antResultatsRendre(); };
-  });
-  box.querySelectorAll("[data-balpt]").forEach(function(b){
-    b.onclick=function(){
-      ANT_BAL_POINT=+b.dataset.balpt;
-      if(ANT_ONGLET==="bal")ANT_ONGLET="s11";
-      antResultatsRendre();
-    };
-  });
-  /* Une colonne du tableau S se clique comme une ligne du balayage, et pour la
-     même raison : c'est une simulation complète, dont le diagramme vaut autant
-     que la case de décibels qu'on en montre. */
-  box.querySelectorAll("[data-tscol]").forEach(function(b){
-    b.onclick=function(){
-      ANT_TS_COL=+b.dataset.tscol;
-      if(ANT_ONGLET==="ts"){
-        const rc=antRes();
-        ANT_ONGLET=(rc&&rc.nf2ff&&rc.nf2ff.e_norm&&rc.nf2ff.e_norm.length)
-                   ?"ff":"s11";
-      }
-      antResultatsRendre();
-    };
-  });
-  box.querySelector("#bCsv").onclick=antExportCsv;
-  const b1p=box.querySelector("#bS1p");
-  if(b1p)b1p.onclick=antExportS1p;
-  const bnp=box.querySelector("#bSnp");
-  if(bnp)bnp.onclick=antExportSnp;
+  // Sécuriser les indices de marqueurs par rapport aux données actuelles
+  const curF = r ? r.f : null;
+  if(!curF || ANT_COURBE_ETAT.m1 >= curF.length) ANT_COURBE_ETAT.m1 = null;
+  if(!curF || ANT_COURBE_ETAT.m2 >= curF.length) ANT_COURBE_ETAT.m2 = null;
+  if(!curF || (ANT_COURBE_ETAT.zoom && ANT_COURBE_ETAT.zoom.k1 >= curF.length)) ANT_COURBE_ETAT.zoom = null;
+  if(!curF || ANT_COURBE_ETAT.k >= curF.length) ANT_COURBE_ETAT.k = null;
+
+  if(box.querySelectorAll){
+    box.querySelectorAll("[data-ong]").forEach(function(b){
+      b.onclick=function(){
+        ANT_ONGLET=b.dataset.ong;
+        ANT_COURBE_ETAT.survol=false;
+        ANT_COURBE_ETAT.polarSurvol=false;
+        antResultatsRendre();
+      };
+    });
+    box.querySelectorAll("[data-balpt]").forEach(function(b){
+      b.onclick=function(){
+        ANT_BAL_POINT=+b.dataset.balpt;
+        if(ANT_ONGLET==="bal")ANT_ONGLET="s11";
+        antResultatsRendre();
+      };
+    });
+    /* Une colonne du tableau S se clique comme une ligne du balayage, et pour la
+       même raison : c'est une simulation complète, dont le diagramme vaut autant
+       que la case de décibels qu'on en montre. */
+    box.querySelectorAll("[data-tscol]").forEach(function(b){
+      b.onclick=function(){
+        ANT_TS_COL=+b.dataset.tscol;
+        if(ANT_ONGLET==="ts"){
+          const rc=antRes();
+          ANT_ONGLET=(rc&&rc.nf2ff&&rc.nf2ff.e_norm&&rc.nf2ff.e_norm.length)
+                     ?"ff":"s11";
+        }
+        antResultatsRendre();
+      };
+    });
+  }
+  if(box.querySelector){
+    const bCsv=box.querySelector("#bCsv");
+    if(bCsv)bCsv.onclick=antExportCsv;
+    const b1p=box.querySelector("#bS1p");
+    if(b1p)b1p.onclick=antExportS1p;
+    const bnp=box.querySelector("#bSnp");
+    if(bnp)bnp.onclick=antExportSnp;
+  }
+
+  const cv=aE("courbe");
+  if(cv)antCourbeEcouteursAttacher(cv);
   antCourbeDessiner();
+  antCourbeBarreMettreAJour();
 }
 
 /* Une fois : la première fois qu'un balayage arrive, on montre la famille de
@@ -361,13 +410,19 @@ function antVerdictTexte(r,bp,nf){
 function antCourbeDessiner(){
   const cv=aE("courbe");
   const r=antRes();
-  if(!cv||!r)return;
+  if(!cv||!r||typeof cv.getContext!=="function")return;
   const dpr=Math.min(2,window.devicePixelRatio||1);
-  const box=cv.parentElement.getBoundingClientRect();
-  const W=Math.max(200,box.width-2), H=Math.max(140,Math.min(340,box.height*0.5));
-  cv.style.width=W+"px"; cv.style.height=H+"px";
+  const cont=aE("resultats")||cv.parentElement;
+  const box=(cont&&typeof cont.getBoundingClientRect==="function")
+            ?cont.getBoundingClientRect():{width:400,height:300};
+  const pw=(cv.parentElement&&typeof cv.parentElement.getBoundingClientRect==="function")
+           ?cv.parentElement.getBoundingClientRect().width:box.width;
+  const W=Math.max(200,Math.floor((pw>10?pw:box.width)-2)),
+        H=Math.max(160,Math.min(360,Math.round((box.height||300)*0.5)));
+  if(cv.style){ cv.style.width=W+"px"; cv.style.height=H+"px"; }
   cv.width=Math.round(W*dpr); cv.height=Math.round(H*dpr);
   const c=cv.getContext("2d");
+  if(!c)return;
   c.setTransform(dpr,0,0,dpr,0,0);
   c.clearRect(0,0,W,H);
 
@@ -503,12 +558,26 @@ function antSeries(r){
 }
 
 function antCartesien(c,W,H,f,series,famille){
-  const G={g:52,d:14,h:12,b:28};
+  if(!f||!f.length||!series||!series.length)return;
+  const G={g:52,d:14,h:14,b:28};
   const x0=G.g, x1=W-G.d, y0=G.h, y1=H-G.b;
 
+  const N=f.length;
+  let k0=0, k1=N-1;
+  if(ANT_COURBE_ETAT.zoom && N>2){
+    k0=Math.max(0,Math.min(N-2,ANT_COURBE_ETAT.zoom.k0));
+    k1=Math.max(k0+1,Math.min(N-1,ANT_COURBE_ETAT.zoom.k1));
+  }
+
   let vmin=Infinity,vmax=-Infinity;
-  for(const s of series)
-    for(const v of s.v){ if(v<vmin)vmin=v; if(v>vmax)vmax=v; }
+  for(const s of series){
+    const i0=Math.max(0,k0), i1=Math.min(s.v.length-1,k1);
+    for(let i=i0;i<=i1;i++){
+      const v=s.v[i];
+      if(v<vmin)vmin=v;
+      if(v>vmax)vmax=v;
+    }
+  }
   for(const s of series)
     if(s.seuil!=null){ vmin=Math.min(vmin,s.seuil); vmax=Math.max(vmax,s.seuil); }
   /* Le ROE monte à l'infini là où l'antenne n'est pas adaptée : le laisser
@@ -518,7 +587,7 @@ function antCartesien(c,W,H,f,series,famille){
   if(!(vmax>vmin)){vmax=vmin+1;}
   const marge=(vmax-vmin)*0.08; vmin-=marge; vmax+=marge;
 
-  const fx=function(i){ return x0+(x1-x0)*i/Math.max(1,f.length-1); };
+  const fx=function(i){ return x0+(x1-x0)*(i-k0)/Math.max(1,k1-k0); };
   const fy=function(v){ return y1-(y1-y0)*(Math.min(vmax,Math.max(vmin,v))-vmin)/(vmax-vmin); };
 
   c.fillStyle="#101214"; c.fillRect(x0,y0,x1-x0,y1-y0);
@@ -535,7 +604,7 @@ function antCartesien(c,W,H,f,series,famille){
   }
   c.textAlign="center"; c.textBaseline="top";
   for(let i=0;i<=4;i++){
-    const k=Math.round((f.length-1)*i/4), x=fx(k);
+    const k=Math.round(k0+(k1-k0)*i/4), x=fx(k);
     c.beginPath(); c.moveTo(x,y0); c.lineTo(x,y1); c.stroke();
     c.fillText(aNb(f[k]/antKf(),3),x,y1+5);
   }
@@ -552,35 +621,109 @@ function antCartesien(c,W,H,f,series,famille){
       c.restore();
     }
 
+  /* Tracé des courbes clipsé dans la zone graphique */
+  c.save();
+  c.beginPath();
+  c.rect(x0,y0,x1-x0,y1-y0);
+  c.clip();
+
   for(const s of series){
     c.save();
     c.strokeStyle=s.couleur; c.lineWidth=s.epais||1.8;
-    /* Le trait pointillé porte le SECOND axe d'un croisement — voir
-       `antBalDessiner`. Ailleurs il n'y en a pas, et la courbe est pleine. */
     if(s.tirets&&s.tirets.length)c.setLineDash(s.tirets);
     c.beginPath();
-    for(let i=0;i<f.length;i++){
-      const y=fy(s.v[i]);
-      if(i)c.lineTo(fx(i),y); else c.moveTo(fx(i),y);
+    const iStart=Math.max(0,k0-1), iEnd=Math.min(s.v.length-1,k1+1);
+    for(let i=iStart;i<=iEnd;i++){
+      const y=fy(s.v[i]), x=fx(i);
+      if(i===iStart)c.moveTo(x,y); else c.lineTo(x,y);
     }
     c.stroke();
     c.restore();
   }
+  c.restore();
 
   /* La résonance, marquée : c'est le seul point qu'on relit toujours. */
   const r=antRes();
-  const i0=r.f.indexOf(r.f0)>=0?r.f.indexOf(r.f0):antPlusProche(r.f,r.f0);
-  c.strokeStyle="#e6e8ec"; c.setLineDash([2,3]); c.lineWidth=1;
-  c.beginPath(); c.moveTo(fx(i0),y0); c.lineTo(fx(i0),y1); c.stroke();
-  c.setLineDash([]);
+  const i0=(r&&r.f)?(r.f.indexOf(r.f0)>=0?r.f.indexOf(r.f0):antPlusProche(r.f,r.f0)):-1;
+  if(i0>=k0&&i0<=k1){
+    c.strokeStyle="#e6e8ec"; c.setLineDash([2,3]); c.lineWidth=1;
+    c.beginPath(); c.moveTo(fx(i0),y0); c.lineTo(fx(i0),y1); c.stroke();
+    c.setLineDash([]);
+  }
 
-  /* La cible visée, si elle est dans la plage : l'écart entre les deux traits
-     est la question qu'on se pose en ouvrant ce panneau. */
-  if(ANT.bande.fcible>=f[0]&&ANT.bande.fcible<=f[f.length-1]){
+  /* La cible visée, si elle est dans la plage visible */
+  if(ANT.bande.fcible>=f[k0]&&ANT.bande.fcible<=f[k1]){
     const ic=antPlusProche(f,ANT.bande.fcible);
     c.strokeStyle="#f2c744"; c.setLineDash([1,4]);
     c.beginPath(); c.moveTo(fx(ic),y0); c.lineTo(fx(ic),y1); c.stroke();
     c.setLineDash([]);
+  }
+
+  /* --- INTERACTION : Marqueurs M1/M2, Delta, Sonde et Infobulle HUD --- */
+  const m1=ANT_COURBE_ETAT.m1, m2=ANT_COURBE_ETAT.m2;
+
+  // Zone d'écart ombrée si deux marqueurs sont posés
+  if(m1!=null&&m2!=null&&m1<f.length&&m2<f.length){
+    const xM1=fx(m1), xM2=fx(m2);
+    const xL=Math.max(x0,Math.min(xM1,xM2)), xR=Math.min(x1,Math.max(xM1,xM2));
+    if(xR>xL){
+      c.save();
+      c.fillStyle="rgba(242, 199, 68, 0.09)";
+      c.fillRect(xL,y0,xR-xL,y1-y0);
+      c.restore();
+    }
+  }
+
+  // Marqueur M1
+  if(m1!=null&&m1>=0&&m1<f.length){
+    antCartesienDessinerMarqueur(c,m1,"M1","#f2c744",fx,fy,series,x0,x1,y0,y1,k0,k1);
+  }
+
+  // Marqueur M2
+  if(m2!=null&&m2>=0&&m2<f.length){
+    antCartesienDessinerMarqueur(c,m2,"M2","#3fa0ea",fx,fy,series,x0,x1,y0,y1,k0,k1);
+  }
+
+  // Réticule de survol (sonde dynamique)
+  const survolK=ANT_COURBE_ETAT.survol?ANT_COURBE_ETAT.k:null;
+  if(survolK!=null&&survolK>=k0&&survolK<=k1&&survolK<f.length){
+    const xk=fx(survolK);
+    c.save();
+    c.strokeStyle="rgba(138, 240, 255, 0.65)";
+    c.setLineDash([3,2]);
+    c.lineWidth=1;
+    c.beginPath(); c.moveTo(xk,y0); c.lineTo(xk,y1); c.stroke();
+
+    // Pastilles lumineuses sur chaque série
+    for(const s of series){
+      if(survolK<s.v.length){
+        const yk=fy(s.v[survolK]);
+        c.fillStyle=s.couleur;
+        c.beginPath(); c.arc(xk,yk,3.5,0,2*Math.PI); c.fill();
+        c.strokeStyle="#ffffff"; c.lineWidth=1.2; c.setLineDash([]);
+        c.beginPath(); c.arc(xk,yk,3.5,0,2*Math.PI); c.stroke();
+      }
+    }
+
+    // Étiquette fréquence en bas de la ligne
+    const txtF=aF(f[survolK]);
+    c.font='9.5px "JetBrains Mono",monospace';
+    const tw=c.measureText(txtF).width;
+    const tagX=Math.max(x0,Math.min(x1-tw-10,xk-tw/2-5));
+    c.fillStyle="#0f1012";
+    c.fillRect(tagX,y1+2,tw+10,15);
+    c.strokeStyle="#8af0ff"; c.lineWidth=1; c.setLineDash([]);
+    c.strokeRect(tagX,y1+2,tw+10,15);
+    c.fillStyle="#8af0ff";
+    c.textAlign="center"; c.textBaseline="middle";
+    c.fillText(txtF,tagX+(tw+10)/2,y1+9);
+    c.restore();
+  }
+
+  // Infobulle HUD incrustée
+  const hudK=(survolK!=null)?survolK:((m1!=null&&m1<f.length)?m1:null);
+  if(hudK!=null){
+    antCartesienDessinerHud(c,hudK,f,series,fx,fy,x0,x1,y0,y1,famille);
   }
 
   const lg=aE("legende");
@@ -629,6 +772,157 @@ function antCartesien(c,W,H,f,series,famille){
       (s.seuilNom?' <em>· repère '+aEsc(s.seuilNom)+'</em>':"")+'</span>').join("")+
     '<span><i class="trait blanc"></i>résonance</span>'+
     '<span><i class="trait jaune"></i>fréquence visée</span>';
+}
+
+/* Dessine un marqueur M1 ou M2 sur le graphique cartésien */
+function antCartesienDessinerMarqueur(c,k,nom,couleur,fx,fy,series,x0,x1,y0,y1,k0,k1){
+  if(k<k0||k>k1)return;
+  const x=fx(k);
+  c.save();
+  c.strokeStyle=couleur;
+  c.setLineDash([4,2]);
+  c.lineWidth=1.2;
+  c.beginPath(); c.moveTo(x,y0); c.lineTo(x,y1); c.stroke();
+
+  for(const s of series){
+    if(k<s.v.length){
+      const y=fy(s.v[k]);
+      c.fillStyle=couleur;
+      c.beginPath(); c.arc(x,y,4,0,2*Math.PI); c.fill();
+      c.strokeStyle="#ffffff"; c.lineWidth=1.2; c.setLineDash([]);
+      c.beginPath(); c.arc(x,y,4,0,2*Math.PI); c.stroke();
+    }
+  }
+
+  c.fillStyle=couleur;
+  c.beginPath();
+  if(c.roundRect)c.roundRect(x-11,y0-12,22,12,2);
+  else c.rect(x-11,y0-12,22,12);
+  c.fill();
+  c.fillStyle="#0f1012";
+  c.font='bold 8.5px "JetBrains Mono",monospace';
+  c.textAlign="center";
+  c.textBaseline="middle";
+  c.fillText(nom,x,y0-6);
+  c.restore();
+}
+
+/* Dessine l'infobulle HUD flottante dans le coin opposé au curseur */
+function antCartesienDessinerHud(c,k,f,series,fx,fy,x0,x1,y0,y1,famille){
+  const r=antRes();
+  if(!r)return;
+  const titre=aF(f[k]);
+  const lignes=[];
+
+  if(ANT_ONGLET==="s11"){
+    if(r.s11_db&&k<r.s11_db.length){
+      lignes.push({label:"S₁₁",val:aNb(r.s11_db[k],2)+" dB",couleur:"#3fa0ea"});
+    }
+    if(r.s11_re&&r.s11_im&&k<r.s11_re.length){
+      const re=r.s11_re[k], im=r.s11_im[k];
+      const mod=Math.hypot(re,im);
+      const ang=Math.atan2(im,re)*180/Math.PI;
+      lignes.push({label:"|Γ|",val:aNb(mod,3)+" ∠ "+aNb(ang,1)+"°",couleur:"#8b919c"});
+    }
+    if(r.vswr&&k<r.vswr.length){
+      lignes.push({label:"ROE",val:aNb(r.vswr[k],2),couleur:"#f2c744"});
+    }
+  } else if(ANT_ONGLET==="z"){
+    if(r.z_re&&k<r.z_re.length){
+      lignes.push({label:"R (réel)",val:aNb(r.z_re[k],1)+" Ω",couleur:"#4cc38a"});
+    }
+    if(r.z_im&&k<r.z_im.length){
+      lignes.push({label:"X (imag)",val:aNb(r.z_im[k],1)+" Ω",couleur:"#c07cf0"});
+    }
+    if(r.z_re&&r.z_im&&k<r.z_re.length){
+      lignes.push({label:"|Z|",val:aNb(Math.hypot(r.z_re[k],r.z_im[k]),1)+" Ω",couleur:"#8af0ff"});
+    }
+  } else if(ANT_ONGLET==="roe"){
+    if(r.vswr&&k<r.vswr.length){
+      lignes.push({label:"ROE",val:aNb(r.vswr[k],2),couleur:"#f2c744"});
+    }
+    if(r.s11_db&&k<r.s11_db.length){
+      lignes.push({label:"S₁₁",val:aNb(r.s11_db[k],2)+" dB",couleur:"#3fa0ea"});
+    }
+  } else if(ANT_ONGLET==="bal"){
+    const bal=antBal();
+    if(bal&&bal.points&&bal.points.length){
+      const ptSel=bal.points[Math.min(ANT_BAL_POINT,bal.points.length-1)];
+      if(ptSel&&ptSel.resultat&&ptSel.resultat.s11_db&&k<ptSel.resultat.s11_db.length){
+        lignes.push({label:"Choisi ("+ptSel.etiquette+")",
+                     val:aNb(ptSel.resultat.s11_db[k],2)+" dB",
+                     couleur:"#f2c744"});
+      }
+      if(ANT_COURBE_ETAT.survol&&ANT_COURBE_ETAT.y!=null){
+        let bestPt=null, bestDist=Infinity;
+        for(let pi=0;pi<bal.points.length;pi++){
+          const p=bal.points[pi];
+          if(!p.resultat||!p.resultat.s11_db||k>=p.resultat.s11_db.length)continue;
+          const yPt=fy(p.resultat.s11_db[k]);
+          const d=Math.abs(ANT_COURBE_ETAT.y-yPt);
+          if(d<bestDist){ bestDist=d; bestPt=p; }
+        }
+        if(bestPt&&bestPt!==ptSel&&bestDist<25){
+          lignes.push({label:"Survol ("+bestPt.etiquette+")",
+                       val:aNb(bestPt.resultat.s11_db[k],2)+" dB",
+                       couleur:"#8af0ff"});
+        }
+      }
+    }
+  } else {
+    for(const s of series){
+      if(k<s.v.length){
+        lignes.push({label:s.nom,val:aNb(s.v[k],2)+" dB",couleur:s.couleur});
+      }
+    }
+  }
+
+  if(!lignes.length)return;
+
+  c.save();
+  c.font='9.5px "JetBrains Mono","SF Mono",Consolas,monospace';
+  let maxW=c.measureText(titre).width;
+  for(const l of lignes){
+    const w=c.measureText(l.label+": "+l.val).width+18;
+    if(w>maxW)maxW=w;
+  }
+  const padH=8, padV=6, lineH=14;
+  const boxW=Math.max(130,Math.ceil(maxW+padH*2));
+  const boxH=padV*2+(lignes.length+1)*lineH;
+
+  const xk=fx(k);
+  let hx=(xk>(x0+x1)/2)?(x0+8):(x1-boxW-8);
+  let hy=y0+6;
+
+  c.fillStyle="rgba(16, 18, 20, 0.92)";
+  c.strokeStyle="#3a3e46";
+  c.lineWidth=1;
+  c.beginPath();
+  if(c.roundRect)c.roundRect(hx,hy,boxW,boxH,4);
+  else c.rect(hx,hy,boxW,boxH);
+  c.fill();
+  c.stroke();
+
+  c.fillStyle="#f2c744";
+  c.textAlign="left";
+  c.textBaseline="top";
+  c.fillText(titre,hx+padH,hy+padV);
+
+  let cy=hy+padV+lineH;
+  for(const l of lignes){
+    if(l.couleur){
+      c.fillStyle=l.couleur;
+      c.beginPath(); c.arc(hx+padH+3,cy+5,2.5,0,2*Math.PI); c.fill();
+    }
+    c.fillStyle="#8b919c";
+    c.fillText(l.label+":",hx+padH+(l.couleur?10:0),cy);
+    c.fillStyle="#e6e8ec";
+    c.textAlign="right";
+    c.fillText(l.val,hx+boxW-padH,cy);
+    c.textAlign="left";
+    cy+=lineH;
+  }
+  c.restore();
 }
 
 function antPlusProche(t,v){
@@ -690,12 +984,391 @@ function antFfDessiner(c,W,H,nf){
     c.stroke();
   });
 
+  // Exploration interactive du diagramme polaire
+  if(ANT_COURBE_ETAT.polarSurvol&&ANT_COURBE_ETAT.polarAngle!=null){
+    const angleDeg=((Math.round(ANT_COURBE_ETAT.polarAngle)%360)+360)%360;
+    const tRad=angleDeg*Math.PI/180;
+
+    c.save();
+    c.strokeStyle="rgba(138, 240, 255, 0.75)";
+    c.lineWidth=1.2;
+    c.setLineDash([3,2]);
+    c.beginPath();
+    c.moveTo(cx,cy);
+    c.lineTo(cx+(R+12)*Math.sin(tRad),cy-(R+12)*Math.cos(tRad));
+    c.stroke();
+
+    const iTheta=antPlusProche(th,angleDeg);
+    const hudLignes=[];
+
+    nf.phi.forEach(function(phi,ip){
+      const ligne=nf.e_norm[ip];
+      if(!ligne)return;
+      const db=20*Math.log10(Math.max(ligne[iTheta],1e-6));
+      const rDot=R*Math.max(0,(db+PLAGE))/PLAGE;
+      const xDot=cx+rDot*Math.sin(tRad), yDot=cy-rDot*Math.cos(tRad);
+
+      c.fillStyle=couleurs[ip%couleurs.length];
+      c.beginPath(); c.arc(xDot,yDot,4,0,2*Math.PI); c.fill();
+      c.strokeStyle="#ffffff"; c.lineWidth=1.2; c.setLineDash([]);
+      c.beginPath(); c.arc(xDot,yDot,4,0,2*Math.PI); c.stroke();
+
+      hudLignes.push({label:"φ = "+aNb(phi,0)+"°",
+                      val:aNb(db,1)+" dB",
+                      couleur:couleurs[ip%couleurs.length]});
+    });
+
+    if(hudLignes.length){
+      const titrePolaire="θ = "+angleDeg+"° (zénith = 0°)";
+      c.font='9.5px "JetBrains Mono","SF Mono",Consolas,monospace';
+      let maxW=c.measureText(titrePolaire).width;
+      for(const l of hudLignes){
+        const w=c.measureText(l.label+": "+l.val).width+18;
+        if(w>maxW)maxW=w;
+      }
+      const padH=8, padV=6, lineH=14;
+      const boxW=Math.max(130,Math.ceil(maxW+padH*2));
+      const boxH=padV*2+(hudLignes.length+1)*lineH;
+
+      const hx=10, hy=10;
+      c.fillStyle="rgba(16, 18, 20, 0.92)";
+      c.strokeStyle="#3a3e46";
+      c.lineWidth=1;
+      c.beginPath();
+      if(c.roundRect)c.roundRect(hx,hy,boxW,boxH,4);
+      else c.rect(hx,hy,boxW,boxH);
+      c.fill();
+      c.stroke();
+
+      c.fillStyle="#8af0ff";
+      c.textAlign="left";
+      c.textBaseline="top";
+      c.fillText(titrePolaire,hx+padH,hy+padV);
+
+      let cyLine=hy+padV+lineH;
+      for(const l of hudLignes){
+        c.fillStyle=l.couleur;
+        c.beginPath(); c.arc(hx+padH+3,cyLine+5,2.5,0,2*Math.PI); c.fill();
+        c.fillStyle="#8b919c";
+        c.fillText(l.label+":",hx+padH+10,cyLine);
+        c.fillStyle="#e6e8ec";
+        c.textAlign="right";
+        c.fillText(l.val,hx+boxW-padH,cyLine);
+        c.textAlign="left";
+        cyLine+=lineH;
+      }
+    }
+    c.restore();
+  }
+
   const lg=aE("legende");
   if(lg)lg.innerHTML=nf.phi.map((p,i)=>
       '<span><i style="background:'+couleurs[i%couleurs.length]+'"></i>'+
       'plan φ = '+aNb(p,0)+'°</span>').join("")+
     '<span class="note">niveau relatif au maximum, échelle '+PLAGE+' dB ; '+
     'angle θ mesuré depuis le zénith (0° = au-dessus de la carte).</span>';
+}
+
+/* =========================================================================
+   Écouteurs et barre d'interaction de la courbe
+   ========================================================================= */
+function antCourbeEcouteursAttacher(cv){
+  if(!cv)return;
+
+  if(typeof ResizeObserver==="function"&&!cv._ro){
+    cv._ro=new ResizeObserver(function(){ antCourbeDessiner(); });
+    if(cv.parentElement)cv._ro.observe(cv.parentElement);
+  }
+
+  cv.onpointermove=function(e){
+    const r=antRes();
+    if(!r)return;
+    const rect=cv.getBoundingClientRect();
+    const px=e.clientX-rect.left, py=e.clientY-rect.top;
+    const W=rect.width, H=rect.height;
+
+    if(ANT_ONGLET==="ff"){
+      const cx=W/2, cy=H/2, R=Math.min(W,H)/2-22;
+      const dx=px-cx, dy=py-cy;
+      const dist=Math.hypot(dx,dy);
+      if(dist<=R+25){
+        let t=Math.atan2(dx,-dy);
+        if(t<0)t+=2*Math.PI;
+        ANT_COURBE_ETAT.polarSurvol=true;
+        ANT_COURBE_ETAT.polarAngle=t*180/Math.PI;
+        ANT_COURBE_ETAT.polarR=dist;
+      } else {
+        ANT_COURBE_ETAT.polarSurvol=false;
+      }
+      antCourbeDessiner();
+      antCourbeBarreMettreAJour();
+      return;
+    }
+
+    const f=(ANT_ONGLET==="ts"&&typeof antTs==="function"&&antTs())?antTs().f:r.f;
+    if(!f||!f.length)return;
+    const G={g:52,d:14,h:14,b:28};
+    const x0=G.g, x1=W-G.d, y0=G.h, y1=H-G.b;
+
+    if(ANT_COURBE_ETAT.glisse){
+      const dx=px-ANT_COURBE_ETAT.glisse.downX;
+      if(Math.abs(dx)>3)ANT_COURBE_ETAT.glisse.moved=true;
+      if(ANT_COURBE_ETAT.zoom){
+        const span=ANT_COURBE_ETAT.glisse.k1-ANT_COURBE_ETAT.glisse.k0;
+        const deltaK=Math.round(-dx/Math.max(1,x1-x0)*span);
+        let newK0=ANT_COURBE_ETAT.glisse.k0+deltaK;
+        let newK1=ANT_COURBE_ETAT.glisse.k1+deltaK;
+        if(newK0<0){ newK1-=newK0; newK0=0; }
+        if(newK1>=f.length){ newK0-=(newK1-(f.length-1)); newK1=f.length-1; }
+        newK0=Math.max(0,newK0); newK1=Math.min(f.length-1,newK1);
+        ANT_COURBE_ETAT.zoom={k0:newK0, k1:newK1};
+        antCourbeDessiner();
+        antCourbeBarreMettreAJour();
+        return;
+      }
+    }
+
+    if(px>=x0&&px<=x1&&py>=y0&&py<=y1){
+      ANT_COURBE_ETAT.survol=true;
+      ANT_COURBE_ETAT.x=px;
+      ANT_COURBE_ETAT.y=py;
+      const k0=ANT_COURBE_ETAT.zoom?ANT_COURBE_ETAT.zoom.k0:0;
+      const k1=ANT_COURBE_ETAT.zoom?ANT_COURBE_ETAT.zoom.k1:f.length-1;
+      const ratio=Math.max(0,Math.min(1,(px-x0)/Math.max(1,x1-x0)));
+      ANT_COURBE_ETAT.k=Math.max(0,Math.min(f.length-1,Math.round(k0+ratio*(k1-k0))));
+    } else {
+      ANT_COURBE_ETAT.survol=false;
+    }
+    antCourbeDessiner();
+    antCourbeBarreMettreAJour();
+  };
+
+  cv.onpointerleave=function(){
+    ANT_COURBE_ETAT.survol=false;
+    ANT_COURBE_ETAT.polarSurvol=false;
+    ANT_COURBE_ETAT.glisse=null;
+    cv.classList.remove("glisse");
+    antCourbeDessiner();
+    antCourbeBarreMettreAJour();
+  };
+
+  cv.onpointerdown=function(e){
+    cv.focus();
+    const rect=cv.getBoundingClientRect();
+    const px=e.clientX-rect.left, py=e.clientY-rect.top;
+    const r=antRes();
+    const f=(ANT_ONGLET==="ts"&&typeof antTs==="function"&&antTs())?antTs().f:(r?r.f:null);
+    ANT_COURBE_ETAT.glisse={
+      downX:px, downY:py, moved:false,
+      k0:ANT_COURBE_ETAT.zoom?ANT_COURBE_ETAT.zoom.k0:0,
+      k1:ANT_COURBE_ETAT.zoom?ANT_COURBE_ETAT.zoom.k1:(f?f.length-1:0)
+    };
+    if(ANT_COURBE_ETAT.zoom)cv.classList.add("glisse");
+  };
+
+  cv.onpointerup=function(){
+    if(ANT_COURBE_ETAT.glisse&&!ANT_COURBE_ETAT.glisse.moved){
+      if(ANT_COURBE_ETAT.k!=null){
+        if(ANT_COURBE_ETAT.m1==null){
+          ANT_COURBE_ETAT.m1=ANT_COURBE_ETAT.k;
+        } else if(ANT_COURBE_ETAT.m2==null){
+          if(ANT_COURBE_ETAT.k!==ANT_COURBE_ETAT.m1){
+            ANT_COURBE_ETAT.m2=ANT_COURBE_ETAT.k;
+          }
+        } else {
+          ANT_COURBE_ETAT.m1=ANT_COURBE_ETAT.k;
+          ANT_COURBE_ETAT.m2=null;
+        }
+      }
+    }
+    ANT_COURBE_ETAT.glisse=null;
+    cv.classList.remove("glisse");
+    antCourbeDessiner();
+    antCourbeBarreMettreAJour();
+  };
+
+  cv.onwheel=function(e){
+    if(ANT_ONGLET==="ff")return;
+    const r=antRes();
+    const f=(ANT_ONGLET==="ts"&&typeof antTs==="function"&&antTs())?antTs().f:(r?r.f:null);
+    if(!f||f.length<4)return;
+    e.preventDefault();
+
+    const rect=cv.getBoundingClientRect();
+    const px=e.clientX-rect.left;
+    const G={g:52,d:14,h:14,b:28};
+    const x0=G.g, x1=rect.width-G.d;
+    const k0=ANT_COURBE_ETAT.zoom?ANT_COURBE_ETAT.zoom.k0:0;
+    const k1=ANT_COURBE_ETAT.zoom?ANT_COURBE_ETAT.zoom.k1:f.length-1;
+
+    const ratio=Math.max(0,Math.min(1,(px-x0)/Math.max(1,x1-x0)));
+    const kCenter=k0+ratio*(k1-k0);
+
+    const factor=e.deltaY<0?0.75:1.35;
+    const currentSpan=k1-k0;
+    const newSpan=Math.max(4,Math.min(f.length-1,currentSpan*factor));
+
+    if(newSpan>=f.length-1){
+      ANT_COURBE_ETAT.zoom=null;
+    } else {
+      let newK0=Math.round(kCenter-ratio*newSpan);
+      let newK1=Math.round(newK0+newSpan);
+      if(newK0<0){ newK1-=newK0; newK0=0; }
+      if(newK1>=f.length){ newK0-=(newK1-(f.length-1)); newK1=f.length-1; }
+      newK0=Math.max(0,newK0); newK1=Math.min(f.length-1,newK1);
+      ANT_COURBE_ETAT.zoom={k0:newK0, k1:newK1};
+    }
+    antCourbeDessiner();
+    antCourbeBarreMettreAJour();
+  };
+
+  cv.ondblclick=function(){
+    if(ANT_COURBE_ETAT.zoom){
+      ANT_COURBE_ETAT.zoom=null;
+    } else {
+      ANT_COURBE_ETAT.m1=null;
+      ANT_COURBE_ETAT.m2=null;
+    }
+    antCourbeDessiner();
+    antCourbeBarreMettreAJour();
+  };
+
+  cv.onkeydown=function(e){
+    const r=antRes();
+    const f=(ANT_ONGLET==="ts"&&typeof antTs==="function"&&antTs())?antTs().f:(r?r.f:null);
+    if(!f||!f.length)return;
+
+    if(e.key==="ArrowLeft"||e.key==="ArrowRight"){
+      e.preventDefault();
+      const pas=(e.shiftKey?10:1)*(e.key==="ArrowLeft"?-1:1);
+      if(ANT_COURBE_ETAT.m2!=null){
+        ANT_COURBE_ETAT.m2=Math.max(0,Math.min(f.length-1,ANT_COURBE_ETAT.m2+pas));
+        ANT_COURBE_ETAT.k=ANT_COURBE_ETAT.m2;
+      } else if(ANT_COURBE_ETAT.m1!=null){
+        ANT_COURBE_ETAT.m1=Math.max(0,Math.min(f.length-1,ANT_COURBE_ETAT.m1+pas));
+        ANT_COURBE_ETAT.k=ANT_COURBE_ETAT.m1;
+      } else {
+        const curK=ANT_COURBE_ETAT.k!=null?ANT_COURBE_ETAT.k:0;
+        ANT_COURBE_ETAT.m1=Math.max(0,Math.min(f.length-1,curK+pas));
+        ANT_COURBE_ETAT.k=ANT_COURBE_ETAT.m1;
+      }
+      antCourbeDessiner();
+      antCourbeBarreMettreAJour();
+    } else if(e.key==="Home"){
+      e.preventDefault();
+      ANT_COURBE_ETAT.m1=0; ANT_COURBE_ETAT.k=0;
+      antCourbeDessiner(); antCourbeBarreMettreAJour();
+    } else if(e.key==="End"){
+      e.preventDefault();
+      ANT_COURBE_ETAT.m1=f.length-1; ANT_COURBE_ETAT.k=f.length-1;
+      antCourbeDessiner(); antCourbeBarreMettreAJour();
+    } else if(e.key==="m"||e.key==="M"){
+      e.preventDefault();
+      const i0=antIndexF0();
+      ANT_COURBE_ETAT.m1=i0; ANT_COURBE_ETAT.k=i0;
+      antCourbeDessiner(); antCourbeBarreMettreAJour();
+    } else if(e.key==="Escape"){
+      e.preventDefault();
+      ANT_COURBE_ETAT.m1=null; ANT_COURBE_ETAT.m2=null; ANT_COURBE_ETAT.zoom=null;
+      antCourbeDessiner(); antCourbeBarreMettreAJour();
+    }
+  };
+}
+
+function antCourbeBarreMettreAJour(){
+  const barre=aE("courbeBarre");
+  if(!barre)return;
+  const r=antRes();
+  if(!r){ barre.innerHTML=""; return; }
+
+  if(ANT_ONGLET==="ff"){
+    let txt="";
+    if(ANT_COURBE_ETAT.polarSurvol&&ANT_COURBE_ETAT.polarAngle!=null){
+      txt='<span class="courbe-badge">θ = <b>'+Math.round(ANT_COURBE_ETAT.polarAngle)+'°</b></span>';
+    } else {
+      txt='<span class="courbe-astuce">Survolez le diagramme polaire pour sonder le niveau selon l\'angle θ</span>';
+    }
+    barre.innerHTML=txt;
+    return;
+  }
+
+  const f=(ANT_ONGLET==="ts"&&typeof antTs==="function"&&antTs())?antTs().f:r.f;
+  if(!f||!f.length){ barre.innerHTML=""; return; }
+
+  const s0=(ANT_ONGLET==="ts"&&typeof antTsSeries==="function"&&antTs())
+           ?antTsSeries(antTs())[0]:antSeries(r)[0];
+  const unite=(ANT_ONGLETS.find(o=>o.id===ANT_ONGLET)||{}).unite||"";
+
+  const m1=ANT_COURBE_ETAT.m1, m2=ANT_COURBE_ETAT.m2;
+  const hBadges=[];
+
+  if(m1!=null&&m1<f.length){
+    const v1=(s0&&s0.v&&m1<s0.v.length)?aNb(s0.v[m1],2)+" "+unite:"";
+    hBadges.push('<span class="courbe-badge m1" title="Marqueur M1"><b>M1</b> '+aF(f[m1])+(v1?' · '+v1:'')+'</span>');
+  }
+
+  if(m2!=null&&m2<f.length){
+    const v2=(s0&&s0.v&&m2<s0.v.length)?aNb(s0.v[m2],2)+" "+unite:"";
+    hBadges.push('<span class="courbe-badge m2" title="Marqueur M2"><b>M2</b> '+aF(f[m2])+(v2?' · '+v2:'')+'</span>');
+  }
+
+  if(m1!=null&&m2!=null&&m1<f.length&&m2<f.length){
+    const df=f[m2]-f[m1];
+    const dfTxt=(df>=0?"+":"−")+aNb(Math.abs(df)/1e6,2)+" MHz";
+    let dyTxt="";
+    if(s0&&s0.v&&m1<s0.v.length&&m2<s0.v.length){
+      const dy=s0.v[m2]-s0.v[m1];
+      dyTxt=" ("+(dy>=0?"+":"−")+aNb(Math.abs(dy),2)+" "+unite+")";
+    }
+    hBadges.push('<span class="courbe-badge delta" title="Écart entre M1 et M2"><b>Δ</b> '+dfTxt+dyTxt+'</span>');
+  }
+
+  if(!hBadges.length){
+    if(ANT_COURBE_ETAT.survol&&ANT_COURBE_ETAT.k!=null&&ANT_COURBE_ETAT.k<f.length){
+      const k=ANT_COURBE_ETAT.k;
+      const v=(s0&&s0.v&&k<s0.v.length)?aNb(s0.v[k],2)+" "+unite:"";
+      hBadges.push('<span class="courbe-badge">Sonde : <b>'+aF(f[k])+'</b>'+(v?' · <b>'+v+'</b>':'')+'</span>');
+    }
+  }
+
+  const hOutils=[];
+  hOutils.push('<button class="tb mini" id="bCourbeMin" title="Placer M1 au creux de résonance f₀ (Touche M)">🎯 Min f₀</button>');
+  if(m1!=null||m2!=null){
+    hOutils.push('<button class="tb mini" id="bCourbeClear" title="Effacer les marqueurs (Échap)">✕ Marqueurs</button>');
+  }
+  if(ANT_COURBE_ETAT.zoom!=null){
+    hOutils.push('<button class="tb mini" id="bCourbeResetZoom" title="Réinitialiser le zoom à 100% (Double-clic)">⤢ 100%</button>');
+  }
+
+  barre.innerHTML=
+    '<div class="courbe-marqueurs">'+hBadges.join("")+'</div>'+
+    '<span class="push"></span>'+
+    '<div class="courbe-boutons">'+hOutils.join("")+'</div>'+
+    '<span class="courbe-astuce">Clic : M1/M2 · Molette : zoom · Flèches : pas à pas</span>';
+
+  if(barre.querySelector){
+    const bMin=barre.querySelector("#bCourbeMin");
+    if(bMin)bMin.onclick=function(){
+      const i0=antIndexF0();
+      ANT_COURBE_ETAT.m1=i0;
+      ANT_COURBE_ETAT.k=i0;
+      antCourbeDessiner();
+      antCourbeBarreMettreAJour();
+    };
+    const bClear=barre.querySelector("#bCourbeClear");
+    if(bClear)bClear.onclick=function(){
+      ANT_COURBE_ETAT.m1=null;
+      ANT_COURBE_ETAT.m2=null;
+      antCourbeDessiner();
+      antCourbeBarreMettreAJour();
+    };
+    const bReset=barre.querySelector("#bCourbeResetZoom");
+    if(bReset)bReset.onclick=function(){
+      ANT_COURBE_ETAT.zoom=null;
+      antCourbeDessiner();
+      antCourbeBarreMettreAJour();
+    };
+  }
 }
 
 /* =========================================================================
