@@ -62,16 +62,16 @@ function antObjetNeuf(type){
 function antXYZ(i,etiquette,ou,v){
   return '<div class="xyz"><label>'+aEsc(etiquette)+'</label>'+
     [0,1,2].map(k=>
-      '<input type="number" step="0.1" data-obj="'+i+'" data-ou="'+ou+
-      '" data-k="'+k+'" value="'+(v[k]==null?0:v[k])+'">').join("")+
+      '<input type="text" inputmode="decimal" spellcheck="false" data-obj="'+i+'" data-ou="'+ou+
+      '" data-k="'+k+'" value="'+mdlNb(v[k]==null?0:v[k])+'">').join("")+
     '<span class="u">'+antUnite()+'</span></div>';
 }
 
 function antChampNb(i,etiquette,ou,v,pas,mini){
   return '<div class="xyz"><label>'+etiquette+'</label>'+
-    '<input type="number" step="'+(pas||0.05)+'"'+
+    '<input type="text" inputmode="decimal" spellcheck="false"'+
     (mini!=null?' min="'+mini+'"':"")+
-    ' data-obj="'+i+'" data-ou="'+ou+'" value="'+v+'">'+
+    ' data-obj="'+i+'" data-ou="'+ou+'" value="'+mdlNb(v)+'">'+
     '<span class="u">'+antUnite()+'</span></div>';
 }
 
@@ -96,8 +96,8 @@ function antObjetFiche(o,i){
 
   const matiere=(o.materiau==="dielectrique")
     ? '<div class="xyz"><label>&epsilon;<sub>r</sub> · tan&delta;</label>'+
-      '<input type="number" step="0.1" min="1" data-obj="'+i+'" data-ou="er" value="'+o.er+'">'+
-      '<input type="number" step="0.001" min="0" data-obj="'+i+'" data-ou="df" value="'+o.df+'">'+
+      '<input type="text" inputmode="decimal" spellcheck="false" data-obj="'+i+'" data-ou="er" value="'+mdlNb(o.er)+'">'+
+      '<input type="text" inputmode="decimal" spellcheck="false" data-obj="'+i+'" data-ou="df" value="'+mdlNb(o.df)+'">'+
       '<span class="u"></span></div>'
     : "";
 
@@ -175,13 +175,16 @@ ANT_LIER.objets=function(box){
   });
 
   box.querySelectorAll("[data-obj]").forEach(function(el){
-    const ecrire=function(){
+    const ecrire=function(commit){
       const o=ANT.primitives[+el.dataset.obj];
       if(!o)return;
       const ou=el.dataset.ou;
-      if(el.type==="number"){
-        const v=parseFloat(String(el.value).replace(",","."));
+      if(el.type==="number"||el.inputMode==="decimal"){
+        const s=String(el.value).trim().replace(",",".");
+        if(!commit&&(s===""||s==="."||s==="-"||s.endsWith(".")))return;
+        const v=parseFloat(s);
         if(!isFinite(v))return;
+        if(commit)el.value=mdlNb(v);
         if(ou.indexOf("pts.")===0)o.pts[+ou.slice(4)][+el.dataset.k]=v;
         else if(el.dataset.k!=null)o[ou][+el.dataset.k]=v;
         else o[ou]=v;
@@ -194,6 +197,11 @@ ANT_LIER.objets=function(box){
          remplir. */
       antMaj(el.tagName==="SELECT");
     };
-    if(el.tagName==="SELECT")el.onchange=ecrire; else el.oninput=ecrire;
+    if(el.tagName==="SELECT"){
+      el.onchange=function(){ ecrire(true); };
+    }else{
+      el.oninput=function(){ ecrire(false); };
+      el.onchange=function(){ ecrire(true); };
+    }
   });
 };

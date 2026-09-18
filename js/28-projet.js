@@ -127,6 +127,11 @@ function prjDessin(){
     actif:!!CON.actif,
     carte:{L:CON.carte.L, W:CON.carte.W},
     pile:CON.pile, uid:CON.uid,
+    /* Le modèle d'usine et l'épaisseur visée voyagent AVEC l'empilage : sans
+       eux, un projet rouvert dirait « empilage libre » alors qu'il tient dans
+       une référence de catalogue, et le bouton « répartir » n'aurait plus de
+       cible à viser. */
+    modele:CON.modele, cible:CON.cible,
     elements:CON.elements,
     grille:CON.grille, unite:CON.unite, largeur:CON.largeur,
     trou:!!CON.trou, coucheActive:CON.coucheActive,
@@ -347,6 +352,13 @@ function prjConAppliquer(d){
     CON.carte.W=prjNombre(d.carte.W,CON.carte.W);
   }
   if(Array.isArray(d.pile)&&d.pile.length)CON.pile=d.pile;
+  CON.modele=(typeof d.modele==="string")?d.modele:"";
+  CON.cible=prjNombre(d.cible,conEpTotale()||1.6);
+  CON.pileSel=0;
+  /* UN PROJET A DÉJÀ RÉPONDU À LA QUESTION DE L'EMPILAGE. La reposer par
+     dessus un dessin qu'on vient de rouvrir laisserait croire qu'il reste à
+     choisir, et le premier clic sur un nombre de couches referait la carte. */
+  CON.demarrage=false;
   CON.uid=Math.max(prjNombre(d.uid,1),
                    1+CON.pile.reduce((m,e)=>Math.max(m,e.uid||0),0));
   if(Array.isArray(d.elements))CON.elements=d.elements;

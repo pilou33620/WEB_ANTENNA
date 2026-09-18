@@ -146,6 +146,7 @@ function antResultatsRendre(){
           o.titre+'</button>';
       }).join("")+
       '<span class="push"></span>'+
+      '<button class="tb mini" id="bRapportRes" title="Générer un rapport d\'ingénierie complet : résultats, empilage, géométrie, maillage et diagnostic des anomalies">📋 Rapport</button>'+
       '<button class="tb mini" id="bCsv">⤓ .csv</button>'+
       (ts?'<button class="tb mini" id="bSnp">⤓ .s'+ts.ports.length+
            'p</button>'
@@ -198,6 +199,8 @@ function antResultatsRendre(){
     });
   }
   if(box.querySelector){
+    const bRap=box.querySelector("#bRapportRes");
+    if(bRap)bRap.onclick=function(){ if(typeof rapOuvrir==="function")rapOuvrir(); };
     const bCsv=box.querySelector("#bCsv");
     if(bCsv)bCsv.onclick=antExportCsv;
     const b1p=box.querySelector("#bS1p");

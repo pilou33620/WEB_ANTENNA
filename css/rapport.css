@@ -1,0 +1,571 @@
+/* =============================================================================
+   Antenne openEMS — rapport.css
+   Feuille de style du rapport d'ingénierie et de diagnostic FDTD
+   ============================================================================= */
+
+/* ---------- Fenêtre modale du rapport ---------- */
+.rap-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(8, 10, 13, 0.82);
+  backdrop-filter: blur(4px);
+  padding: 20px;
+  animation: rapFadeIn 0.18s ease-out;
+}
+
+.rap-modal[hidden] {
+  display: none !important;
+}
+
+@keyframes rapFadeIn {
+  from { opacity: 0; transform: scale(0.985); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.rap-box {
+  background: var(--panel, #17181b);
+  border: 1px solid var(--border2, #3a3e46);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 1060px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  color: var(--txt, #e6e8ec);
+  font-family: var(--ui, "Segoe UI", system-ui, sans-serif);
+  overflow: hidden;
+}
+
+/* ---------- En-tête de la modale ---------- */
+.rap-head {
+  padding: 14px 20px;
+  background: var(--panel2, #1c1e22);
+  border-bottom: 1px solid var(--border, #2b2e34);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.rap-titres {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.rap-titre-principal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #fff;
+}
+
+.rap-badge-statut {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.rap-badge-statut.ok {
+  background: rgba(76, 195, 138, 0.16);
+  color: var(--green, #4cc38a);
+  border: 1px solid var(--green, #4cc38a);
+}
+
+.rap-badge-statut.warn {
+  background: rgba(242, 199, 68, 0.16);
+  color: var(--yellow, #f2c744);
+  border: 1px solid var(--yellow, #f2c744);
+}
+
+.rap-badge-statut.crit {
+  background: rgba(232, 68, 58, 0.2);
+  color: #ff8e88;
+  border: 1px solid var(--red, #e8443a);
+}
+
+.rap-badge-statut.info {
+  background: rgba(63, 160, 234, 0.16);
+  color: var(--blue, #3fa0ea);
+  border: 1px solid var(--blue, #3fa0ea);
+}
+
+.rap-sous-titre {
+  font-size: 11.5px;
+  color: var(--txt-dim, #8b919c);
+  font-family: var(--mono, monospace);
+}
+
+.rap-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rap-btn {
+  background: var(--panel, #17181b);
+  color: var(--txt, #e6e8ec);
+  border: 1px solid var(--border2, #3a3e46);
+  padding: 6px 12px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--ui);
+  transition: all 0.12s ease;
+}
+
+.rap-btn:hover {
+  border-color: var(--blue, #3fa0ea);
+  color: #fff;
+  background: #20242a;
+}
+
+.rap-btn.fermer {
+  background: transparent;
+  border-color: transparent;
+  font-size: 16px;
+  padding: 4px 8px;
+  color: var(--txt-dim);
+}
+
+.rap-btn.fermer:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ---------- Notification toast (copie effectuée) ---------- */
+.rap-toast {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--blue-deep, #2b7fbf);
+  color: #fff;
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  z-index: 1010;
+  animation: rapFadeIn 0.15s ease-out;
+}
+
+/* ---------- Corps du rapport ---------- */
+.rap-corps {
+  padding: 20px 24px 30px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.rap-corps::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rap-corps::-webkit-scrollbar-thumb {
+  background: #31343a;
+  border-radius: 4px;
+}
+
+/* ---------- Sections ---------- */
+.rap-sec {
+  margin-bottom: 24px;
+}
+
+.rap-sec:last-child {
+  margin-bottom: 0;
+}
+
+.rap-sec-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border2, #3a3e46);
+  padding-bottom: 6px;
+  margin-bottom: 12px;
+}
+
+.rap-sec-titre {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--blue, #3fa0ea);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rap-sec-note {
+  font-size: 11px;
+  color: var(--txt-dim, #8b919c);
+}
+
+/* ---------- Cartes KPI ---------- */
+.rap-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.rap-kpi {
+  background: var(--panel2, #1c1e22);
+  border: 1px solid var(--border, #2b2e34);
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.rap-kpi.accent {
+  border-left: 3px solid var(--blue, #3fa0ea);
+}
+
+.rap-kpi.ok {
+  border-left: 3px solid var(--green, #4cc38a);
+}
+
+.rap-kpi.warn {
+  border-left: 3px solid var(--yellow, #f2c744);
+}
+
+.rap-kpi.crit {
+  border-left: 3px solid var(--red, #e8443a);
+}
+
+.rap-kpi-val {
+  font-family: var(--mono, monospace);
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.rap-kpi-lbl {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--txt-dim, #8b919c);
+}
+
+.rap-kpi-detail {
+  font-size: 11px;
+  color: var(--txt-dim, #8b919c);
+  margin-top: 2px;
+}
+
+/* ---------- Diagnostics & Anomalies ---------- */
+.rap-diags {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rap-diag-item {
+  background: var(--panel2, #1c1e22);
+  border: 1px solid var(--border, #2b2e34);
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rap-diag-item.crit {
+  border-color: rgba(232, 68, 58, 0.4);
+  background: rgba(232, 68, 58, 0.06);
+}
+
+.rap-diag-item.warn {
+  border-color: rgba(242, 199, 68, 0.4);
+  background: rgba(242, 199, 68, 0.06);
+}
+
+.rap-diag-item.ok {
+  border-color: rgba(76, 195, 138, 0.25);
+  background: rgba(76, 195, 138, 0.03);
+}
+
+.rap-diag-item.info {
+  border-color: rgba(63, 160, 234, 0.25);
+  background: rgba(63, 160, 234, 0.03);
+}
+
+.rap-diag-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rap-diag-titre {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--txt, #e6e8ec);
+}
+
+.rap-diag-desc {
+  font-size: 11.5px;
+  color: var(--txt-dim, #8b919c);
+  line-height: 1.5;
+}
+
+.rap-diag-conseil {
+  font-size: 11.5px;
+  color: var(--yellow, #f2c744);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 2px solid var(--yellow);
+  margin-top: 2px;
+}
+
+/* ---------- Tableaux techniques ---------- */
+.rap-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border, #2b2e34);
+  border-radius: 6px;
+  background: var(--panel2, #1c1e22);
+}
+
+.rap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  text-align: left;
+}
+
+.rap-table th {
+  background: #151619;
+  color: var(--txt-dim, #8b919c);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border, #2b2e34);
+  white-space: nowrap;
+}
+
+.rap-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(43, 46, 52, 0.5);
+  color: var(--txt, #e6e8ec);
+  vertical-align: middle;
+}
+
+.rap-table tr:last-child td {
+  border-bottom: none;
+}
+
+.rap-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.rap-table .mono {
+  font-family: var(--mono, monospace);
+}
+
+.rap-table .num {
+  text-align: right;
+  font-family: var(--mono, monospace);
+}
+
+.rap-table .highlight {
+  font-weight: 600;
+  color: #fff;
+}
+
+.rap-badge-mini {
+  display: inline-block;
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-family: var(--mono);
+}
+
+.rap-badge-cuivre {
+  background: rgba(242, 199, 68, 0.15);
+  color: #fce892;
+  border: 1px solid rgba(242, 199, 68, 0.3);
+}
+
+.rap-badge-die {
+  background: rgba(63, 160, 234, 0.15);
+  color: #9cd3ff;
+  border: 1px solid rgba(63, 160, 234, 0.3);
+}
+
+.rap-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 768px) {
+  .rap-grid-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Log / Trace terminal ---------- */
+.rap-log-box {
+  background: #0d0e10;
+  border: 1px solid var(--border, #2b2e34);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: var(--mono, monospace);
+  font-size: 11px;
+  color: #9fa4af;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+/* =============================================================================
+   Styles d'Impression (@media print)
+   Génère un rapport papier / PDF monochrome ou couleur propre, contrasté,
+   sur fond blanc, sans boutons ni éléments d'interface.
+   ============================================================================= */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .rap-modal {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    backdrop-filter: none !important;
+    visibility: visible !important;
+    display: block !important;
+  }
+
+  .rap-box {
+    visibility: visible !important;
+    position: static !important;
+    max-width: 100% !important;
+    max-height: none !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .rap-box * {
+    visibility: visible !important;
+  }
+
+  .rap-actions, .rap-toast {
+    display: none !important;
+  }
+
+  .rap-head {
+    background: transparent !important;
+    border-bottom: 2px solid #333 !important;
+    padding: 0 0 12px 0 !important;
+  }
+
+  .rap-titre-principal {
+    color: #111 !important;
+    font-size: 18pt !important;
+  }
+
+  .rap-sous-titre {
+    color: #555 !important;
+  }
+
+  .rap-corps {
+    padding: 14px 0 !important;
+    overflow: visible !important;
+  }
+
+  .rap-sec {
+    page-break-inside: avoid;
+    margin-bottom: 20px !important;
+  }
+
+  .rap-sec-head {
+    border-bottom: 1.5px solid #444 !important;
+  }
+
+  .rap-sec-titre {
+    color: #0b497a !important;
+    font-size: 12pt !important;
+  }
+
+  .rap-kpi {
+    background: #f8f9fa !important;
+    border: 1px solid #ccc !important;
+    color: #111 !important;
+    border-left-width: 4px !important;
+  }
+
+  .rap-kpi-val {
+    color: #111 !important;
+  }
+
+  .rap-diag-item {
+    background: #fdfdfd !important;
+    border: 1px solid #ccc !important;
+    page-break-inside: avoid;
+  }
+
+  .rap-diag-titre {
+    color: #111 !important;
+  }
+
+  .rap-diag-desc {
+    color: #333 !important;
+  }
+
+  .rap-diag-conseil {
+    background: #fef8e7 !important;
+    color: #724c00 !important;
+    border-left: 2px solid #c99300 !important;
+  }
+
+  .rap-table-wrap {
+    border: 1px solid #ccc !important;
+    background: #fff !important;
+  }
+
+  .rap-table th {
+    background: #eaecef !important;
+    color: #222 !important;
+    border-bottom: 1px solid #bbb !important;
+  }
+
+  .rap-table td {
+    color: #222 !important;
+    border-bottom: 1px solid #eee !important;
+  }
+
+  .rap-table .highlight {
+    color: #000 !important;
+  }
+
+  .rap-log-box {
+    background: #f5f5f5 !important;
+    color: #333 !important;
+    border: 1px solid #ccc !important;
+    max-height: none !important;
+  }
+}

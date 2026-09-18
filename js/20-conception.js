@@ -73,6 +73,9 @@ const CON_DIELECTRIQUES=[
   {id:"verre",     nom:"Verre borosilicate",      er:4.60, df:0.006,  f:"1 GHz"},
   {id:"abs",       nom:"ABS (radôme, boîtier)",   er:2.80, df:0.006,  f:"1 GHz"},
   {id:"mousse",    nom:"Mousse Rohacell",         er:1.07, df:0.0002, f:"10 GHz"},
+  {id:"vernis",    nom:"Vernis épargne (masque)", er:3.80, df:0.020,  f:"1 GHz",
+   note:"la couche verte : 25 µm qui couvrent le cuivre et abaissent la "+
+        "résonance d'environ 1 % sur un patch"},
   {id:"air",       nom:"Air",                     er:1.0006, df:0,    f:"—",
    note:"un patch suspendu : bande large, rendement élevé, mécanique à inventer"}
 ];
@@ -137,6 +140,26 @@ const CON={
      couche au milieu déplacerait d'un cran tout le cuivre déjà dessiné. */
   pile:[],
   uid:1,
+
+  /* Le modèle d'usine appliqué, et l'épaisseur totale visée en millimètres.
+     `modele` est vide dès qu'on touche à l'empilage à la main : le panneau
+     cesse alors d'annoncer un catalogue qui n'est plus celui-là, et c'est
+     honnête — un empilage retouché ne se commande plus par son nom. */
+  modele:"",
+  cible:1.6,
+
+  /* La couche dont la fiche est ouverte, par son RANG dans `CON.pile`. Un
+     rang et non un uid : la coupe et la fiche parlent de la même liste, et un
+     empilage refait remet la fiche sur la couche du dessus plutôt que de
+     chercher une couche disparue. */
+  pileSel:0,
+
+  /* Vrai tant que l'empilage de départ n'a pas été arrêté. C'est la première
+     question du mode, et elle vient AVANT le dessin : un patch dessiné sur un
+     FR-4 de 1,6 mm puis reporté sur un RO4350B de 0,762 mm n'est plus un
+     patch, c'est un rectangle de cuivre. Poser la question après coup ferait
+     refaire tout le dessin. */
+  demarrage:false,
 
   /* Les formes dessinées. Genre, couche (uid), net, et des coordonnées.
      Rien d'autre : pas d'identifiant de CAO, pas d'empreinte, pas de règle. */
@@ -226,6 +249,198 @@ function conNomCouche(uid){
 }
 
 /* ==========================================================================
+   Les modèles d'usine
+   --------------------------------------------------------------------------
+   UN FABRICANT NE VEND PAS « QUATRE COUCHES ». Il vend un empilage : des
+   cuivres d'une épaisseur donnée, des prépregs et des âmes d'une épaisseur
+   donnée, le tout tombant sur une épaisseur totale normalisée — 1,6 mm le
+   plus souvent, parce que c'est l'épaisseur qu'attendent les connecteurs, les
+   glissières et les entretoises. Choisir un nombre de couches sans choisir
+   l'empilage qui va avec laisse le solveur travailler sur un substrat qui
+   n'existe chez personne : l'antenne mesurée ne ressemble alors plus à
+   l'antenne simulée, et l'écart ne se voit sur aucune courbe.
+
+   C'est pour cela que ce tableau est ici plutôt que dans l'interface. Chaque
+   modèle tombe EXACTEMENT sur l'épaisseur qu'il annonce, masque exclu — c'est
+   ce que vérifie le banc d'essai, et c'est la seule façon d'être sûr qu'un
+   empilage proposé se commande tel quel.
+
+   `s` dit la nature du diélectrique : une âme (core) est un stratifié cuivré
+   des deux faces, un prépreg est la résine qui colle deux âmes au pressage.
+   La distinction ne change rien au champ — seuls εr, tan δ et l'épaisseur y
+   entrent — mais elle change ce qu'on peut commander, et un empilage qui
+   n'alterne pas âme et prépreg ne se fabrique pas.
+   ========================================================================== */
+const CON_SORTES={core:"âme (core)", prepreg:"prépreg", masque:"masque"};
+
+/* Le vernis épargne : 25 µm, εr 3,8. Il est déclaré ici et non dans un
+   modèle, parce qu'il ne dépend ni du nombre de couches ni du stratifié. */
+const CON_MASQUE_EP=0.025;
+
+const CON_MODELES=[
+  /* -- une face ---------------------------------------------------------- */
+  {id:"fr4-1c-16", n:1, cible:1.600, nom:"1 couche · FR-4 1,6 mm",
+   cu:[0.035], die:[{s:"core", ep:1.565, mat:"fr4"}],
+   note:"le cuivre est sur le dessus, le stratifié le porte : pas de plan de "+
+        "masse, donc pas de patch — c'est l'empilage d'une boucle ou d'un dipôle"},
+
+  /* -- double face, le cas ordinaire ------------------------------------- */
+  {id:"fr4-2c-16", n:2, cible:1.600, nom:"2 couches · FR-4 1,6 mm · 35 µm",
+   cu:[0.035,0.035], die:[{s:"core", ep:1.530, mat:"fr4"}],
+   note:"la carte que tout le monde a sous la main, et celle sur laquelle les "+
+        "formules de patch sont écrites"},
+  {id:"fr4-2c-16-70", n:2, cible:1.600, nom:"2 couches · FR-4 1,6 mm · 70 µm",
+   cu:[0.070,0.070], die:[{s:"core", ep:1.460, mat:"fr4"}]},
+  {id:"fr4-2c-08", n:2, cible:0.800, nom:"2 couches · FR-4 0,8 mm",
+   cu:[0.035,0.035], die:[{s:"core", ep:0.730, mat:"fr4"}],
+   note:"un substrat deux fois plus mince : patch plus étroit de bande, "+
+        "rendement moindre, carte plus souple"},
+  {id:"fr4-2c-16-hf", n:2, cible:1.600,
+   nom:"2 couches · FR-4 haute fréquence 1,6 mm",
+   cu:[0.035,0.035], die:[{s:"core", ep:1.530, mat:"fr4hf"}]},
+
+  /* -- double face, les stratifiés hyperfréquence ------------------------ */
+  {id:"ro4350-2c-0762", n:2, cible:0.832,
+   nom:"2 couches · RO4350B 0,762 mm (30 mil)",
+   cu:[0.035,0.035], die:[{s:"core", ep:0.762, mat:"ro4350b"}],
+   note:"l'épaisseur de patch la plus courante au-dessus de 2 GHz"},
+  {id:"ro4350-2c-0508", n:2, cible:0.578,
+   nom:"2 couches · RO4350B 0,508 mm (20 mil)",
+   cu:[0.035,0.035], die:[{s:"core", ep:0.508, mat:"ro4350b"}]},
+  {id:"ro4003-2c-1524", n:2, cible:1.594,
+   nom:"2 couches · RO4003C 1,524 mm (60 mil)",
+   cu:[0.035,0.035], die:[{s:"core", ep:1.524, mat:"ro4003c"}]},
+  {id:"rt5880-2c-1575", n:2, cible:1.645,
+   nom:"2 couches · RT/duroid 5880 1,575 mm (62 mil)",
+   cu:[0.035,0.035], die:[{s:"core", ep:1.575, mat:"rt5880"}],
+   note:"les pertes les plus basses et l'εr le plus bas : la bande la plus "+
+        "large qu'un patch imprimé sache donner"},
+  {id:"rt5880-2c-0787", n:2, cible:0.857,
+   nom:"2 couches · RT/duroid 5880 0,787 mm (31 mil)",
+   cu:[0.035,0.035], die:[{s:"core", ep:0.787, mat:"rt5880"}]},
+  {id:"ro3003-2c-1524", n:2, cible:1.594,
+   nom:"2 couches · RO3003 1,524 mm (60 mil)",
+   cu:[0.035,0.035], die:[{s:"core", ep:1.524, mat:"ro3003"}]},
+
+  /* -- double face, hors stratifié rigide -------------------------------- */
+  {id:"pi-2c-01", n:2, cible:0.086, nom:"2 couches · polyimide souple 86 µm",
+   cu:[0.018,0.018], die:[{s:"core", ep:0.050, mat:"polyimide"}],
+   note:"l'antenne de nappe : elle se colle sur un boîtier, et sa courbure "+
+        "ne se simule pas ici"},
+  {id:"air-2c-3", n:2, cible:3.070,
+   nom:"2 couches · patch suspendu sur 3 mm d'air",
+   cu:[0.035,0.035], die:[{s:"core", ep:3.000, mat:"air"}],
+   note:"bande large et rendement élevé ; la mécanique qui tient le patch à "+
+        "3 mm du plan reste à inventer, et elle rayonne aussi"},
+
+  /* -- quatre couches ---------------------------------------------------- */
+  {id:"fr4-4c-16", n:4, cible:1.600, nom:"4 couches · FR-4 1,6 mm",
+   cu:[0.035,0.0175,0.0175,0.035],
+   die:[{s:"prepreg", ep:0.210, mat:"fr4"},
+        {s:"core",    ep:1.075, mat:"fr4"},
+        {s:"prepreg", ep:0.210, mat:"fr4"}],
+   note:"l'antenne travaille contre le plan de la COUCHE 2, à 0,21 mm : un "+
+        "patch y est bien plus étroit de bande que sur un 1,6 mm double face"},
+  {id:"fr4-4c-10", n:4, cible:1.000, nom:"4 couches · FR-4 1,0 mm",
+   cu:[0.035,0.0175,0.0175,0.035],
+   die:[{s:"prepreg", ep:0.200, mat:"fr4"},
+        {s:"core",    ep:0.495, mat:"fr4"},
+        {s:"prepreg", ep:0.200, mat:"fr4"}]},
+  {id:"hyb-4c-16", n:4, cible:1.600,
+   nom:"4 couches hybride · RO4350B en surface + FR-4",
+   cu:[0.035,0.0175,0.0175,0.035],
+   die:[{s:"core", ep:0.508, mat:"ro4350b"},
+        {s:"core", ep:0.479, mat:"fr4"},
+        {s:"core", ep:0.508, mat:"ro4350b"}],
+   note:"l'empilage des cartes radio : le stratifié cher n'est que là où "+
+        "l'onde passe, le FR-4 porte le reste et tient l'épaisseur"},
+
+  /* -- six et huit couches ----------------------------------------------- */
+  {id:"fr4-6c-16", n:6, cible:1.600, nom:"6 couches · FR-4 1,6 mm",
+   cu:[0.035,0.0175,0.0175,0.0175,0.0175,0.035],
+   die:[{s:"prepreg", ep:0.250, mat:"fr4"},
+        {s:"core",    ep:0.355, mat:"fr4"},
+        {s:"prepreg", ep:0.250, mat:"fr4"},
+        {s:"core",    ep:0.355, mat:"fr4"},
+        {s:"prepreg", ep:0.250, mat:"fr4"}]},
+  {id:"fr4-8c-16", n:8, cible:1.600, nom:"8 couches · FR-4 1,6 mm",
+   cu:[0.035,0.0175,0.0175,0.0175,0.0175,0.0175,0.0175,0.035],
+   die:[{s:"prepreg", ep:0.150, mat:"fr4"},
+        {s:"core",    ep:0.275, mat:"fr4"},
+        {s:"prepreg", ep:0.150, mat:"fr4"},
+        {s:"core",    ep:0.275, mat:"fr4"},
+        {s:"prepreg", ep:0.150, mat:"fr4"},
+        {s:"core",    ep:0.275, mat:"fr4"},
+        {s:"prepreg", ep:0.150, mat:"fr4"}]}
+];
+
+function conModeleEmpilage(id){
+  return CON_MODELES.find(m=>m.id===id)||null;
+}
+function conModelesPour(n){
+  return CON_MODELES.filter(m=>m.n===n);
+}
+/* Les comptes de couches proposés : ceux pour lesquels un modèle existe. Un
+   compte sans modèle serait un empilage à inventer de toutes pièces, et ce
+   n'est pas ce que ce mode sait faire — on ajoute alors les couches une à
+   une, et l'empilage cesse d'être celui d'un catalogue. */
+function conComptesCuivre(){
+  const out=[];
+  for(const m of CON_MODELES)if(out.indexOf(m.n)<0)out.push(m.n);
+  return out.sort((a,b)=>a-b);
+}
+
+/* Les noms d'usine. Le dessus et le dessous portent le leur ; les internes
+   sont numérotées dans l'ordre où elles se pressent, comme sur la feuille
+   d'empilage du fabricant. */
+function conNomCuivre(i,n){
+  if(i===0)return "Cuivre dessus";
+  if(i===n-1)return "Cuivre dessous";
+  return "Cuivre interne "+i;
+}
+/* LE RÔLE D'USINE DE LA SECONDE COUCHE EST « MASSE », et ce n'est pas un
+   détail de présentation : une antenne imprimée rayonne CONTRE le plan qui
+   est juste sous elle, et un empilage sans masse déclarée donne un port qui
+   ne relie rien. Le dessous l'est aussi — c'est le blindage habituel. Tout
+   cela reste modifiable, et les motifs d'antenne le modifient : un dipôle
+   imprimé n'a aucune masse, et il le dit en posant « signal ». */
+function conRoleUsine(i,n){
+  if(n<2)return "signal";
+  if(i===1||i===n-1)return "gnd";
+  return "signal";
+}
+/* Les noms des diélectriques d'un modèle. Un seul : c'est « le substrat », et
+   l'appeler « âme 1 » n'apprendrait rien. Plusieurs : leur nature et leur
+   rang, parce que c'est ainsi qu'on les lit sur la feuille d'empilage. */
+function conNomsDie(die){
+  if(die.length===1)return ["Substrat"];
+  const rang={};
+  return die.map(function(d){
+    const base=(d.s==="prepreg")?"Prépreg":"Âme";
+    rang[base]=(rang[base]||0)+1;
+    return base+" "+rang[base];
+  });
+}
+
+/* L'empilage d'un modèle, en oubliant tout ce qui existait avant. Les uid
+   sont neufs : c'est `conPileVers()` qui rend aux couches conservées celui
+   que les formes dessinées désignent. */
+function conPileDeModele(m){
+  const noms=conNomsDie(m.die||[]);
+  const out=[];
+  for(let i=0;i<m.n;i++){
+    out.push({k:"cu", uid:CON.uid++, nom:conNomCuivre(i,m.n),
+              ep:m.cu[i]||0.035, role:conRoleUsine(i,m.n), mat:"cuivre"});
+    const d=(m.die||[])[i];
+    if(!d)continue;
+    const mat=conDielectrique(d.mat);
+    out.push({k:"die", uid:CON.uid++, nom:noms[i], sorte:d.s||"core",
+              ep:d.ep, mat:mat.id, er:mat.er, df:mat.df});
+  }
+  return out;
+}
+
+/* ==========================================================================
    L'empilage d'usine
    --------------------------------------------------------------------------
    Deux faces et un FR-4 de 1,6 mm : c'est la carte que tout le monde a sous
@@ -234,37 +449,311 @@ function conNomCouche(uid){
    rayonne CONTRE un plan de masse et qu'un empilage sans masse déclarée
    donnerait un port qui ne relie rien.
    ========================================================================== */
+const CON_MODELE_DEFAUT="fr4-2c-16";
+
 function conPileDefaut(){
   CON.uid=1;
-  return [
-    {k:"cu",  uid:CON.uid++, nom:"Cuivre dessus",  ep:0.035, role:"signal",
-     mat:"cuivre"},
-    {k:"die", uid:CON.uid++, nom:"Substrat",       ep:1.6,   mat:"fr4",
-     er:4.30, df:0.020},
-    {k:"cu",  uid:CON.uid++, nom:"Cuivre dessous", ep:0.035, role:"gnd",
-     mat:"cuivre"}
-  ];
+  const m=conModeleEmpilage(CON_MODELE_DEFAUT);
+  CON.modele=m.id;
+  CON.cible=m.cible;
+  return conPileDeModele(m);
 }
 
 /* Un nom libre. Les noms de couche servent de clé partout — au port, aux
    vias, aux valeurs saisies — et deux couches du même nom rendraient le
    modèle ambigu sans qu'aucun message ne le dise. */
-function conNomLibre(base){
-  const pris=new Set(CON.pile.map(e=>e.nom));
+function conNomLibre(base,pile){
+  const pris=new Set((pile||CON.pile).map(e=>e.nom));
   if(!pris.has(base))return base;
   for(let n=2;n<200;n++)if(!pris.has(base+" "+n))return base+" "+n;
   return base+" "+Date.now();
 }
 
+/* ==========================================================================
+   Le masque
+   --------------------------------------------------------------------------
+   IL N'EST PAS POSÉ D'USINE, ET CE CHOIX SE PAIE DANS LES DEUX SENS. Le
+   vernis épargne existe sur presque toutes les cartes et il compte : 25 µm
+   d'εr 3,8 sur un patch abaissent la résonance d'environ un pour cent, assez
+   pour expliquer un écart qu'on irait chercher ailleurs.
+
+   MAIS IL COÛTE DU TEMPS DE CALCUL, ET IL FAUT DIRE COMBIEN. Chaque interface
+   de l'empilage porte une ligne de maillage OBLIGATOIRE — c'est
+   python/openems_modele.py qui le garantit, et il a raison : une interface de
+   substrat qui glisse, c'est un autre substrat. Le masque pose donc deux
+   lignes distantes de 25 µm là où la plus petite cellule du modèle faisait
+   37 µm, et le pas de temps FDTD suit la plus petite cellule du domaine.
+   Mesuré sur le patch 2,45 GHz de l'exemple : la simulation devient une fois
+   et demie plus longue, pour deux pour cent de cellules en plus. C'est
+   supportable au dernier tour, ce ne l'est pas pendant qu'on cherche encore
+   la géométrie.
+
+   L'outil ne tranche donc pas à la place de l'utilisateur : le masque est
+   proposé, son coût est écrit, et le réglage d'usine est « sans ». On le pose
+   à la fin, quand la géométrie est arrêtée et qu'on veut le dernier pour cent.
+   ========================================================================== */
+function conEstMasque(e){
+  return !!(e&&e.k==="die"&&e.sorte==="masque");
+}
+function conMasqueEntree(nom,pile){
+  const m=conDielectrique("vernis");
+  return {k:"die", uid:CON.uid++, nom:conNomLibre(nom,pile), sorte:"masque",
+          ep:CON_MASQUE_EP, mat:m.id, er:m.er, df:m.df};
+}
+function conMasques(){
+  const n=CON.pile.length;
+  return {haut:conEstMasque(CON.pile[0]),
+          bas:n>1&&conEstMasque(CON.pile[n-1])};
+}
+/* Poser ou retirer les deux faces d'un coup : un masque sur une seule face
+   décrit une carte qui ne se fabrique pas ainsi, et ferait surtout croire à
+   une asymétrie de calcul là où il n'y a qu'un oubli. Celui du dessous n'est
+   posé que s'il y a du cuivre à couvrir. */
+function conMasquePoser(oui){
+  if(!oui){
+    CON.pile=CON.pile.filter(e=>!conEstMasque(e));
+    return;
+  }
+  const a=conMasques();
+  if(!a.haut&&CON.pile.length&&CON.pile[0].k==="cu")
+    CON.pile.unshift(conMasqueEntree("Masque dessus"));
+  if(!a.bas&&CON.pile.length&&CON.pile[CON.pile.length-1].k==="cu")
+    CON.pile.push(conMasqueEntree("Masque dessous"));
+}
+
+/* ==========================================================================
+   Les épaisseurs
+   --------------------------------------------------------------------------
+   Quatre nombres, et ils ne disent pas la même chose : le cuivre total (ce
+   qu'on commande en onces), le diélectrique (ce que le champ traverse), le
+   stratifié nu (ce que le fabricant presse) et l'épaisseur totale (ce que la
+   carte mesure au pied à coulisse, masque compris). C'est la dernière qui
+   doit tomber sur l'épaisseur visée, et c'est le diélectrique qu'on ajuste
+   pour cela : on ne choisit pas une épaisseur de cuivre pour faire tomber
+   juste une épaisseur de carte.
+   ========================================================================== */
+function conEpCuivre(){
+  let s=0;
+  for(const e of CON.pile)if(e.k==="cu")s+=+e.ep||0;
+  return +s.toFixed(4);
+}
+function conEpDie(){
+  let s=0;
+  for(const e of CON.pile)if(e.k==="die"&&!conEstMasque(e))s+=+e.ep||0;
+  return +s.toFixed(4);
+}
+function conEpMasque(){
+  let s=0;
+  for(const e of CON.pile)if(conEstMasque(e))s+=+e.ep||0;
+  return +s.toFixed(4);
+}
+function conEpStratifie(){ return +(conEpCuivre()+conEpDie()).toFixed(4); }
+function conEpTotale(){ return +(conEpStratifie()+conEpMasque()).toFixed(4); }
+
+/* Ramener l'empilage sur l'épaisseur visée en répartissant l'écart sur les
+   diélectriques, au prorata de ce qu'ils font déjà. Le cuivre et le masque ne
+   bougent pas : ils se commandent, ils ne se négocient pas. Rendre faux plutôt
+   que d'écraser l'empilage quand la visée est plus mince que le cuivre
+   lui-même — une carte de 0,05 mm dont le cuivre fait 0,07 n'est pas une
+   carte. */
+function conAjusterEpaisseur(){
+  const fixe=conEpCuivre()+conEpMasque();
+  const veut=(+CON.cible||0)-fixe, a=conEpDie();
+  if(!(veut>0.02)||!(a>0))return false;
+  const k=veut/a;
+  for(const e of CON.pile)
+    if(e.k==="die"&&!conEstMasque(e))
+      e.ep=Math.max(0.005,+(e.ep*k).toFixed(4));
+  return true;
+}
+
+/* ==========================================================================
+   La symétrie
+   --------------------------------------------------------------------------
+   UN EMPILAGE ASYMÉTRIQUE SE VOILE À LA CUISSON : le fabricant le refuse, ou
+   le compense à sa façon et rend une carte dont l'empilage n'est plus celui
+   qu'on a simulé. Ce n'est pas un défaut de calcul — le solveur simule très
+   bien un empilage impossible —, c'est un défaut de commande, et il ne se
+   découvre qu'au devis. Plutôt qu'un verdict, la liste des paires qui ne se
+   répondent pas : c'est elle qui dit quoi corriger.
+   ========================================================================== */
+function conAsymetrie(){
+  const cu=conCuivres().map(c=>c.e);
+  const die=CON.pile.filter(e=>e.k==="die"&&!conEstMasque(e));
+  const out=[], eps=1e-4;
+  for(let i=0,j=cu.length-1;i<j;i++,j--)
+    if(Math.abs((cu[i].ep||0)-(cu[j].ep||0))>eps)
+      out.push({quoi:"cuivre", a:cu[i].nom, b:cu[j].nom,
+                dit:"épaisseurs différentes"});
+  for(let i=0,j=die.length-1;i<j;i++,j--){
+    if(Math.abs((die[i].ep||0)-(die[j].ep||0))>eps)
+      out.push({quoi:"diélectrique", a:die[i].nom, b:die[j].nom,
+                dit:"épaisseurs différentes"});
+    else if(die[i].mat!==die[j].mat)
+      out.push({quoi:"diélectrique", a:die[i].nom, b:die[j].nom,
+                dit:"matières différentes"});
+  }
+  return out;
+}
+/* Symétriser, c'est faire la moyenne des couches deux à deux — et donner à
+   celle du bas la matière de celle du haut, puisque c'est la face dessinée
+   qui commande. */
+function conSymetriser(){
+  const cu=conCuivres().map(c=>c.e);
+  const die=CON.pile.filter(e=>e.k==="die"&&!conEstMasque(e));
+  for(let i=0,j=cu.length-1;i<j;i++,j--){
+    const t=+(((cu[i].ep||0)+(cu[j].ep||0))/2).toFixed(4);
+    cu[i].ep=t; cu[j].ep=t;
+  }
+  for(let i=0,j=die.length-1;i<j;i++,j--){
+    const t=+(((die[i].ep||0)+(die[j].ep||0))/2).toFixed(4);
+    die[i].ep=t; die[j].ep=t;
+    die[j].mat=die[i].mat; die[j].er=die[i].er; die[j].df=die[i].df;
+    die[j].sorte=die[i].sorte;
+  }
+}
+
+/* ==========================================================================
+   Changer le nombre de couches
+   --------------------------------------------------------------------------
+   LES DIÉLECTRIQUES D'UN QUATRE COUCHES NE VEULENT PLUS RIEN DIRE SUR UN SIX
+   COUCHES : on reprend donc le modèle d'usine du nouveau compte plutôt que
+   d'étirer l'ancien. Mais on garde ce qui ne dépend pas du compte et qui a
+   été décidé — le nom, le rôle et le métal des couches conservées — et
+   surtout leur `uid`, parce que c'est par lui que les formes déjà dessinées
+   désignent leur couche. Un empilage refait avec des uid neufs laisserait
+   tout le cuivre dessiné pointer dans le vide.
+
+   Le report suit la règle de la CAO : dessus → dessus, dessous → dessous,
+   internes par rang. Les formes d'une couche interne qui disparaît sont
+   ramenées sur la couche voisine et COMPTÉES — effacer du dessin en silence
+   parce qu'on a touché à l'empilage est exactement la perte qu'on ne remarque
+   qu'au résultat.
+   ========================================================================== */
+function conPileVers(n,id){
+  const m=(id&&conModeleEmpilage(id))||conModelesPour(n)[0];
+  if(!m)return null;
+  const masques=conMasques();
+  const anciens=conCuivres().map(c=>c.e);
+  const neuve=conPileDeModele(m);
+  const cuNeufs=neuve.filter(e=>e.k==="cu");
+
+  /* Le report des couches conservées. Une source ne sert qu'une fois : sans
+     cela, passer de deux à quatre couches donnerait deux couches du même uid,
+     et une forme dessinée ne saurait plus sur laquelle elle est. */
+  const pris=new Set();
+  cuNeufs.forEach(function(e,i){
+    let src=null;
+    if(anciens.length){
+      if(i===0)src=anciens[0];
+      else if(i===cuNeufs.length-1)src=anciens[anciens.length-1];
+      else src=anciens[Math.min(i,anciens.length-2)]||null;
+    }
+    if(!src||pris.has(src.uid))return;
+    pris.add(src.uid);
+    e.uid=src.uid;
+    e.nom=src.nom;
+    e.role=src.role;
+    e.mat=src.mat;
+  });
+
+  /* Les noms repris peuvent se heurter à ceux du modèle : on dédoublonne une
+     fois, à la fin, plutôt que de refuser un report pour un homonyme. */
+  const vus=new Set();
+  for(const e of neuve){
+    if(vus.has(e.nom))e.nom=conNomLibre(e.nom,neuve);
+    vus.add(e.nom);
+  }
+
+  /* Les formes orphelines : celles dont la couche a disparu. Elles sont
+     ramenées sur la couche de même rang, ou sur la plus basse si ce rang
+     n'existe plus. */
+  const rangAncien=new Map();
+  anciens.forEach(function(e,r){ rangAncien.set(e.uid,r); });
+  const vivants=new Set(cuNeufs.map(e=>e.uid));
+  let deplacees=0;
+  for(const el of CON.elements){
+    if(vivants.has(el.cu))continue;
+    const r=rangAncien.has(el.cu)?rangAncien.get(el.cu):0;
+    const cible=cuNeufs[Math.min(r,cuNeufs.length-1)];
+    if(!cible)continue;
+    el.cu=cible.uid;
+    deplacees++;
+  }
+
+  CON.pile=neuve;
+  CON.modele=m.id;
+  CON.cible=m.cible;
+  if(masques.haut||masques.bas)conMasquePoser(true);
+  if(conCoucheDeUid(CON.coucheActive)<0)CON.coucheActive=conPremierCuivre();
+  return {modele:m, deplacees:deplacees};
+}
+
+/* ==========================================================================
+   Les ports que l'empilage vient de rendre faux
+   --------------------------------------------------------------------------
+   UN PORT QUI RELIAIT LE DESSUS AU DESSOUS D'UN DOUBLE FACE relie, sur un
+   quatre couches, deux cuivres SÉPARÉS PAR DEUX PLANS. Les deux couches
+   existent toujours, elles portent toujours leur nom : ni le solveur ni le
+   serveur ne refuseront quoi que ce soit, et le S11 qui sortira sera celui
+   d'une antenne alimentée en travers de sa propre masse. C'est exactement le
+   genre de faute qu'il faut compter et dire, puisque rien d'autre ne la dira.
+
+   Le critère est la mitoyenneté : un port ordinaire relie deux conducteurs
+   VOISINS de l'empilage, avec le seul diélectrique qui les sépare entre eux.
+   Tout le reste demande au moins qu'on l'ait voulu.
+   ========================================================================== */
+function conPortsSuspects(){
+  const noms=conCuivres().map(c=>c.e.nom);
+  const out=[];
+  (typeof ANT!=="undefined"?(ANT.ports||[]):[]).forEach(function(p,i){
+    if(!p||!p.pose)return;
+    const a=noms.indexOf(p.de), b=noms.indexOf(p.a);
+    if(a<0||b<0||Math.abs(a-b)!==1)out.push(i+1);
+  });
+  return out;
+}
+
+/* Appliquer un modèle d'usine SANS changer le nombre de couches : les
+   épaisseurs et les matières changent, les noms, les rôles et les uid
+   restent. C'est le geste courant — « le même quatre couches, mais en
+   1,0 mm » —, et il ne doit rien coûter au dessin. */
+function conAppliquerModele(id){
+  const m=conModeleEmpilage(id);
+  if(!m)return false;
+  if(m.n!==conCuivres().length)return !!conPileVers(m.n,m.id);
+  const cu=conCuivres().map(c=>c.e);
+  const die=CON.pile.filter(e=>e.k==="die"&&!conEstMasque(e));
+  cu.forEach(function(e,i){ e.ep=m.cu[i]||e.ep; });
+  die.forEach(function(e,i){
+    const d=(m.die||[])[i];
+    if(!d)return;
+    const mat=conDielectrique(d.mat);
+    e.sorte=d.s||"core"; e.ep=d.ep; e.mat=mat.id; e.er=mat.er; e.df=mat.df;
+  });
+  CON.modele=m.id;
+  CON.cible=m.cible;
+  return true;
+}
+
 /* Ajouter une paire diélectrique + cuivre sous l'empilage : c'est ainsi qu'on
-   passe de deux à quatre couches, et jamais un conducteur seul — deux
-   conducteurs sans rien entre eux ne sont pas un empilage mais un
-   court-circuit. */
+   passe de deux à quatre couches à la main, et jamais un conducteur seul —
+   deux conducteurs sans rien entre eux ne sont pas un empilage mais un
+   court-circuit. La paire se glisse SOUS le dernier cuivre et AVANT le masque
+   du dessous : un masque pris au milieu de l'empilage décrirait une carte
+   impossible.
+
+   L'empilage cesse alors d'être celui d'un modèle d'usine, et il le dit :
+   `CON.modele` est vidé plutôt que de laisser le panneau afficher le nom d'un
+   empilage qui n'est plus le sien. */
 function conAjouterCouche(){
-  CON.pile.push({k:"die", uid:CON.uid++, nom:conNomLibre("Substrat"),
-                 ep:0.5, mat:"fr4", er:4.30, df:0.020});
-  CON.pile.push({k:"cu",  uid:CON.uid++, nom:conNomLibre("Cuivre"),
-                 ep:0.035, role:"signal", mat:"cuivre"});
+  const fin=CON.pile.length-(conMasques().bas?1:0);
+  CON.pile.splice(fin,0,
+    {k:"die", uid:CON.uid++, nom:conNomLibre("Substrat"),
+     ep:0.5, sorte:"prepreg", mat:"fr4", er:4.30, df:0.020},
+    {k:"cu",  uid:CON.uid++, nom:conNomLibre("Cuivre"),
+     ep:0.035, role:"signal", mat:"cuivre"});
+  CON.modele="";
 }
 
 /* Une couche de cuivre porte-t-elle du dessin ? On ne la retire pas dans ce
@@ -279,9 +768,16 @@ function conRetirerCouche(i){
   if(!e)return;
   if(e.k==="cu"&&conCoucheOccupee(e.uid))return;
   CON.pile.splice(i,1);
-  /* Un diélectrique en bout d'empilage ne sépare plus rien : il part avec. */
-  while(CON.pile.length&&CON.pile[CON.pile.length-1].k==="die")CON.pile.pop();
-  while(CON.pile.length&&CON.pile[0].k==="die")CON.pile.shift();
+  /* Un diélectrique en bout d'empilage ne sépare plus rien : il part avec.
+     LE MASQUE EST LA SEULE EXCEPTION — il est fait pour être en bout, et le
+     perdre parce qu'on a retiré la couche d'en dessous serait une surprise. */
+  const bout=p=>p.length&&p[p.length-1].k==="die"&&!conEstMasque(p[p.length-1]);
+  const tete=p=>p.length&&p[0].k==="die"&&!conEstMasque(p[0]);
+  while(bout(CON.pile))CON.pile.pop();
+  while(tete(CON.pile))CON.pile.shift();
+  /* Un masque qui ne couvre plus aucun cuivre n'a plus d'objet. */
+  if(!CON.pile.some(x=>x.k==="cu"))CON.pile=[];
+  CON.modele="";
   if(conCoucheDeUid(CON.coucheActive)<0)CON.coucheActive=conPremierCuivre();
 }
 
@@ -658,6 +1154,7 @@ const CON_HIST_MAX=60;
 function conEtatDessin(){
   return JSON.stringify({
     el:CON.elements, carte:CON.carte, pile:CON.pile, uid:CON.uid,
+    modele:CON.modele, cible:CON.cible,
     cu:CON.coucheActive, net:CON.netActif, f:CON.fcible,
     gab:CON.gabarit, gabP:CON.gabaritP, gabT:CON.gabaritTouche,
     calc:CON.calcul,
@@ -703,6 +1200,9 @@ function conHistAller(j){
   CON.carte=e.carte;
   CON.pile=e.pile;
   CON.uid=e.uid;
+  CON.modele=e.modele||"";
+  CON.cible=e.cible||CON.cible;
+  CON.pileSel=Math.min(CON.pileSel,Math.max(CON.pile.length-1,0));
   CON.coucheActive=e.cu;
   CON.netActif=e.net;
   CON.fcible=e.f;
@@ -816,6 +1316,11 @@ function conEntrer(){
   document.body.classList.add("conception");
   if(!CON.pile.length)CON.pile=conPileDefaut();
   if(conCoucheDeUid(CON.coucheActive)<0)CON.coucheActive=conPremierCuivre();
+  /* PAGE BLANCHE : ON COMMENCE PAR L'EMPILAGE. Rien n'est dessiné, donc rien
+     n'est perdu à changer le nombre de couches ou le stratifié — et tout
+     serait à refaire si la question venait après le premier patch. Un dessin
+     déjà commencé, lui, ne se fait pas interrompre par une question. */
+  CON.demarrage=!CON.elements.length;
 
   conBoutonEtat();
   conAppliquer(true);

@@ -1,29 +1,116 @@
 # =============================================================================
-# Antenne openEMS — dépendances Python
+# ANTENNE OPENEMS — GUIDE D'INSTALLATION COMPLET POUR NOUVELLE MACHINE (WINDOWS)
+# =============================================================================
 #
-# LE SERVEUR ET LE PARSEUR N'EN ONT AUCUNE. `web_antenna.py`, `ipc2581_parser.py`
-# et `openems_modele.py` fonctionnent avec la bibliothèque standard seule :
-# sur un poste où rien de ce qui suit n'est installé, la page s'ouvre, les
-# fichiers IPC-2581 se lisent, les modèles se préparent et se vérifient, et
-# leurs scripts s'exportent. Seul le bouton « Lancer » est éteint.
+# LE SERVEUR ET LE PARSEUR N'ONT AUCUNE DÉPENDANCE OBLIGATOIRE :
+# `web_antenna.py`, `ipc2581_parser.py` et `openems_modele.py` fonctionnent avec
+# la bibliothèque standard Python seule. Sur un poste sans solveur, la page s'ouvre,
+# les fichiers IPC-2581 se lisent, les modèles se préparent et les scripts s'exportent.
 #
-# PRÉREQUIS D'INSTALLATION :
-# 1. Utiliser Python 3.10 ou 3.11 (64 bits) impérativement.
-# 2. Avoir extrait l'archive binaire openEMS pour Windows dans le dossier
-#    « openEMS/ » à côté de web_antenna.py AVANT de lancer pip.
+# En revanche, pour LANCER les simulations électromagnétiques (FDTD) et visualiser
+# les champs 3D, openEMS et ParaView doivent être installés comme suit :
 #
-#   pip install -r requirements.txt
+# =============================================================================
+# ÉTAPE 1 : INSTALLER PYTHON 3.10 OU 3.11 (64 BITS) — IMPÉRATIF
+# =============================================================================
+# Pourquoi : Les roues C++ précompilées (wheels .whl) d'openEMS pour Windows ne sont
+# fournies QUE pour Python 3.10 et 3.11 (cp310 et cp311).
+# Avec Python 3.12 ou supérieur, l'installation échouera car aucune roue n'existe.
 #
-# Ce que chaque paquet apporte :
-#   - numpy    : le dépouillement (S11, impédance, ROE) et le champ lointain
-#   - openEMS  : les liaisons Python du solveur FDTD (roue .whl dans openEMS/python/)
-#   - CSXCAD   : la description de géométrie qu'openEMS consomme (roue .whl)
-#   - h5py     : la lecture des champs enregistrés par la boîte NF2FF
+# 1. Installer Python 3.10 (ou 3.11) 64 bits (ex: depuis python.org).
+# 2. À la racine du projet (dossier WEB_ANTENNA), créer et activer l'environnement :
 #
-# LES ROUES WINDOWS D'OPENEMS ET CSXCAD NE SONT PAS SUR PYPI :
-# Elles sont fournies dans le sous-dossier openEMS/python/ de l'archive binaire.
-# La directive « --find-links openEMS/python » ci-dessous indique à pip d'y
-# chercher directement les roues compatibles (cp310 / cp311).
+#      py -3.10 -m venv env
+#      .\env\Scripts\activate
+#
+#    (Sous Linux/macOS : python3.10 -m venv env && source env/bin/activate)
+#
+# =============================================================================
+# ÉTAPE 2 : INSTALLER OPENEMS (SOLVEUR FDTD & GÉOMÉTRIE CSXCAD)
+# =============================================================================
+# Les liaisons Python et les exécutables openEMS pour Windows ne sont pas sur PyPI.
+# Ils sont distribués sous forme d'archive binaire autonome.
+#
+# 1. Télécharger l'archive binaire Windows (64-bit) :
+#    - Site officiel : https://www.openems.de/download/
+#    - Ou GitHub     : https://github.com/thliebig/openEMS-project/releases
+#      (Exemple d'archive : openEMS-v0.0.36-win64.zip)
+#
+# 2. Extraire l'archive DIRECTEMENT dans le dossier « openEMS » à la racine du projet :
+#
+#      WEB_ANTENNA/
+#      ├── openEMS/
+#      │   ├── openEMS.exe
+#      │   ├── CSXCAD.dll
+#      │   ├── openEMS.dll
+#      │   ├── AppCSXCAD.exe
+#      │   ├── python/
+#      │   │   ├── CSXCAD-0.6.3-cp310-cp310-win_amd64.whl
+#      │   │   ├── openEMS-0.0.36-cp310-cp310-win_amd64.whl
+#      │   │   └── ...
+#      │   └── ...
+#      ├── web_antenna.py
+#      └── requirements.txt
+#
+#    ATTENTION AU PIÈGE D'EXTRACTION :
+#    L'outil d'extraction Windows crée souvent un sous-dossier de même nom.
+#    Veillez à ne pas avoir `openEMS/openEMS/...`. Le fichier `CSXCAD.dll` et
+#    le sous-dossier `python/` doivent être directement sous `openEMS/`.
+#
+# 3. Installer les dépendances Python avec pip :
+#
+#      pip install -r requirements.txt
+#
+#    (La directive `--find-links openEMS/python` ci-dessous indique à pip d'installer
+#     les roues locales de CSXCAD et openEMS sans chercher sur PyPI).
+#
+#    NOTE DLL : `openems_run.py` et `web_antenna.py` injectent automatiquement
+#    le chemin des DLL via `os.add_dll_directory()`. Aucune modification du PATH
+#    Windows n'est nécessaire !
+#
+# =============================================================================
+# ÉTAPE 3 : INSTALLER PARAVIEW (VISUALISATION 3D DES CHAMPS ÉLECTROMAGNÉTIQUES)
+# =============================================================================
+# Les simulations volumiques exportent les champs E et H au format VTK (.vtr).
+# ParaView est le visualiseur recommandé pour inspecter les coupes et flux 3D.
+#
+# 1. Télécharger ParaView pour Windows :
+#    - Téléchargement : https://www.paraview.org/download/
+#    - Prendre la version Windows 64-bit (soit l'archive portable .zip, soit le .exe).
+#
+# 2. Intégration (2 options au choix) :
+#
+#    Option A — Mode portable (Recommandé, sans droits administrateur) :
+#      Décompressez simplement l'archive ZIP à la racine du projet.
+#      Exemple de dossier : `ParaView-6.1.1-Windows-Python3.12-msvc2017-AMD64/`
+#      `openems_run.py` détecte automatiquement tout dossier racine commençant
+#      par « paraview » et repère `bin/paraview.exe` (même si décompressé avec
+#      un sous-dossier imbriqué).
+#
+#    Option B — Installation standard :
+#      Installez ParaView dans `C:\Program Files\ParaView ...` ou assurez-vous
+#      que l'exécutable `paraview` est accessible dans le `PATH` du système.
+#
+# =============================================================================
+# ÉTAPE 4 : DÉMARRAGE ET VÉRIFICATION
+# =============================================================================
+# Lancez l'application :
+#
+#      python web_antenna.py
+#
+# (Note : si lancé avec le Python système, web_antenna.py bascule automatiquement
+#  sur l'environnement virtuel `env/` s'il est présent à la racine).
+#
+# La console doit confirmer la détection des deux outils :
+#      openEMS           disponible
+#      ParaView          C:\...\bin\paraview.exe
+#
+# =============================================================================
+# CE QUE CHAQUE PAQUET APPORTE :
+#   - numpy    : dépouillement (S11, impédance, ROE) et champ lointain (NF2FF)
+#   - h5py     : lecture des champs et des données HDF5
+#   - CSXCAD   : description géométrique et maillage non uniforme (roue locale)
+#   - openEMS  : solveur FDTD 3D (roue locale)
 # =============================================================================
 
 # Dépendances standards hébergées sur PyPI

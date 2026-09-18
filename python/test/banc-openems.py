@@ -360,6 +360,13 @@ verifie("les trois axes de maillage y sont",
         texte.count("mesh.SetLines") == 3)
 verifie("la conductivite de pertes est calculee, pas recopiee",
         "kappa=" in texte and "tan d =" in texte)
+verifie("le script declare la recherche automatique et relative des DLL",
+        "add_dll_directory" in texte and "OPENEMS_DLL" in texte
+        and "_candidats" in texte and "CSXCAD.dll" in texte)
+_t_dll = openems_script.generer(m, chemin_openems=r"C:\un\dossier\inexistant\openEMS")
+verifie("le dossier d'origine est en tete de liste des candidats",
+        "inexistant" in _t_dll and "_candidats" in _t_dll)
+
 
 
 def aire(pts):
@@ -382,8 +389,10 @@ verifie("le contour tourne dans le sens direct, la decoupe a l'envers",
         aire(poly["o"]) > 0 and aire(poly["t"][0]) < 0,
         "aires %.2f / %.2f" % (aire(poly["o"]), aire(poly["t"][0])))
 t2 = openems_script.generer(m2)
-verifie("la decoupe sort a une priorite superieure au metal",
+verifie("la decoupe sort a une priorite superieure au plan de masse",
         "priority=11" in t2 and "priority=10" in t2)
+verifie("le conducteur sans trou sort a priorite superieure a la decoupe",
+        "priority=12" in t2)
 
 print()
 print("5b. Les trois modes de cuivre")

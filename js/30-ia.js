@@ -42,7 +42,7 @@
      État privé éphémère
      ========================================================================== */
   let _cleApi = "";               // EN MÉMOIRE VIVE. Jamais localStorage.
-  let _modele = "gemini-2.5-flash";
+  let _modele = "gemma-4-31b-it";
   let _historique = [];           // les messages de la session en cours
   let _enAttente = false;
   let _inclureContexte = true;    // transmettre l'état des réglages
@@ -1810,9 +1810,9 @@ grammaire(),
           '<div class="ia-status-left">' +
             '<span class="ia-status-dot"></span>' +
             '<select id="iaModelSelect" class="ia-model-select" title="Modèle Google AI Studio">' +
-              '<option value="gemini-2.5-flash">Gemini 2.5 Flash</option>' +
-              '<option value="gemini-2.5-pro">Gemini 2.5 Pro</option>' +
               '<option value="gemma-4-31b-it">Gemma 4 31B</option>' +
+              '<option value="gemini-3.8-flash">Gemini 3.8 Flash</option>' +
+              '<option value="gemini-3.8-flash-thinking">Gemini 3.8 Flash (Thinking)</option>' +
             '</select>' +
             '<span class="ia-status-ctx" id="iaContextText">Prêt</span>' +
           '</div>' +
@@ -1844,7 +1844,7 @@ grammaire(),
             '<label title="Transmet le résumé des réglages de simulation pour guider la réponse. Ni le fichier IPC-2581, ni les polygones, ni les courbes.">' +
               '<input type="checkbox" id="iaChkContext" checked> Contexte projet' +
             '</label>' +
-            '<span id="iaFooterModelLabel">Google AI Studio · Session active</span>' +
+            '<span id="iaFooterModelLabel">Gemma 4 31B · Session active</span>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -1852,9 +1852,12 @@ grammaire(),
     const selModel = document.getElementById("iaModelSelect");
     if(selModel){
       selModel.value = _modele;
+      const lbl = document.getElementById("iaFooterModelLabel");
+      if(lbl && selModel.selectedIndex >= 0) {
+        lbl.textContent = selModel.options[selModel.selectedIndex].text + " · Session active";
+      }
       selModel.addEventListener("change", function(){
         _modele = this.value;
-        const lbl = document.getElementById("iaFooterModelLabel");
         if(lbl) lbl.textContent = this.options[this.selectedIndex].text +
                                   " · Session active";
       });
@@ -2172,20 +2175,25 @@ grammaire(),
       contexte = "ETAT COURANT DES REGLAGES DANS L'OUTIL :\n" +
                  extraireContexteOpenems();
 
+    let endpointModel = _modele;
+    let thinkingLevel = null;
+    let temperature = 0.2;
     const estGemma = _modele.indexOf("gemma") >= 0;
-    const contents = [];
 
-    if(estGemma){
-      /* Gemma n'accepte pas `systemInstruction` : on amorce la session par un
-         tour de rôle explicite, comme le fait WEB_CAO. */
-      contents.push({role:"user", parts:[{text:
-        "[DIRECTIVE ABSOLUE DU SYSTEME]\n" + promptSysteme()}]});
-      contents.push({role:"model", parts:[{text:
-        "Bien recu. Je reponds exclusivement en francais, avec rigueur et "+
-        "concision, et je termine par un bloc ```action quand je preconise "+
-        "des valeurs concretes."}]});
+    if(_modele === "gemini-3.8-flash-thinking"){
+      endpointModel = "gemini-3.8-flash";
+      thinkingLevel = "high";
+      temperature = 0.2;
+    } else if(_modele === "gemini-3.8-flash"){
+      endpointModel = "gemini-3.8-flash";
+      thinkingLevel = "low";
+      temperature = 0.2;
+    } else if(estGemma){
+      endpointModel = "gemma-4-31b-it";
+      temperature = 0.7;
     }
 
+    const contents = [];
     const passes = _historique.filter(m => !m.localOutil);
     passes.forEach(function(m, i){
       let t = (m.parts && m.parts[0] && m.parts[0].text) || "";
@@ -2194,34 +2202,46 @@ grammaire(),
       contents.push({role:m.role, parts:[{text:t}]});
     });
 
-    const corps = {
-      contents:contents,
-      /* Une température basse : on demande un dimensionnement, pas une
-         variation. Deux réponses différentes à la même question sur les mêmes
-         réglages seraient un défaut, pas une richesse. */
-      generationConfig:{temperature:0.15, maxOutputTokens:4096}
+    const genConfig = {
+      temperature: temperature,
+      maxOutputTokens: 8192
     };
-    if(!estGemma) corps.systemInstruction = {parts:[{text:promptSysteme()}]};
+    if(thinkingLevel){
+      genConfig.thinkingConfig = { thinkingLevel: thinkingLevel };
+    }
+
+    const corps = {
+      contents: contents,
+      systemInstruction: { parts: [{ text: promptSysteme() }] },
+      generationConfig: genConfig
+    };
+
+    const appelerApi = async (body) => {
+      return await fetch(IA_URL + encodeURIComponent(endpointModel) +
+                         ":generateContent?key=" + encodeURIComponent(_cleApi), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    };
 
     try{
-      let rep = await fetch(IA_URL + encodeURIComponent(_modele) +
-                            ":generateContent?key=" + encodeURIComponent(_cleApi), {
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(corps)
-      });
+      let rep = await appelerApi(corps);
 
-      /* Repli pour les modèles qui refusent `systemInstruction`. */
-      if(rep.status === 400 && !estGemma){
+      /* Retry automatique en cas d'erreur 500 / 503 (transitoire côté Google) */
+      if(rep.status >= 500){
+        await new Promise(r => setTimeout(r, 1500));
+        rep = await appelerApi(corps);
+      }
+
+      /* Repli si le modèle refuse `systemInstruction` (HTTP 400). */
+      if(rep.status === 400 && corps.systemInstruction){
         const alt = JSON.parse(JSON.stringify(contents));
         if(alt.length && alt[0].role === "user")
           alt[0].parts[0].text = promptSysteme() + "\n\n" + alt[0].parts[0].text;
-        rep = await fetch(IA_URL + encodeURIComponent(_modele) +
-                          ":generateContent?key=" + encodeURIComponent(_cleApi), {
-          method:"POST",
-          headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({contents:alt,
-                               generationConfig:corps.generationConfig})
+        rep = await appelerApi({
+          contents: alt,
+          generationConfig: corps.generationConfig
         });
       }
 
@@ -2259,6 +2279,12 @@ grammaire(),
                 "réseau ? « verifier » et « help », eux, marchent sans."
               : m));
       _questionEnAttente = q;
+      const inputEl = document.getElementById("iaInput");
+      if(inputEl){
+        inputEl.value = q;
+        inputEl.style.height = "auto";
+        inputEl.focus();
+      }
     }
     _enAttente = false;
     rendreMessages();

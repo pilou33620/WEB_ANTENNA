@@ -190,6 +190,18 @@ function conBlocCarte(){
 
 /* -------------------------------------------------------------------------
    2. L'empilage et les matériaux
+   -------------------------------------------------------------------------
+   DEUX VUES DU MÊME EMPILAGE, ET C'EST VOULU. La COUPE, en haut, se lit d'un
+   coup : c'est la feuille d'empilage du fabricant, du dessus vers le dessous,
+   avec ce qu'on commande — nom, matière, rôle, poids de cuivre, épaisseur,
+   Dk, Df. La FICHE, en dessous, ne montre qu'une couche à la fois, mais elle
+   la montre entière : les listes de matériaux, les valeurs modifiables, et ce
+   que chaque nombre signifie pour le calcul.
+
+   Un empilage à huit couches fait dix-sept lignes. Tout déplier ferait un
+   panneau de trois écrans où la couche qu'on cherche n'est jamais visible en
+   même temps que celle à laquelle on la compare ; c'est précisément ce que la
+   coupe permet, et c'est pour cela qu'elle vient en premier.
    ------------------------------------------------------------------------- */
 function conOptionsDie(sel){
   return CON_DIELECTRIQUES.map(m=>
@@ -210,10 +222,64 @@ function conOptionsEp(v){
     (connu?"":'<option value="'+v+'" selected>'+conNb(v*1000,1)+' µm</option>');
 }
 
+/* Le poids du cuivre, en onces par pied carré. C'est l'unité dans laquelle un
+   cuivre se commande, et la seule qu'un fabricant reconnaisse au premier coup
+   d'œil : 1 oz/pi² ≈ 34,8 µm. Les valeurs de catalogue tombent sur des demis,
+   les autres sont écrites telles quelles plutôt qu'arrondies à un demi qu'on
+   n'aurait pas demandé. */
+const CON_OZ=0.0348;
+function conOz(ep){
+  const o=(+ep||0)/CON_OZ, r=Math.round(o*2)/2;
+  return (Math.abs(o-r)<0.06?conNb(r,r%1?1:0):conNb(o,2))+" oz";
+}
+
+/* Le rôle affiché dans la coupe : celui d'une couche de cuivre se choisit,
+   celui d'un diélectrique dit sa nature — c'est ce qui distingue une âme d'un
+   prépreg sur la feuille du fabricant. */
+const CON_ROLES_CU={signal:"Signal", gnd:"Plan de masse", pwr:"Plan d'alim."};
+function conRoleTxt(e){
+  if(e.k==="cu")return CON_ROLES_CU[e.role]||"Signal";
+  return (CON_SORTES[e.sorte]||"âme (core)").replace(/^./,c=>c.toUpperCase());
+}
+
+/* Une ligne de la coupe. `rang` est le numéro de la couche de cuivre — celui
+   qui sert à en parler (« la couche 2 »), et qui ne compte pas les
+   diélectriques ; un diélectrique n'a pas de numéro, il a deux voisins. */
+function conLigneCoupe(e,i,rang){
+  const sel=(CON.pileSel===i)?" on":"";
+  const die=(e.k==="die");
+  const mat=die?conDielectrique(e.mat).nom:conConducteur(e.mat).nom;
+  return '<tr class="'+(die?"gap":"cu")+sel+'" data-con-voir="'+i+'" '+
+      'title="Régler cette couche">'+
+    '<td>'+(die?"":rang)+'</td>'+
+    '<td class="nom">'+aEsc(e.nom)+'</td>'+
+    '<td>'+aEsc(mat)+'</td>'+
+    '<td>'+aEsc(conRoleTxt(e))+'</td>'+
+    '<td>'+(die?"—":conOz(e.ep))+'</td>'+
+    '<td>'+conNb(conAff(e.ep),3)+'</td>'+
+    '<td>'+(die?conNb(e.er,2):"—")+'</td>'+
+    '<td>'+(die?conNb(e.df,4):"—")+'</td>'+
+    '</tr>';
+}
+
+function conCoupe(){
+  let rang=0;
+  const lignes=CON.pile.map(function(e,i){
+    if(e.k==="cu")rang++;
+    return conLigneCoupe(e,i,rang);
+  }).join("");
+  return '<table class="empilage coupe">'+
+    '<thead><tr><th>#</th><th>nom</th><th>matière</th><th>rôle</th>'+
+    '<th>poids</th><th>épaiss. '+conU()+'</th><th>Dk</th><th>Df</th></tr></thead>'+
+    '<tbody>'+lignes+'</tbody></table>';
+}
+
+/* La fiche de la couche choisie : tout ce qui se règle, et pourquoi. */
 function conFicheCouche(e,i){
   const occupee=(e.k==="cu")&&conCoucheOccupee(e.uid);
+  const masque=conEstMasque(e);
   const tete='<div class="objet-tete">'+
-    '<b>'+(e.k==="cu"?"Cuivre":"Diélectrique")+'</b>'+
+    '<b>'+(e.k==="cu"?"Cuivre":(masque?"Masque":"Diélectrique"))+'</b>'+
     '<input type="text" class="nom" data-con-pile="'+i+'" data-ou="nom" '+
       'value="'+aEsc(e.nom)+'">'+
     '<button class="tb mini" data-con-pile-suppr="'+i+'"'+
@@ -247,7 +313,7 @@ function conFicheCouche(e,i){
 
   const m=conDielectrique(e.mat);
   const colle=Math.abs(m.er-e.er)<1e-6&&Math.abs(m.df-e.df)<1e-9;
-  return '<div class="objet die">'+tete+
+  return '<div class="objet die'+(masque?" masque":"")+'">'+tete+
     '<div class="ligne">'+
       '<span style="flex:1 1 180px"><label>matériau</label>'+
         '<select data-con-pile="'+i+'" data-ou="mat">'+
@@ -256,6 +322,11 @@ function conFicheCouche(e,i){
         '" min="0" data-con-pile="'+i+'" data-ou="ep" value="'+
         conAff(e.ep)+'"></span>'+
       '<span class="unite">'+conU()+'</span>'+
+      (masque?"":'<span><label>nature</label>'+
+        '<select data-con-pile="'+i+'" data-ou="sorte">'+
+          '<option value="core"'+(e.sorte!=="prepreg"?" selected":"")+'>âme (core)</option>'+
+          '<option value="prepreg"'+(e.sorte==="prepreg"?" selected":"")+'>prépreg</option>'+
+        '</select></span>')+
     '</div>'+
     '<div class="ligne">'+
       '<span><label>ε<sub>r</sub></label><input type="number" step="0.01" min="1" '+
@@ -263,31 +334,142 @@ function conFicheCouche(e,i){
       '<span><label>tan δ</label><input type="number" step="0.0005" min="0" '+
         'data-con-pile="'+i+'" data-ou="df" value="'+e.df+'"></span>'+
     '</div>'+
-    '<p class="note">'+(colle
-      ? 'Valeurs de notice, données à '+aEsc(m.f)+
-        (m.note?'. '+aEsc(m.note):"")+
-        '. La tolérance réelle est plus large que l\'affichage : ±2 % sur un '+
-        'FR-4 déplace la résonance d\'un pour cent.'
-      : 'Valeurs saisies à la main : elles ne viennent plus d\'une notice, et '+
-        'c\'est très bien — le stratifié qu\'on a en magasin n\'est jamais tout '+
-        'à fait celui du catalogue.')+'</p>'+
+    '<p class="note">'+(masque
+      ? 'Le vernis épargne compte deux fois : il abaisse la résonance d\'un '+
+        'pour cent environ, et ses '+conNb(e.ep*1000,1)+' µm posent deux '+
+        'lignes de maillage obligatoires là où la plus petite cellule du '+
+        'modèle en faisait 37. Le pas de temps FDTD suit la plus petite '+
+        'cellule du domaine : compter une fois et demie le temps de calcul.'
+      : (colle
+        ? 'Valeurs de notice, données à '+aEsc(m.f)+
+          (m.note?'. '+aEsc(m.note):"")+
+          '. La tolérance réelle est plus large que l\'affichage : ±2 % sur un '+
+          'FR-4 déplace la résonance d\'un pour cent.'
+        : 'Valeurs saisies à la main : elles ne viennent plus d\'une notice, et '+
+          'c\'est très bien — le stratifié qu\'on a en magasin n\'est jamais tout '+
+          'à fait celui du catalogue.'))+'</p>'+
     '</div>';
+}
+
+/* Le choix du modèle d'usine et du nombre de couches. Les deux vont ensemble :
+   changer le compte prend le premier modèle du nouveau compte, changer le
+   modèle peut changer le compte. */
+function conOptionsModele(){
+  const n=conCuivres().length;
+  const liste=conModelesPour(n);
+  const autres=CON_MODELES.filter(m=>m.n!==n);
+  const opt=m=>'<option value="'+m.id+'"'+(CON.modele===m.id?" selected":"")+
+    '>'+aEsc(m.nom)+'</option>';
+  return '<option value=""'+(CON.modele?"":" selected")+'>— empilage libre —</option>'+
+    (liste.length?'<optgroup label="'+n+' couche'+(n>1?"s":"")+'">'+
+      liste.map(opt).join("")+'</optgroup>':"")+
+    '<optgroup label="autres comptes de couches">'+
+      autres.map(opt).join("")+'</optgroup>';
+}
+
+function conBlocDemarrage(){
+  const n=conCuivres().length;
+  const boutons=conComptesCuivre().map(c=>
+    '<button class="tb'+(c===n?" on":"")+'" data-con-ncu-bouton="'+c+'">'+
+    c+' couche'+(c>1?"s":"")+'</button>').join("");
+  const modeles=conModelesPour(n).map(function(m){
+    return '<button class="tb large'+(CON.modele===m.id?" on":"")+'" '+
+      'data-con-modele-bouton="'+m.id+'">'+aEsc(m.nom)+
+      '<small>'+conNb(m.cible,3)+' mm'+(m.note?' · '+aEsc(m.note):"")+
+      '</small></button>';
+  }).join("");
+  return '<div class="champ demarrage"><label>Sur quelle carte ? '+
+    '<small>C\'est la première question, et elle vient avant le premier trait : '+
+    'les cotes d\'un motif sont calculées SUR un substrat — un patch dessiné '+
+    'pour un FR-4 de 1,6 mm et reporté tel quel sur un RO4350B de 0,762 mm '+
+    'n\'est plus un patch, c\'est un rectangle de cuivre. Rien n\'est dessiné '+
+    'pour l\'instant : c\'est le seul moment où changer d\'empilage ne coûte '+
+    'rien.</small></label>'+
+    '<div class="raccourcis">'+boutons+'</div>'+
+    '<div class="modeles">'+modeles+'</div>'+
+    '<div class="pnl-bar">'+
+      '<button class="tb on" data-con-demarrer>Empilage arrêté, dessiner</button>'+
+      '<span class="note-inline">Tout reste modifiable ensuite, couche par '+
+      'couche — mais les cotes déjà dessinées, elles, ne se recalculent pas '+
+      'toutes seules.</span>'+
+    '</div></div>';
 }
 
 function conBlocEmpilage(){
   const s=conSubstrat();
   const cu=conCuivres();
-  return '<div class="champ"><label>L\'empilage et les matériaux '+
-    '<small>ce que le solveur mettra entre les couches de cuivre. Une '+
-    'permittivité fausse de 10 % déplace la résonance d\'environ 5 % — assez '+
-    'pour être hors bande sans savoir pourquoi.</small></label>'+
-    CON.pile.map(conFicheCouche).join("")+
+  const masques=conMasques();
+  const obtenue=conEpTotale();
+  const ecart=obtenue-(+CON.cible||0);
+  const asym=conAsymetrie();
+  const i=Math.min(Math.max(CON.pileSel|0,0),Math.max(CON.pile.length-1,0));
+  const fiche=CON.pile[i]?conFicheCouche(CON.pile[i],i):"";
+
+  return (CON.demarrage?conBlocDemarrage():"")+
+    '<div class="champ"><label>L\'empilage et les matériaux '+
+    '<small>ce que le solveur mettra entre les couches de cuivre, et ce que '+
+    'le fabricant pressera. Une permittivité fausse de 10 % déplace la '+
+    'résonance d\'environ 5 % — assez pour être hors bande sans savoir '+
+    'pourquoi.</small></label>'+
+
+    (CON.demarrage?"":'<div class="ligne">'+
+      '<span style="flex:1 1 200px"><label>modèle d\'usine</label>'+
+        '<select data-con-modele>'+conOptionsModele()+'</select></span>'+
+      '<span><label>couches de cuivre</label><select data-con-ncu>'+
+        conComptesCuivre().map(c=>'<option value="'+c+'"'+
+          (c===cu.length?" selected":"")+'>'+c+'</option>').join("")+
+        (conComptesCuivre().indexOf(cu.length)<0
+          ? '<option value="'+cu.length+'" selected>'+cu.length+'</option>':"")+
+      '</select></span>'+
+    '</div>')+
+
+    conCoupe()+
+    fiche+
+
+    '<div class="ligne">'+
+      '<span><label>épaisseur visée</label><input type="number" step="'+
+        conPas(0.05)+'" min="0" data-con-cible value="'+conAff(CON.cible)+
+        '"></span>'+
+      '<span class="unite">'+conU()+'</span>'+
+      '<span><label>&nbsp;</label><button class="tb mini" data-con-ajuster '+
+        'title="Répartir l\'écart sur les diélectriques, au prorata. Le cuivre '+
+        'et le masque ne bougent pas : ils se commandent.">répartir</button></span>'+
+    '</div>'+
+
+    '<div class="recap">'+
+      '<span>obtenue <b>'+conLong(obtenue)+'</b></span>'+
+      '<span>stratifié nu '+conLong(conEpStratifie())+'</span>'+
+      '<span>cuivre total '+conLong(conEpCuivre())+'</span>'+
+      (conEpMasque()?'<span>masque '+conLong(conEpMasque())+'</span>':"")+
+      (Math.abs(ecart)>0.0005
+        ? '<span class="alerte">écart '+(ecart>0?"+":"−")+
+          conLong(Math.abs(ecart))+' sur la visée</span>'
+        : '<span>visée atteinte</span>')+
+    '</div>'+
+
     '<div class="pnl-bar">'+
       '<button class="tb mini" data-con-ajout-couche>+ diélectrique et cuivre</button>'+
-      '<span class="note-inline">'+cu.length+' couche(s) de cuivre · '+
-        'substrat vu par les gabarits : h = '+conLong(s.h)+', ε<sub>r</sub> = '+
-        conNb(s.er,3)+', tan δ = '+conNb(s.df,4)+'</span>'+
-    '</div></div>';
+      '<button class="tb mini'+(masques.haut||masques.bas?" on":"")+'" '+
+        'data-con-masque title="Le vernis épargne : 25 µm d\'εr 3,8 sur les '+
+        'deux faces. Il abaisse la résonance d\'environ 1 %, et il allonge '+
+        'le calcul d\'environ moitié — le pas de temps FDTD suit ses '+
+        '25 µm.">masque</button>'+
+      (asym.length?'<button class="tb mini" data-con-symetriser '+
+        'title="Faire la moyenne des couches deux à deux">symétriser</button>':"")+
+    '</div>'+
+
+    (asym.length?'<p class="note alerte">Empilage asymétrique : '+
+      asym.map(a=>aEsc(a.a)+" / "+aEsc(a.b)+" ("+aEsc(a.dit)+")").join(", ")+
+      '. Une carte asymétrique se voile à la cuisson ; le fabricant la refuse, '+
+      'ou la compense à sa façon — et rend alors une carte dont l\'empilage '+
+      'n\'est plus celui qu\'on a simulé.</p>':"")+
+
+    '<p class="note">'+cu.length+' couche(s) de cuivre · substrat vu par les '+
+      'gabarits : h = '+conLong(s.h)+', ε<sub>r</sub> = '+conNb(s.er,3)+
+      ', tan δ = '+conNb(s.df,4)+'. C\'est le diélectrique entre la PREMIÈRE '+
+      'couche de cuivre et la SUIVANTE : une antenne imprimée travaille contre '+
+      'le plan qui est juste sous elle, pas contre le dessous de la carte.</p>'+
+    '</div>';
 }
 
 /* -------------------------------------------------------------------------
@@ -447,6 +629,13 @@ function conFicheMotif(g){
       'le dessin n\'est pas touché">✕</button></div>'+
     '<p class="note">'+aEsc(g.aide)+'</p>'+manque+
     '<div class="apercu" id="conApercu">'+conApercuBloc(g)+'</div>'+
+    (g.id==="ifa"
+      ? '<div class="pnl-bar" style="margin:6px 0 10px">'+
+        '<span class="note-inline">Préréglages Silicon Labs AN1088 :</span>'+
+        '<button class="tb mini" data-con-ifa-preset="16" title="FR-4 1,6 mm (0.062\") : La=19,86 mm, ha=8,31 mm, d=2,77 mm">AN1088 (1,6 mm)</button>'+
+        '<button class="tb mini" data-con-ifa-preset="08" title="FR-4 0,8 mm : La=21,84 mm, ha=7,90 mm, d=2,92 mm">AN1088 (0,8 mm)</button>'+
+        '</div>'
+      : "")+
     '<p class="note">Toutes les longueurs du motif sont réglables : chaque '+
     'lettre du dessin a son champ ci-dessous, et chaque champ allume sa cote '+
     'sur le dessin. Cliquez une cote pour ouvrir son champ. Le dessin se '+
@@ -745,6 +934,13 @@ function conPanneauLier(box){
            doit cesser de prétendre le contraire. */
         if(ou==="er"||ou==="df")rendre=true;
       }
+      /* CE QUI EST RETOUCHÉ N'EST PLUS UN EMPILAGE DE CATALOGUE. Le nom du
+         modèle est donc lâché : il désignait une commande possible, et une
+         épaisseur reprise à la main n'en est plus une. Le NOM et le RÔLE
+         d'une couche, eux, ne changent rien à ce qu'on commande — un plan de
+         masse et une couche de signal se pressent pareil. */
+      if(ou==="ep"||ou==="er"||ou==="df"||ou==="mat"||ou==="sorte")
+        CON.modele="";
       if(rendre)conAppliquer(false);
       else conMajDifferee();
     };
@@ -754,9 +950,116 @@ function conPanneauLier(box){
       el.onchange=function(){ appliquer(true); };
   });
 
+  /* La coupe : une ligne cliquée ouvre la fiche de cette couche. C'est la
+     seule façon de régler un empilage à huit couches sans dérouler dix-sept
+     fiches — et c'est aussi ainsi qu'on lit une feuille d'empilage. */
+  box.querySelectorAll("[data-con-voir]").forEach(function(tr){
+    tr.onclick=function(){
+      CON.pileSel=+tr.dataset.conVoir;
+      conPanneauRendre();
+    };
+  });
+
+  /* Le modèle d'usine. Il peut changer le nombre de couches — « 4 couches
+     FR-4 1,0 mm » depuis un double face —, et `conAppliquerModele` s'en
+     charge : ce n'est pas au panneau de décider si l'empilage se retouche ou
+     se refait. */
+  box.querySelectorAll("[data-con-modele],[data-con-modele-bouton]").forEach(
+    function(el){
+      const id=el.dataset.conModeleBouton;
+      const faire=function(v){
+        if(!v)return;                       // « empilage libre » : rien à poser
+        const avant=conCuivres().length;
+        conAppliquerModele(v);
+        const m=conModeleEmpilage(v);
+        if(m&&m.n!==avant){
+          const susp=conPortsSuspects();
+          hint("Empilage « "+m.nom+" » posé : "+m.n+" couches de cuivre."+
+               (susp.length?" ⚠ Le port "+susp.join(", ")+" relie deux couches "+
+                "qui ne sont plus voisines : reprenez-le à l'étape « Les "+
+                "ports ».":""));
+        }
+        CON.pileSel=0;
+        conAppliquer(false);
+      };
+      if(id)el.onclick=function(){ faire(id); };
+      else el.onchange=function(){ faire(el.value); };
+    });
+
+  /* Le nombre de couches. Les formes dessinées sur une couche interne qui
+     disparaît sont reportées et COMPTÉES : c'est la seule chose que
+     l'utilisateur ne peut pas voir tout seul sur le dessin. */
+  box.querySelectorAll("[data-con-ncu],[data-con-ncu-bouton]").forEach(
+    function(el){
+      const b=el.dataset.conNcuBouton;
+      const faire=function(n){
+        if(!(n>0))return;
+        if(n===conCuivres().length)return;
+        const r=conPileVers(n);
+        if(!r)return;
+        CON.pileSel=0;
+        const susp=conPortsSuspects();
+        hint("Empilage « "+r.modele.nom+" » posé"+
+             (r.deplacees?" — "+r.deplacees+" forme(s) reportée(s) sur une "+
+              "couche voisine : leur couche d'origine n'existe plus.":".")+
+             (susp.length?" ⚠ Le port "+susp.join(", ")+" relie deux couches "+
+              "qui ne sont plus voisines : reprenez-le à l'étape « Les ports », "+
+              "sans quoi l'antenne sera alimentée en travers de sa masse.":""));
+        conAppliquer(false);
+      };
+      if(b)el.onclick=function(){ faire(+b); };
+      else el.onchange=function(){ faire(+el.value); };
+    });
+
+  box.querySelectorAll("[data-con-demarrer]").forEach(function(b){
+    b.onclick=function(){
+      CON.demarrage=false;
+      conPanneauRendre();
+      hint("Empilage arrêté. Les cotes des motifs sont maintenant calculées "+
+           "sur ce substrat.");
+    };
+  });
+
+  box.querySelectorAll("[data-con-cible]").forEach(function(el){
+    el.onchange=function(){
+      const v=parseFloat(String(el.value).replace(",","."));
+      if(!isFinite(v)||v<=0)return;
+      CON.cible=conLire(v);
+      conPanneauRendre();
+    };
+  });
+  box.querySelectorAll("[data-con-ajuster]").forEach(function(b){
+    b.onclick=function(){
+      if(!conAjusterEpaisseur()){
+        hint("Épaisseur visée intenable : le cuivre et le masque font déjà "+
+             "plus que ce qui est demandé. Le diélectrique ne peut pas être "+
+             "négatif.");
+        return;
+      }
+      CON.modele="";
+      conAppliquer(false);
+    };
+  });
+  box.querySelectorAll("[data-con-masque]").forEach(function(b){
+    b.onclick=function(){
+      const a=conMasques();
+      conMasquePoser(!(a.haut||a.bas));
+      CON.pileSel=0;
+      if(!(a.haut||a.bas))
+        hint("Masque posé : il abaisse la résonance d'environ 1 %, et allonge "+
+             "le calcul d'environ moitié — le pas de temps FDTD suit ses "+
+             "25 µm. On le retire tant que la géométrie bouge.");
+      conAppliquer(false);
+    };
+  });
+  box.querySelectorAll("[data-con-symetriser]").forEach(function(b){
+    b.onclick=function(){ conSymetriser(); CON.modele=""; conAppliquer(false); };
+  });
+
   box.querySelectorAll("[data-con-pile-suppr]").forEach(function(b){
     b.onclick=function(){
       conRetirerCouche(+b.dataset.conPileSuppr);
+      CON.pileSel=Math.min(CON.pileSel,Math.max(CON.pile.length-1,0));
       conAppliquer(false);
     };
   });
@@ -816,6 +1119,25 @@ function conPanneauLier(box){
     b.onclick=function(){
       const g=conGabarit(CON.gabarit);
       if(g)conGabaritPoser(g,CON.gabaritP);
+    };
+  });
+  box.querySelectorAll("[data-con-ifa-preset]").forEach(function(b){
+    b.onclick=function(){
+      const kf=2.45e9/Math.max(CON.fcible||2.45e9,1e6);
+      const is08=(b.dataset.conIfaPreset==="08");
+      const p={
+        La:+( (is08?21.84:19.86)*kf ).toFixed(2),
+        ha:+( (is08?7.90:8.31)*kf ).toFixed(2),
+        wb:+( 1.00*kf ).toFixed(2),
+        d:+( (is08?2.92:2.77)*kf ).toFixed(2),
+        wf:+( 1.02*kf ).toFixed(2),
+        marge:+( 1.02*kf ).toFixed(2),
+        masseTop:1,
+        viasCouture:1
+      };
+      Object.assign(CON.gabaritP, p);
+      for(const k in p) CON.gabaritTouche[k]=true;
+      conPanneauRendre();
     };
   });
   box.querySelectorAll("[data-con-cote]").forEach(function(el){

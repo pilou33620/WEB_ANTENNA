@@ -366,25 +366,22 @@ verifie("la bande est ouverte a +/-15 % autour de la cible",
         Math.abs(ANT.bande.f1-0.85*CON.fcible)<1&&
         Math.abs(ANT.bande.f2-1.15*CON.fcible)<1);
 
-/* -- l'IFA : le court-circuit est reel ----------------------------------- */
+/* -- l'IFA : le court-circuit et les coutures sont réels (Silicon Labs AN1088) -- */
 conGabaritPoser("ifa");
-const via=CON.elements.find(e=>e.type==="via");
-verifie("l'IFA pose un via de court-circuit", !!via&&via.net==="ANTENNE");
+const viasAnt=CON.elements.filter(e=>e.type==="via"&&e.net==="ANTENNE");
+verifie("l'IFA pose 2 vias de court-circuit", viasAnt.length===2);
 const doc=conModele();
 const perc=doc.perçages||doc.percages||[];
-verifie("le via relie bien la premiere et la derniere couche de cuivre",
-        perc.length===1&&perc[0].sa===conCuivres()[0].i&&
-        perc[0].sb===conCuivres()[conCuivres().length-1].i,
+verifie("les vias relient bien la premiere et la derniere couche de cuivre",
+        perc.length>=2&&perc.every(p=>p.sa===conCuivres()[0].i&&
+                                      p.sb===conCuivres()[conCuivres().length-1].i),
         JSON.stringify(perc[0]||null));
 /* Le pied du court-circuit doit tomber SUR le plan de masse, pas a cote :
    un via pose au ras du bord ne court-circuite rien. */
 const pIfa=conGabaritDefauts(CON_MOTIF_IFA,cx);
-verifie("le pied du via est sur le plan de masse",
-        via.y<pIfa.Lg&&via.y>pIfa.Lg-pIfa.sc-1e-9,
-        "y="+via.y+" pour une masse jusqu'a "+pIfa.Lg);
-/* Le developpe annonce est celui qu'on peut MESURER sur la piste dessinee.
-   C'est la verification qui attrape un morceau oublie — l'enfoncement du
-   court-circuit en etait un. */
+verifie("le pied des vias est sur le plan de masse",
+        viasAnt[0].y<pIfa.Lg&&viasAnt[0].y>pIfa.Lg-pIfa.sc-1e-9,
+        "y="+viasAnt[0].y+" pour une masse jusqu'a "+pIfa.Lg);
 const tIfa=CON_MOTIF_IFA.tracer(cx,pIfa);
 const quart=CON_C0/(4*cx.f*Math.sqrt(cx.eeffAir));
 const mesure=function(t){
@@ -396,24 +393,21 @@ const mesure=function(t){
                   bras.pts[i][1]-bras.pts[i-1][1]);
   return d;
 };
-verifie("le developpe dessine de l'IFA vaut le quart d'onde",
-        Math.abs(mesure(tIfa)-quart)<0.01,
-        mesure(tIfa).toFixed(4)+" pour "+quart.toFixed(4)+" mm");
+verifie("le bras dessine de l'IFA mesure La + ha + sc (AN1088)",
+        Math.abs(mesure(tIfa)-(pIfa.La-pIfa.wb/2+pIfa.ha+pIfa.sc))<0.1,
+        mesure(tIfa).toFixed(4));
 verifie("l'alimentation est entre le court-circuit et le bout du bras",
         pIfa.d>0&&pIfa.d<pIfa.La);
-verifie("l'IFA a un decroche de masse sous l'alimentation",
-        tIfa.formes.some(f=>f.cu==="bas"&&f.trou&&f.type==="rect"));
 verifie("le port de l'IFA est au fond du decroche",
         Math.abs(tIfa.port.y-(pIfa.Lg-pIfa.ed))<1e-4);
-verifie("le via de court-circuit reste hors du decroche",
-        via.x<(pIfa.marge+pIfa.d-pIfa.wf/2-pIfa.gd));
-const tIfaTop=CON_MOTIF_IFA.tracer(cx,Object.assign({},pIfa,{masseTop:1}));
-verifie("l'IFA par defaut n'a pas de plan de masse en haut",
-        !tIfa.formes.some(f=>f.cu==="haut"&&!f.trou&&f.type==="rect"&&f.net==="GND"));
-verifie("l'IFA avec masseTop pose un plan de masse sur le dessus",
-        tIfaTop.formes.some(f=>f.cu==="haut"&&!f.trou&&f.type==="rect"&&f.net==="GND"));
+verifie("les vias de court-circuit restent hors du decroche",
+        viasAnt[0].x<(pIfa.marge+pIfa.d));
+verifie("l'IFA par defaut pose un plan de masse en haut (masseTop)",
+        tIfa.formes.some(f=>f.cu==="haut"&&!f.trou&&f.type==="rect"&&f.net==="GND"));
 verifie("l'IFA avec masseTop pose aussi son decroche d'isolation sur le dessus",
-        tIfaTop.formes.some(f=>f.cu==="haut"&&f.trou&&f.type==="rect"));
+        tIfa.formes.some(f=>f.cu==="haut"&&f.trou&&f.type==="rect"));
+verifie("l'IFA pose des vias de couture de masse le long du bord",
+        tIfa.formes.some(f=>f.type==="via"&&f.net==="GND"));
 
 /* -- le MIFA : replier ne raccourcit pas le fil -------------------------- */
 const pMifa=conGabaritDefauts(CON_MOTIF_MIFA,cx);
@@ -1460,6 +1454,314 @@ global.antCuivreCalcul = vraiCalcul;
 V.modele = null;
 
 console.log("");
+console.log("12. L'empilage du mode conception");
+/* CE QUE CETTE SECTION EPROUVE, ET POURQUOI. L'empilage est le seul reglage
+   du mode qui ne se voit pas sur le dessin : une couche de trop, un
+   dielectrique de la mauvaise epaisseur, un modele d'usine qui ne tombe pas
+   sur l'epaisseur qu'il annonce ne changent rien a ce qu'on regarde a
+   l'ecran, et tout a ce que le solveur calcule. C'est exactement le critere
+   qui a fait ecrire les sections precedentes.
+
+   Et le changement de nombre de couches porte le risque propre a ce mode :
+   les formes designent leur couche par un `uid`, et un empilage refait avec
+   des uid neufs laisserait tout le cuivre dessine pointer dans le vide —
+   sans erreur, sans message, et avec un dessin qui a toujours l'air d'en
+   etre un. */
+
+CON.elements=[];
+CON.pile=conPileDefaut();
+CON.coucheActive=conPremierCuivre();
+
+/* -- les modeles d'usine tombent sur ce qu'ils annoncent ------------------ */
+/* Un modele qui n'atteint pas son epaisseur ne se commande pas : le
+   fabricant repondrait par un empilage a lui, et la carte pressee ne serait
+   plus celle qu'on a simulee. */
+let modelesFaux=[];
+CON_MODELES.forEach(function(m){
+  let s=0;
+  m.cu.forEach(function(e){ s+=e; });
+  (m.die||[]).forEach(function(d){ s+=d.ep; });
+  if(Math.abs(s-m.cible)>1e-6)
+    modelesFaux.push(m.id+" ("+s.toFixed(4)+" au lieu de "+m.cible+")");
+  if(m.cu.length!==m.n)modelesFaux.push(m.id+" : "+m.cu.length+" cuivres pour n="+m.n);
+  if((m.die||[]).length!==Math.max(1,m.n-1))
+    modelesFaux.push(m.id+" : "+(m.die||[]).length+" dielectriques");
+});
+verifie("chaque modele d'usine tombe sur l'epaisseur qu'il annonce",
+        modelesFaux.length===0, modelesFaux.join(" | "));
+verifie("chaque modele nomme un dielectrique du catalogue",
+        CON_MODELES.every(m=>(m.die||[]).every(d=>
+          CON_DIELECTRIQUES.some(x=>x.id===d.mat))));
+
+/* -- l'empilage d'usine --------------------------------------------------- */
+verifie("l'empilage d'usine a deux couches de cuivre",
+        conCuivres().length===2);
+verifie("et fait 1,6 mm en tout",
+        Math.abs(conEpTotale()-1.6)<1e-9, conEpTotale()+" mm");
+verifie("la seconde couche est declaree masse — une antenne imprimee "+
+        "rayonne contre un plan",
+        conCuivres()[1].e.role==="gnd");
+verifie("le substrat vu par les gabarits est celui d'entre les deux cuivres",
+        Math.abs(conSubstrat().h-1.53)<1e-9&&
+        Math.abs(conSubstrat().er-4.3)<1e-9, JSON.stringify(conSubstrat()));
+
+/* -- changer le nombre de couches, sans perdre le dessin ------------------ */
+const uidHaut=conPremierCuivre(), uidBas=conDernierCuivre();
+CON.elements=[{type:"rect", cu:uidHaut, net:"ANTENNE", x1:0,y1:0,x2:10,y2:10},
+              {type:"rect", cu:uidBas,  net:"GND",     x1:0,y1:0,x2:20,y2:20}];
+const vers4=conPileVers(4);
+verifie("passer a quatre couches prend le modele d'usine du nouveau compte",
+        conCuivres().length===4&&vers4.modele.n===4, vers4&&vers4.modele.id);
+verifie("le cuivre du dessus garde son uid : les formes le designent encore",
+        conPremierCuivre()===uidHaut&&CON.elements[0].cu===uidHaut);
+verifie("celui du dessous aussi",
+        conDernierCuivre()===uidBas&&CON.elements[1].cu===uidBas);
+verifie("aucune forme n'a eu a etre reportee",
+        vers4.deplacees===0, String(vers4.deplacees));
+verifie("les quatre couches ont des uid distincts",
+        new Set(conCuivres().map(c=>c.e.uid)).size===4);
+verifie("et des noms distincts — un nom de couche sert de cle partout",
+        new Set(CON.pile.map(e=>e.nom)).size===CON.pile.length);
+verifie("le quatre couches fait toujours 1,6 mm",
+        Math.abs(conEpTotale()-1.6)<1e-9, conEpTotale()+" mm");
+
+/* Une forme posee sur une couche INTERNE, puis un retour a deux couches :
+   c'est le cas qui perdrait du cuivre en silence. */
+const uidInterne=conCuivres()[1].e.uid;
+CON.elements.push({type:"rect", cu:uidInterne, net:"GND", x1:1,y1:1,x2:2,y2:2});
+const vers2=conPileVers(2);
+verifie("revenir a deux couches reporte les formes des couches disparues",
+        vers2.deplacees===1, String(vers2.deplacees));
+verifie("et aucune forme ne reste orpheline",
+        CON.elements.every(el=>conCoucheDeUid(el.cu)>=0));
+verifie("le dessus et le dessous n'ont toujours pas bouge",
+        CON.elements[0].cu===uidHaut&&CON.elements[1].cu===uidBas);
+
+/* -- le masque ------------------------------------------------------------ */
+const avantMasque=conEpTotale(), substratAvant=conSubstrat().h;
+conMasquePoser(true);
+verifie("le masque se pose sur les deux faces, en bout d'empilage",
+        conMasques().haut&&conMasques().bas);
+verifie("il ajoute 2 x 25 µm a l'epaisseur totale",
+        Math.abs(conEpTotale()-avantMasque-0.05)<1e-9,
+        conEpTotale()+" mm");
+verifie("il ne change pas le substrat vu par les gabarits — il n'est pas "+
+        "entre deux cuivres",
+        Math.abs(conSubstrat().h-substratAvant)<1e-9);
+verifie("le stratifie nu, lui, l'ignore",
+        Math.abs(conEpStratifie()-avantMasque)<1e-9);
+/* Il doit arriver au solveur : c'est tout l'objet de l'empilage. */
+const docMasque=conModele();
+const entreeMasque=docMasque.empilage[0];
+verifie("le masque part au solveur comme un dielectrique",
+        entreeMasque.type==="DIELECTRIC"&&Math.abs(entreeMasque.dk-3.8)<1e-9,
+        JSON.stringify(entreeMasque));
+conMasquePoser(false);
+verifie("et se retire des deux faces d'un coup",
+        !conMasques().haut&&!conMasques().bas&&
+        Math.abs(conEpTotale()-avantMasque)<1e-9);
+
+/* -- l'epaisseur visee ---------------------------------------------------- */
+CON.cible=1.0;
+verifie("repartir l'ecart tombe sur l'epaisseur visee",
+        conAjusterEpaisseur()&&Math.abs(conEpTotale()-1.0)<1e-3,
+        conEpTotale()+" mm");
+verifie("le cuivre n'a pas bouge — il se commande, il ne se negocie pas",
+        Math.abs(conEpCuivre()-0.07)<1e-9, conEpCuivre()+" mm");
+CON.cible=0.02;
+verifie("une visee plus mince que le cuivre est refusee plutot qu'ecrasee",
+        conAjusterEpaisseur()===false);
+
+/* -- la symetrie ---------------------------------------------------------- */
+CON.pile=conPileDefaut();
+conPileVers(4);
+verifie("un empilage d'usine a quatre couches est symetrique",
+        conAsymetrie().length===0, JSON.stringify(conAsymetrie()));
+CON.pile.filter(e=>e.k==="die")[0].ep=0.4;
+verifie("un dielectrique epaissi d'un seul cote est signale",
+        conAsymetrie().length===1, JSON.stringify(conAsymetrie()));
+conSymetriser();
+verifie("symetriser fait la moyenne des couches deux a deux",
+        conAsymetrie().length===0&&
+        Math.abs(CON.pile.filter(e=>e.k==="die")[0].ep-0.305)<1e-9,
+        String(CON.pile.filter(e=>e.k==="die")[0].ep));
+
+/* -- le port que l'empilage vient de rendre faux -------------------------- */
+/* Les deux couches existent toujours et portent toujours leur nom : rien ne
+   refusera ce port, et le S11 sera celui d'une antenne alimentee en travers
+   de sa masse. C'est la seule faute de cette section que le solveur ne
+   signalerait pas. */
+CON.pile=conPileDefaut();
+ANT.ports=[{pose:true, de:"Cuivre dessus", a:"Cuivre dessous"}];
+verifie("un port entre deux cuivres voisins n'est pas suspect",
+        conPortsSuspects().length===0);
+conPileVers(4);
+verifie("le meme port sur un quatre couches est signale",
+        conPortsSuspects().length===1, JSON.stringify(conPortsSuspects()));
+ANT.ports[0].a=conCuivres()[1].e.nom;
+verifie("ramene sur le plan qui est juste sous l'antenne, il redevient bon",
+        conPortsSuspects().length===0);
+ANT.ports=[];
+
+/* -- ce que le document emporte jusqu'au solveur -------------------------- */
+/* LE POINT DE JONCTION ENTRE L'EMPILAGE ET LA SIMULATION. Tout le reste de
+   cette section serait sans objet si le document rendu par `conModele()` ne
+   portait pas ce qui vient d'etre regle : c'est lui, et lui seul, que
+   `mdlCharger` puis `antEmpilage` conduisent jusqu'a python. */
+CON.pile=conPileDefaut();
+CON.elements=[];
+const docPile=conModele();
+verifie("le document porte une entree d'empilage par couche",
+        docPile.empilage.length===CON.pile.length);
+verifie("le cuivre de masse est declare GROUND",
+        docPile.empilage[2].type==="GROUND"&&docPile.empilage[2].sigma>5e7,
+        JSON.stringify(docPile.empilage[2]));
+verifie("le dielectrique emporte son Dk et son Df",
+        docPile.empilage[1].type==="DIELECTRIC"&&
+        Math.abs(docPile.empilage[1].dk-4.3)<1e-9&&
+        Math.abs(docPile.empilage[1].df-0.02)<1e-9,
+        JSON.stringify(docPile.empilage[1]));
+verifie("l'epaisseur declaree du document est celle de l'empilage",
+        Math.abs(docPile.epaisseur-conEpTotale())<1e-9,
+        docPile.epaisseur+" contre "+conEpTotale());
+
+/* -- appliquer un modele sans toucher au dessin --------------------------- */
+const uidAvant=conCuivres().map(c=>c.e.uid).join(",");
+conAppliquerModele("ro4350-2c-0762");
+verifie("changer de stratifie a compte de couches egal garde les uid",
+        conCuivres().map(c=>c.e.uid).join(",")===uidAvant);
+verifie("et pose bien le nouveau substrat",
+        Math.abs(conSubstrat().er-3.66)<1e-9&&
+        Math.abs(conSubstrat().h-0.762)<1e-9, JSON.stringify(conSubstrat()));
+conAppliquerModele("fr4-4c-16");
+verifie("un modele d'un autre compte refait l'empilage",
+        conCuivres().length===4&&CON.modele==="fr4-4c-16");
+CON.pile=conPileDefaut();
+CON.elements=[];
+
+/* =============================================================================
+   13. Le Rapport d'Ingénierie & Diagnostics FDTD
+   ============================================================================= */
+console.log("");
+console.log("13. Le Rapport d'Ingénierie & Diagnostics FDTD");
+charger("31-rapport.js");
+
+verifie("les fonctions du rapport sont définies",
+        typeof rapCollecterDonnees === "function" &&
+        typeof rapDiagnostiquer === "function" &&
+        typeof rapGenererHtml === "function" &&
+        typeof rapGenererMarkdown === "function");
+
+const rapDonneesInit = rapCollecterDonnees();
+verifie("la collecte initiale extrait la géométrie et l'empilage",
+        rapDonneesInit && rapDonneesInit.empilage && Array.isArray(rapDonneesInit.empilage.couches));
+
+const diagsInit = rapDiagnostiquer(rapDonneesInit);
+verifie("un modèle non simulé est diagnostiqué comme prêt",
+        diagsInit.some(d => d.id === "non_simule"));
+
+// Test cas de résultat avec non-convergence (arrêt prématuré nmax)
+const donneesNonConv = JSON.parse(JSON.stringify(rapDonneesInit));
+donneesNonConv.resultat = {
+  f0: 2.45e9,
+  s11_min_db: -18.2,
+  z0_re: 48.5,
+  z0_im: -1.2,
+  bp: { existe: true, f1: 2.41e9, f2: 2.49e9, largeur: 80e6, relative: 3.2, continue: true, bord: false }
+};
+donneesNonConv.solver.energie_arret_dB = -40;
+donneesNonConv.solver.nmax = 30000;
+donneesNonConv.tache = {
+  etat: "fini",
+  avancement: { pas: 30000, energie_dB: -22.5 }
+};
+const diagsNonConv = rapDiagnostiquer(donneesNonConv);
+verifie("l'arrêt à nmax avec énergie résiduelle élevée est détecté comme avertissement",
+        diagsNonConv.some(d => d.id === "arret_nmax" && d.rang === "warn"));
+
+// Test cas de convergence complète
+const donneesConv = JSON.parse(JSON.stringify(donneesNonConv));
+donneesConv.tache.avancement = { pas: 14200, energie_dB: -42.1 };
+const diagsConv = rapDiagnostiquer(donneesConv);
+verifie("la convergence sous le seuil d'énergie est validée en OK",
+        diagsConv.some(d => d.id === "conv_ok" && d.rang === "ok"));
+
+// Test cas de maillage diélectrique trop grossier
+const donneesMaille = JSON.parse(JSON.stringify(donneesConv));
+donneesMaille.maillage.res_die_mm = 2.5; // trop grand pour lambda_d / 15
+donneesMaille.maillage.lambda_min_mm = 60.0;
+donneesMaille.maillage.er_max = 4.3; // lambda_d/15 = 60 / (15 * 2.07) = 1.93 mm
+const diagsMaille = rapDiagnostiquer(donneesMaille);
+verifie("un maillage diélectrique supérieur à lambda_d/15 est signalé",
+        diagsMaille.some(d => d.id === "maillage_grossier"));
+
+// Test cas d'impédance anormale (court-circuit)
+const donneesCourtJus = JSON.parse(JSON.stringify(donneesConv));
+donneesCourtJus.resultat.z0_re = 1.2;
+const diagsCourtJus = rapDiagnostiquer(donneesCourtJus);
+verifie("une impédance d'entrée quasi-nulle est signalée en critique",
+        diagsCourtJus.some(d => d.id === "zin_court_circuit" && d.rang === "crit"));
+
+// Test cas de faible rendement de rayonnement sur bon S11
+const donneesPertes = JSON.parse(JSON.stringify(donneesConv));
+donneesPertes.resultat.s11_min_db = -22.0;
+donneesPertes.resultat.nf2ff = { dmax_dbi: 5.5, gain_dbi: 0.2, rendement: 0.28 };
+const diagsPertes = rapDiagnostiquer(donneesPertes);
+verifie("un rendement de rayonnement inférieur à 50% sur bon S11 est signalé",
+        diagsPertes.some(d => d.id === "faible_rendement"));
+
+// Test génération HTML & Markdown
+const htmlRapport = rapGenererHtml(donneesConv, diagsConv);
+verifie("le rapport HTML contient les sections clés",
+        htmlRapport.includes("Résonance f₀") &&
+        htmlRapport.includes("S₁₁ minimal") &&
+        htmlRapport.includes("Empilage PCB") &&
+        htmlRapport.includes("Maillage FDTD"));
+
+const mdRapport = rapGenererMarkdown(donneesConv, diagsConv);
+verifie("le rapport Markdown contient les titres et données structurées",
+        mdRapport.includes("# Rapport Technique d'Ingénierie") &&
+        mdRapport.includes("## 1. Synthèse & Indicateurs Clés") &&
+        mdRapport.includes("## 4. Empilage PCB (Stack-up)"));
+
+console.log("\n14. La saisie décimale robuste dans l'assistant");
+extraire("02-modele.js", "mdlNb");
+extraire("13-assistant.js", "antLierNombre");
+
+const elTest = { value: "0" };
+const cibleTest = { res_die: 0.5 };
+let majCompteur = 0;
+global.antMaj = function() { majCompteur++; };
+
+antLierNombre(elTest, cibleTest, "res_die", { min: 0, defaut: 0 });
+
+elTest.value = "0,";
+elTest.oninput();
+verifie("taper '0,' ne remet pas la valeur cible à 0 et ne déclenche pas antMaj",
+        cibleTest.res_die === 0.5 && majCompteur === 0);
+
+elTest.value = "0,8";
+elTest.oninput();
+verifie("taper '0,8' met à jour la valeur cible à 0.8",
+        cibleTest.res_die === 0.8 && majCompteur === 1);
+
+elTest.value = ",";
+elTest.oninput();
+verifie("une virgule isolée n'écrase rien",
+        cibleTest.res_die === 0.8 && majCompteur === 1);
+
+elTest.value = "0,8";
+elTest.onchange();
+verifie("onchange normalise la valeur avec virgule",
+        elTest.value === "0,8" && cibleTest.res_die === 0.8);
+
+elTest.value = "-2";
+elTest.onchange();
+verifie("une valeur sous le minimum est ramenée au min sur change",
+        cibleTest.res_die === 0 && elTest.value === "0");
+
+console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")
                                             :"toutes passees."));
 process.exit(ko.length?1:0);
+

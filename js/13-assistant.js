@@ -42,42 +42,91 @@ function antLongModele(v,dec){
 }
 
 /* ==========================================================================
+   Liaison robuste pour la saisie numérique
+   --------------------------------------------------------------------------
+   - Accepte indifféremment la virgule ',' et le point '.'.
+   - Ne remet PAS la valeur à zéro et ne déclenche PAS de recalcul pendant que
+     l'utilisateur tape un état intermédiaire (ex: '0,' ou '-' ou champ vide).
+   - Déclenche `antMaj()` dès qu'un nombre valide et complet est saisi.
+   - Sur `change` (perte de focus ou Entrée), normalise l'affichage avec `mdlNb()`.
+   ========================================================================== */
+function antLierNombre(el, obj, cle, options){
+  if(!el)return;
+  const opts=options||{};
+  const min=(opts.min!=null)?opts.min:-Infinity;
+  const max=(opts.max!=null)?opts.max:Infinity;
+  const defaut=(opts.defaut!=null)?opts.defaut:0;
+  const facteur=opts.facteur||1;
+  const ent=!!opts.entier;
+  const apres=opts.apres;
+
+  el.oninput=function(){
+    const s=String(el.value).trim().replace(",",".");
+    /* Si l'utilisateur est en train de taper (ex: "0," ou "-" ou vide), on le
+       laisse taper : écraser à zéro ou recalculer à chaque virgule ferait perdre
+       la saisie et le curseur. */
+    if(s===""||s==="."||s==="-"||s.endsWith("."))return;
+    const v=ent?parseInt(s,10):parseFloat(s);
+    if(isFinite(v)){
+      const val=v*facteur;
+      if(val>=min&&val<=max){
+        obj[cle]=val;
+        if(typeof apres==="function")apres(val);
+        antMaj();
+      }
+    }
+  };
+
+  el.onchange=function(){
+    const s=String(el.value).trim().replace(",",".");
+    const v=ent?parseInt(s,10):parseFloat(s);
+    if(isFinite(v)){
+      let val=v*facteur;
+      if(val<min)val=min;
+      if(val>max)val=max;
+      obj[cle]=val;
+      el.value=ent?String(Math.round(val/facteur)):mdlNb(val/facteur);
+      if(typeof apres==="function")apres(val);
+    }else{
+      obj[cle]=defaut;
+      el.value=ent?String(Math.round(defaut/facteur)):mdlNb(defaut/facteur);
+      if(typeof apres==="function")apres(defaut);
+    }
+    antMaj(true);
+  };
+}
+
+/* ==========================================================================
    Le cycle : on change quelque chose -> le serveur revérifie -> on redessine
    --------------------------------------------------------------------------
    La vérification part au serveur à CHAQUE modification, mais pas à chaque
    frappe : un champ de saisie envoie une dizaine d'événements par seconde, et
    dix requêtes par seconde sur un maillage à chiffrer ne serviraient à rien
-   qu'à faire clignoter le bilan. Le délai est court — on veut que le nombre
-   de cellules bouge pendant qu'on tape, pas après.
+   qu'à faire clignoter le bilan. Le délai de 350 ms laisse le temps de taper
+   une décimale sans hacher la frappe.
    ========================================================================== */
 let ANT_ATTENTE=0;
 
 function antMaj(immediat){
-  /* L'ÂGE VIEILLIT ICI, ET TOUT DE SUITE — pas dans le travail différé. Les
-     appelants modifient l'état PUIS appellent `antMaj` ; ce qui est en cache
-     décrit donc déjà l'état d'avant au moment où l'on entre. Attendre les
-     220 ms du délai laisserait la surimpression repeindre l'ancien cuivre
-     pendant ce temps, c'est-à-dire exactement pendant qu'on regarde si le
-     clic a pris. Voir `ANT_AGE` dans 10-etat.js. */
   antVieillir();
   clearTimeout(ANT_ATTENTE);
   const faire=async function(){
     if(!V.modele)return;
     try{ await oePreparer(); }
     catch(e){ /* le refus est déjà dans ANT.refus */ }
-    antAssistantRendre();
+    antAssistantRendre(false);
     antReglagesEcrire();
     redessiner();
     if(ANT.vue==="3d"&&typeof ant3dMaj==="function")ant3dMaj();
   };
   if(immediat)faire();
-  else ANT_ATTENTE=setTimeout(faire,220);
+  else ANT_ATTENTE=setTimeout(faire,350);
 }
 
 /* ==========================================================================
    Le squelette
    ========================================================================== */
-function antAssistantRendre(){
+function antAssistantRendre(forcer){
   antEtapesRendre();
   const corps=aE("assistantCorps");
   if(!corps)return;
@@ -85,13 +134,59 @@ function antAssistantRendre(){
     corps.innerHTML='<div class="rien">Ouvrez d\'abord une carte : '+
       'l\'assistant travaille sur le cuivre réel, pas sur une page blanche.</div>';
     aE("assistantBilan").innerHTML="";
+    corps.dataset.etape="";
     return;
   }
   const etape=ANT_ETAPES[ANT.etape];
-  corps.innerHTML=ANT_CORPS[etape.id]();
-  ANT_LIER[etape.id](corps);
+  const etapeId=etape.id;
+
+  /* Si l'utilisateur est en train de taper dans un champ de cette étape,
+     on ne détruit JAMAIS son champ, même sur un rafraîchissement demandé. */
+  const actif=document.activeElement;
+  const saisieEnCours=actif&&corps.contains(actif)&&(actif.tagName==="INPUT"||actif.tagName==="TEXTAREA");
+
+  if((forcer&&!saisieEnCours)||corps.dataset.etape!==etapeId){
+    corps.dataset.etape=etapeId;
+    corps.innerHTML=ANT_CORPS[etapeId]();
+    ANT_LIER[etapeId](corps);
+  }else{
+    antEtapeActualiser(etapeId,corps);
+  }
   antBilanRendre();
   antBoutonsEtat();
+}
+
+function antEtapeActualiser(etapeId,corps){
+  const m=ANT.modele;
+  const k=(V.unite==="in")?(1/25.4):1;
+  if(etapeId==="boite"){
+    const cEl=corps.querySelector("#antBoiteConseil");
+    if(cEl){
+      cEl.innerHTML=antBoiteConseilHtml(m,k);
+      const auto=cEl.querySelector("#bMargeAuto");
+      if(auto)auto.onclick=function(){
+        const c=ANT.modele.boite.marge_conseil*k;
+        const v=+c.toFixed(3);
+        ANT.boite.mx=ANT.boite.my=ANT.boite.mz_haut=ANT.boite.mz_bas=v;
+        ["#antMx","#antMy","#antMzh","#antMzb"].forEach(id=>{
+          const el=corps.querySelector(id);
+          if(el)el.value=mdlNb(v);
+        });
+        antMaj(true);
+      };
+    }
+    const rEl=corps.querySelector("#antBoiteRecap");
+    if(rEl)rEl.innerHTML=antBoiteRecapHtml(m,k);
+  }else if(etapeId==="bande"){
+    const rEl=corps.querySelector("#antBandeRecap");
+    if(rEl)rEl.innerHTML=antBandeRecapHtml(m);
+  }else if(etapeId==="port"){
+    const rEl=corps.querySelector("#antPortRecap");
+    if(rEl)rEl.innerHTML=antPortRecapHtml();
+  }else if(etapeId==="cuivre"){
+    const rEl=corps.querySelector("#antCuivreRecap");
+    if(rEl)rEl.innerHTML=antCuivreRecapHtml();
+  }
 }
 
 function antEtapesRendre(){
@@ -105,7 +200,7 @@ function antEtapesRendre(){
       '</button>';
   }).join("");
   box.querySelectorAll("[data-etape]").forEach(function(b){
-    b.onclick=function(){ ANT.etape=+b.dataset.etape; antAssistantRendre(); };
+    b.onclick=function(){ ANT.etape=+b.dataset.etape; antAssistantRendre(true); };
   });
 }
 
@@ -290,15 +385,22 @@ ${sansNets?'<p class="alerte">Ce fichier ne déclare pas de connectivité : tout
     Les pastilles de ces nets</label>
 </div>
 
-<div class="recap">
-  <span>${aEnt(c.pistes)} segments de piste</span>
+<div class="recap" id="antCuivreRecap">
+  ${antCuivreRecapHtml()}
+</div>`;
+};
+
+function antCuivreRecapHtml(){
+  const cu=antCuivreDuModele();
+  if(!cu)return "";
+  const c=cu.compte;
+  return `<span>${aEnt(c.pistes)} segments de piste</span>
   <span>${aEnt(c.arcs)} arcs</span>
   <span>${aEnt(c.plans)} versements</span>
   <span>${aEnt(c.pads)} pastilles</span>
   <span>${aEnt(cu.vias.length)} vias</span>
-  ${c.fins?'<span class="alerte">'+aEnt(c.fins)+' trait(s) de largeur nulle, ignorés</span>':""}
-</div>`;
-};
+  ${c.fins?'<span class="alerte">'+aEnt(c.fins)+' trait(s) de largeur nulle, ignorés</span>':""}`;
+}
 
 ANT_LIER.cuivre=function(box){
   box.querySelector("#bPrendre").onclick=function(){
@@ -369,8 +471,8 @@ ANT_CORPS.empilage=function(){
     return `<tr class="cu">
       <td class="nom">${aEsc(e.nom)}</td>
       <td>conducteur</td>
-      <td><input type="number" step="0.001" min="0" data-lt="cu" data-cle="${aEsc(e.nom)}"
-                 value="${e.ep}"> ${antUnite()}</td>
+      <td><input type="text" inputmode="decimal" spellcheck="false" data-lt="cu" data-cle="${aEsc(e.nom)}"
+                 value="${mdlNb(e.ep)}"> ${antUnite()}</td>
       <td>${src(e.epSrc)}</td>
       <td><select data-lt-role="${aEsc(e.nom)}">
             <option value="signal"${e.role==="signal"?" selected":""}>signal</option>
@@ -383,11 +485,11 @@ ANT_CORPS.empilage=function(){
     return `<tr class="gap${g.t>0?"":" manque"}">
       <td class="nom">${aEsc(g.cle)}</td>
       <td>diélectrique</td>
-      <td><input type="number" step="0.001" min="0" data-lt="gap_t" data-cle="${aEsc(g.cle)}"
-                 value="${g.t||""}" placeholder="épaisseur"> ${antUnite()}</td>
+      <td><input type="text" inputmode="decimal" spellcheck="false" data-lt="gap_t" data-cle="${aEsc(g.cle)}"
+                 value="${g.t?mdlNb(g.t):""}" placeholder="épaisseur"> ${antUnite()}</td>
       <td>${src(g.tSrc)}</td>
-      <td><input type="number" step="0.01" min="1" data-lt="gap_er" data-cle="${aEsc(g.cle)}"
-                 value="${g.er||""}" placeholder="εr" class="petit"> ${src(g.erSrc)}</td>
+      <td><input type="text" inputmode="decimal" spellcheck="false" data-lt="gap_er" data-cle="${aEsc(g.cle)}"
+                 value="${g.er?mdlNb(g.er):""}" placeholder="εr" class="petit"> ${src(g.erSrc)}</td>
     </tr>`;
   }).join("");
 
@@ -418,7 +520,7 @@ ANT_CORPS.empilage=function(){
     dans le script lui-même.${m&&m.pertes.actif?" Ici : <b>"+m.dielectriques.filter(d=>d.debye).map(d=>d.debye.poles.length).join("/")+" pôles</b>, tan&delta; tenu à <b>"+aNb(m.pertes.ecart_debye_pc,2)+" %</b> près.":""}</small></label>
   ${ANT.pertes.mode==="kappa"?`<div class="ligne">
     <span><label>Fréquence de référence <small>0 = centre de la bande</small></label>
-      <input type="number" step="any" id="antFk" value="${ANT.pertes.f_kappa?ANT.pertes.f_kappa/antKf():0}"> ${ANT.uniteF}</span>
+      <input type="text" inputmode="decimal" spellcheck="false" id="antFk" value="${mdlNb(ANT.pertes.f_kappa?ANT.pertes.f_kappa/antKf():0)}"> ${ANT.uniteF}</span>
   </div>`:""}
 </div>
 
@@ -444,8 +546,12 @@ ANT_LIER.empilage=function(box){
     inp.onchange=function(){
       const t=V.sur[inp.dataset.lt]||(V.sur[inp.dataset.lt]={});
       const v=parseFloat(String(inp.value).replace(",","."));
-      if(isFinite(v)&&v>0)t[inp.dataset.cle]=v;
-      else delete t[inp.dataset.cle];
+      if(isFinite(v)&&v>0){
+        t[inp.dataset.cle]=v;
+        inp.value=mdlNb(v);
+      }else{
+        delete t[inp.dataset.cle];
+      }
       ltPreparer(); antMaj(true);
     };
   });
@@ -464,14 +570,10 @@ ANT_LIER.empilage=function(box){
     r.onchange=function(){ ANT.modeleCuivre=r.value; antMaj(true); };
   });
   box.querySelectorAll('input[name="antPertes"]').forEach(function(r){
-    r.onchange=function(){ ANT.pertes.mode=r.value; antMaj(true); };
+    r.onchange=function(){ ANT.pertes.mode=r.value; antAssistantRendre(true); };
   });
   const fk=box.querySelector("#antFk");
-  if(fk)fk.oninput=function(){
-    const v=parseFloat(String(fk.value).replace(",","."));
-    ANT.pertes.f_kappa=(isFinite(v)&&v>0)?v*antKf():0;
-    antMaj();
-  };
+  if(fk)antLierNombre(fk, ANT.pertes, "f_kappa", {facteur: antKf(), min:0});
 };
 
 /* L'ÉTAPE 3 — « Autour » — N'EST PAS DANS CE FICHIER, et le saut de numéro
@@ -495,17 +597,17 @@ ANT_CORPS.bande=function(){
 
 <div class="champ ligne">
   <span><label>Début</label>
-    <input type="number" step="any" id="antF1" value="${ANT.bande.f1/k}"></span>
+    <input type="text" inputmode="decimal" spellcheck="false" id="antF1" value="${mdlNb(ANT.bande.f1/k)}"></span>
   <span><label>Fin</label>
-    <input type="number" step="any" id="antF2" value="${ANT.bande.f2/k}"></span>
+    <input type="text" inputmode="decimal" spellcheck="false" id="antF2" value="${mdlNb(ANT.bande.f2/k)}"></span>
   <span><label>Unité</label><select id="antUF">${u}</select></span>
 </div>
 
 <div class="champ ligne">
   <span><label>Fréquence visée <small>celle où l'on veut l'adaptation</small></label>
-    <input type="number" step="any" id="antFc" value="${ANT.bande.fcible/k}"></span>
+    <input type="text" inputmode="decimal" spellcheck="false" id="antFc" value="${mdlNb(ANT.bande.fcible/k)}"></span>
   <span><label>Points de calcul</label>
-    <input type="number" step="1" min="21" max="4001" id="antN" value="${ANT.bande.n}"></span>
+    <input type="text" inputmode="numeric" spellcheck="false" id="antN" value="${ANT.bande.n}"></span>
 </div>
 
 <div class="champ">
@@ -522,31 +624,39 @@ ANT_CORPS.bande=function(){
      maillage reste raisonnable.</p>
 </div>
 
-${m?`<div class="recap">
-  <span>impulsion f₀ = ${aF(m.bande.f0)}, f<sub>c</sub> = ${aF(m.bande.fc)}</span>
-  <span>λ à ${aF(m.bande.f1)} : ${aNb(m.resolution.lambda_max_mm,1)} mm</span>
-  <span>λ à ${aF(m.bande.f2)} : ${aNb(m.resolution.lambda_min_mm,1)} mm</span>
-</div>`:""}`;
+<div class="recap" id="antBandeRecap">
+  ${antBandeRecapHtml(m)}
+</div>`;
 };
 
+function antBandeRecapHtml(m){
+  if(!m)return "";
+  return `<span>impulsion f₀ = ${aF(m.bande.f0)}, f<sub>c</sub> = ${aF(m.bande.fc)}</span>
+  <span>λ à ${aF(m.bande.f1)} : ${aNb(m.resolution.lambda_max_mm,1)} mm</span>
+  <span>λ à ${aF(m.bande.f2)} : ${aNb(m.resolution.lambda_min_mm,1)} mm</span>`;
+}
+
 ANT_LIER.bande=function(box){
-  const k=antKf();
-  const lire=function(id){ return parseFloat(String(aE(id).value).replace(",","."))||0; };
-  box.querySelector("#antF1").oninput=function(){ ANT.bande.f1=lire("antF1")*antKf(); antMaj(); };
-  box.querySelector("#antF2").oninput=function(){ ANT.bande.f2=lire("antF2")*antKf(); antMaj(); };
-  box.querySelector("#antFc").oninput=function(){ ANT.bande.fcible=lire("antFc")*antKf(); antMaj(); };
-  box.querySelector("#antN").oninput=function(){ ANT.bande.n=Math.round(lire("antN")); antMaj(); };
+  antLierNombre(box.querySelector("#antF1"), ANT.bande, "f1", {facteur: antKf(), min:0});
+  antLierNombre(box.querySelector("#antF2"), ANT.bande, "f2", {facteur: antKf(), min:0});
+  antLierNombre(box.querySelector("#antFc"), ANT.bande, "fcible", {facteur: antKf(), min:0});
+  antLierNombre(box.querySelector("#antN"), ANT.bande, "n", {min:21, max:4001, defaut:1001, entier:true});
   box.querySelector("#antUF").onchange=function(){
     /* On change l'unité, pas la fréquence : 2,45 GHz reste 2,45 GHz quand on
        passe en MHz, il s'affiche 2450. L'inverse — garder le nombre et
        changer l'unité — est exactement la faute que cette liste existe pour
        empêcher. */
-    ANT.uniteF=this.value; antAssistantRendre();
+    ANT.uniteF=this.value; antAssistantRendre(true);
   };
   box.querySelectorAll("[data-bande]").forEach(function(b){
     b.onclick=function(){
       const f=parseFloat(b.dataset.bande);
       ANT.bande.fcible=f; ANT.bande.f1=f*0.9; ANT.bande.f2=f*1.1;
+      const k=antKf();
+      const f1=box.querySelector("#antF1"), f2=box.querySelector("#antF2"), fc=box.querySelector("#antFc");
+      if(f1)f1.value=mdlNb(ANT.bande.f1/k);
+      if(f2)f2.value=mdlNb(ANT.bande.f2/k);
+      if(fc)fc.value=mdlNb(ANT.bande.fcible/k);
       antMaj(true);
     };
   });
@@ -628,8 +738,8 @@ ${ANT.ports.length>1?`<div class="champ">
 </div>
 
 <div class="champ ligne">
-  <span><label>X</label><input type="number" step="0.01" id="antPx" value="${p.x}"></span>
-  <span><label>Y</label><input type="number" step="0.01" id="antPy" value="${p.y}"></span>
+  <span><label>X</label><input type="text" inputmode="decimal" spellcheck="false" id="antPx" value="${mdlNb(p.x)}"></span>
+  <span><label>Y</label><input type="text" inputmode="decimal" spellcheck="false" id="antPy" value="${mdlNb(p.y)}"></span>
   <span class="unite">${antUnite()}</span>
 </div>
 
@@ -647,14 +757,14 @@ ${ANT.ports.length>1?`<div class="champ">
 
 ${coax?`
 <div class="champ ligne">
-  <span><label>Rayon de l'âme</label><input type="number" step="0.005" min="0.01" id="antPra" value="${p.ra}"></span>
-  <span><label>Rayon de la gaine</label><input type="number" step="0.01" min="0.02" id="antPrb" value="${p.rb}"></span>
+  <span><label>Rayon de l'âme</label><input type="text" inputmode="decimal" spellcheck="false" id="antPra" value="${mdlNb(p.ra)}"></span>
+  <span><label>Rayon de la gaine</label><input type="text" inputmode="decimal" spellcheck="false" id="antPrb" value="${mdlNb(p.rb)}"></span>
   <span class="unite">${antUnite()}</span>
 </div>
 <div class="champ ligne">
-  <span><label>ε<sub>r</sub> de l'isolant</label><input type="number" step="0.01" min="1" id="antPer" value="${p.er}"></span>
-  <span><label>Épaisseur de gaine</label><input type="number" step="0.05" min="0.01" id="antPepg" value="${p.ep_gaine}"></span>
-  <span><label>Longueur du tronçon</label><input type="number" step="0.5" min="0.1" id="antPlong" value="${p.longueur}"></span>
+  <span><label>ε<sub>r</sub> de l'isolant</label><input type="text" inputmode="decimal" spellcheck="false" id="antPer" value="${mdlNb(p.er)}"></span>
+  <span><label>Épaisseur de gaine</label><input type="text" inputmode="decimal" spellcheck="false" id="antPepg" value="${mdlNb(p.ep_gaine)}"></span>
+  <span><label>Longueur du tronçon</label><input type="text" inputmode="decimal" spellcheck="false" id="antPlong" value="${mdlNb(p.longueur)}"></span>
 </div>
 <div class="recap${ecart>5?" ko":""}">
   <span>Z₀ = 60/√ε<sub>r</sub> · ln(b/a) = <b>${aNb(z0,1)} Ω</b></span>
@@ -679,8 +789,8 @@ ${coax?`
 </div>
 
 <div class="champ ligne">
-  <span><label>Largeur</label><input type="number" step="0.01" min="0.01" id="antPw" value="${p.w}"></span>
-  <span><label>Longueur</label><input type="number" step="0.01" min="0.01" id="antPl" value="${p.l}"></span>
+  <span><label>Largeur</label><input type="text" inputmode="decimal" spellcheck="false" id="antPw" value="${mdlNb(p.w)}"></span>
+  <span><label>Longueur</label><input type="text" inputmode="decimal" spellcheck="false" id="antPl" value="${mdlNb(p.l)}"></span>
 </div>
 <p class="note">Ces deux cotes disent <b>où</b> est le port, pas ce qui excite :
    la source envoyée au solveur est la <b>ligne</b> qui joint les deux couches
@@ -698,10 +808,10 @@ ${coax?`
   </label>
 </div>
 <div class="champ ligne">
-  <span><label>Longueur de ruban</label><input type="number" step="0.1" min="0"
-    id="antPlgd" value="${p.ligne_d||0}"></span>
-  <span><label>Largeur du ruban</label><input type="number" step="0.01" min="0"
-    id="antPlgw" value="${p.ligne_w||0}"></span>
+  <span><label>Longueur de ruban</label><input type="text" inputmode="decimal" spellcheck="false"
+    id="antPlgd" value="${mdlNb(p.ligne_d||0)}"></span>
+  <span><label>Largeur du ruban</label><input type="text" inputmode="decimal" spellcheck="false"
+    id="antPlgw" value="${mdlNb(p.ligne_w||0)}"></span>
   <span class="unite">${antUnite()}</span>
 </div>
 ${(p.ligne_d>0&&p.ligne_w>0)?(function(){
@@ -725,10 +835,16 @@ ${(p.ligne_d>0&&p.ligne_w>0)?(function(){
    toute erreur sur ces deux nombres.</p>`;})():""}`}
 
 <div class="champ ligne">
-  <span><label>Impédance de référence</label><input type="number" step="1" min="1" id="antPR" value="${p.R}"> Ω</span>
+  <span><label>Impédance de référence</label><input type="text" inputmode="numeric" spellcheck="false" id="antPR" value="${p.R}"> Ω</span>
 </div>
 
-${(ANT.modele&&ANT.modele.ports&&ANT.modele.ports[ANT.portActif])?(function(){
+<div id="antPortRecap">
+  ${antPortRecapHtml()}
+</div>`;
+};
+
+function antPortRecapHtml(){
+  if(!ANT.modele||!ANT.modele.ports||!ANT.modele.ports[ANT.portActif])return "";
   const q=ANT.modele.ports[ANT.portActif];
   return `<div class="recap">
   <span>${(q.x2-q.x1<1e-9&&q.y2-q.y1<1e-9)
@@ -739,8 +855,8 @@ ${(ANT.modele&&ANT.modele.ports&&ANT.modele.ports[ANT.portActif])?(function(){
   ${q.coax?'<span>dégagement de '+aL(q.coax.rb)+' dans <b>'+
      (q.coax.degagements.map(d=>aEsc(d.couche)).join(", ")||"aucune couche")+
      '</b></span>':""}
-</div>`;})():""}`;
-};
+</div>`;
+}
 
 ANT_LIER.port=function(box){
   box.querySelectorAll("[data-port]").forEach(function(el){
@@ -754,7 +870,7 @@ ANT_LIER.port=function(box){
         return;
       }
       ANT.portActif=+el.getAttribute("data-port");
-      antAssistantRendre();
+      antAssistantRendre(true);
     };
   });
   const plus=box.querySelector("#bPortPlus");
@@ -770,34 +886,21 @@ ANT_LIER.port=function(box){
 
   box.querySelector("#bPosePort").onclick=function(){
     ANT.posePort=!ANT.posePort;
-    antAssistantRendre();
+    antAssistantRendre(true);
     document.body.classList.toggle("pose-port",!!ANT.posePort);
   };
-  const n=function(id,cle){
-    const el=box.querySelector(id);
-    if(!el)return;
-    el.oninput=function(){
-      const v=parseFloat(String(el.value).replace(",","."));
-      if(isFinite(v)){ANT.port[cle]=v;ANT.port.pose=true;antMaj();}
-    };
+  const n=function(id,cle,min){
+    antLierNombre(box.querySelector(id), ANT.port, cle, {
+      min: min!=null?min:-Infinity,
+      apres: ()=>{ ANT.port.pose=true; }
+    });
   };
-  n("#antPx","x"); n("#antPy","y"); n("#antPw","w");
-  n("#antPl","l"); n("#antPR","R");
-  n("#antPra","ra"); n("#antPrb","rb"); n("#antPer","er");
-  n("#antPepg","ep_gaine"); n("#antPlong","longueur");
-  /* La ligne d'alimentation accepte ZÉRO, qui veut dire « non déclarée » — et
-     c'est pour cela qu'elle ne passe pas par `n()`, dont le garde-fou impose
-     une valeur positive sur des cotes qui, elles, ne peuvent pas être nulles. */
-  ["#antPlgd:ligne_d","#antPlgw:ligne_w"].forEach(function(paire){
-    const bout=paire.split(":");
-    const el=box.querySelector(bout[0]);
-    if(!el)return;
-    el.oninput=function(){
-      const v=parseFloat(String(el.value).replace(",","."));
-      ANT.port[bout[1]]=(isFinite(v)&&v>0)?v:0;
-      antMaj();
-    };
-  });
+  n("#antPx","x"); n("#antPy","y"); n("#antPw","w",0.001);
+  n("#antPl","l",0.001); n("#antPR","R",1);
+  n("#antPra","ra",0.001); n("#antPrb","rb",0.001); n("#antPer","er",1);
+  n("#antPepg","ep_gaine",0.001); n("#antPlong","longueur",0.01);
+  antLierNombre(box.querySelector("#antPlgd"), ANT.port, "ligne_d", {min:0});
+  antLierNombre(box.querySelector("#antPlgw"), ANT.port, "ligne_w", {min:0});
   const s=function(id,cle){
     const el=box.querySelector(id);
     if(el)el.onchange=function(){ ANT.port[cle]=this.value; antMaj(true); };
@@ -820,7 +923,6 @@ ANT_LIER.port=function(box){
 ANT_CORPS.boite=function(){
   const m=ANT.modele;
   const b=ANT.boite;
-  const conseil=m?m.boite.marge_conseil:0;
   /* Les marges sont en millimètres dans le modèle, en unité du fichier dans
      la saisie : sur une carte en pouces, saisir une marge en millimètres à
      côté de coordonnées en pouces serait une invitation à se tromper. */
@@ -836,25 +938,20 @@ ANT_CORPS.boite=function(){
 <div class="champ">
   <label>Marge d'air <small>0 = laisser l'assistant décider</small></label>
   <div class="ligne">
-    <span><label>X</label><input type="number" step="0.1" min="0" id="antMx" value="${b.mx}"></span>
-    <span><label>Y</label><input type="number" step="0.1" min="0" id="antMy" value="${b.my}"></span>
-    <span><label>Z haut</label><input type="number" step="0.1" min="0" id="antMzh" value="${b.mz_haut}"></span>
-    <span><label>Z bas</label><input type="number" step="0.1" min="0" id="antMzb" value="${b.mz_bas}"></span>
+    <span><label>X</label><input type="text" inputmode="decimal" spellcheck="false" id="antMx" value="${mdlNb(b.mx)}"></span>
+    <span><label>Y</label><input type="text" inputmode="decimal" spellcheck="false" id="antMy" value="${mdlNb(b.my)}"></span>
+    <span><label>Z haut</label><input type="text" inputmode="decimal" spellcheck="false" id="antMzh" value="${mdlNb(b.mz_haut)}"></span>
+    <span><label>Z bas</label><input type="text" inputmode="decimal" spellcheck="false" id="antMzb" value="${mdlNb(b.mz_bas)}"></span>
     <span class="unite">${antUnite()}</span>
   </div>
-  ${conseil?`<p class="note">Conseil de l'assistant à cette bande :
-     <b>${aNb(conseil*k,2)} ${antUnite()}</b> de tous les côtés —
-     ${aNb(m.boite.air_utile*k,2)} d'air (λ/4 à ${aF(m.bande.f1)})
-     + ${aNb(m.boite.ep_pml*k,2)} de PML (${m.boite.pml} cellules).
-     <button class="tb mini" id="bMargeAuto">Appliquer</button></p>
-   <p class="note ${m.boite.marge_suffisante?"":"alerte"}">Avec les marges
-     actuelles, il reste <b>${aNb(m.boite.air_restant*k,2)} ${antUnite()}</b>
-     d'air réel entre l'antenne et l'absorbeur.</p>`:""}
+  <div id="antBoiteConseil">
+    ${antBoiteConseilHtml(m,k)}
+  </div>
 </div>
 
 <div class="champ ligne">
   <span><label>Couches de PML</label>
-    <input type="number" step="1" min="4" max="20" id="antPml" value="${b.pml}"></span>
+    <input type="text" inputmode="numeric" spellcheck="false" id="antPml" value="${b.pml}"></span>
   <span class="note-inline">8 est le réglage d'usine d'openEMS et celui de tous
     ses exemples d'antenne. Davantage ne se justifie que pour une structure
     très résonante.</span>
@@ -864,9 +961,9 @@ ANT_CORPS.boite=function(){
   <label>Maillage <small>0 = vingt cellules par longueur d'onde</small></label>
   <div class="ligne">
     <span><label>Pas dans l'air</label>
-      <input type="number" step="0.01" min="0" id="antRa" value="${ANT.maillage.res_air}"></span>
+      <input type="text" inputmode="decimal" spellcheck="false" id="antRa" value="${mdlNb(ANT.maillage.res_air)}"></span>
     <span><label>dans le diélectrique</label>
-      <input type="number" step="0.01" min="0" id="antRd" value="${ANT.maillage.res_die}"></span>
+      <input type="text" inputmode="decimal" spellcheck="false" id="antRd" value="${mdlNb(ANT.maillage.res_die)}"></span>
     <span class="unite">${antUnite()}</span>
   </div>
   <label class="ck"><input type="checkbox" id="antTiers"${ANT.maillage.tiers?" checked":""}>
@@ -876,37 +973,56 @@ ANT_CORPS.boite=function(){
     sans raffiner partout.</small></label>
 </div>
 
-${m?`<div class="recap">
-  <span>boîte : ${aNb((m.boite.x2-m.boite.x1)*k,1)} × ${aNb((m.boite.y2-m.boite.y1)*k,1)}
+<div class="recap" id="antBoiteRecap">
+  ${antBoiteRecapHtml(m,k)}
+</div>`;
+};
+
+function antBoiteConseilHtml(m,k){
+  if(!m)return "";
+  const conseil=m.boite.marge_conseil;
+  if(!conseil)return "";
+  return `<p class="note">Conseil de l'assistant à cette bande :
+     <b>${aNb(conseil*k,2)} ${antUnite()}</b> de tous les côtés —
+     ${aNb(m.boite.air_utile*k,2)} d'air (λ/4 à ${aF(m.bande.f1)})
+     + ${aNb(m.boite.ep_pml*k,2)} de PML (${m.boite.pml} cellules).
+     <button class="tb mini" id="bMargeAuto">Appliquer</button></p>
+   <p class="note ${m.boite.marge_suffisante?"":"alerte"}">Avec les marges
+     actuelles, il reste <b>${aNb(m.boite.air_restant*k,2)} ${antUnite()}</b>
+     d'air réel entre l'antenne et l'absorbeur.</p>`;
+}
+
+function antBoiteRecapHtml(m,k){
+  if(!m)return "";
+  return `<span>boîte : ${aNb((m.boite.x2-m.boite.x1)*k,1)} × ${aNb((m.boite.y2-m.boite.y1)*k,1)}
         × ${aNb((m.boite.z2-m.boite.z1)*k,1)} ${antUnite()}</span>
   <span>pas visé : ${aNb(m.resolution.air*k,3)} / ${aNb(m.resolution.die*k,3)} ${antUnite()}</span>
   <span>plus petite cellule : ${aNb(Math.min.apply(null,m.estimation.plus_petite_cellule_mm)*k,4)} ${antUnite()}</span>
-  <span>pas de temps : ${(m.estimation.dt_s*1e12).toFixed(3).replace(".",",")} ps</span>
-</div>`:""}`;
-};
+  <span>pas de temps : ${(m.estimation.dt_s*1e12).toFixed(3).replace(".",",")} ps</span>`;
+}
 
 ANT_LIER.boite=function(box){
-  const n=function(id,obj,cle){
-    const el=box.querySelector(id);
-    if(!el)return;
-    el.oninput=function(){
-      const v=parseFloat(String(el.value).replace(",","."));
-      obj[cle]=isFinite(v)&&v>=0?v:0;
-      antMaj();
-    };
-  };
-  n("#antMx",ANT.boite,"mx"); n("#antMy",ANT.boite,"my");
-  n("#antMzh",ANT.boite,"mz_haut"); n("#antMzb",ANT.boite,"mz_bas");
-  n("#antPml",ANT.boite,"pml");
-  n("#antRa",ANT.maillage,"res_air"); n("#antRd",ANT.maillage,"res_die");
-  box.querySelector("#antTiers").onchange=function(){
+  antLierNombre(box.querySelector("#antMx"), ANT.boite, "mx", {min:0});
+  antLierNombre(box.querySelector("#antMy"), ANT.boite, "my", {min:0});
+  antLierNombre(box.querySelector("#antMzh"), ANT.boite, "mz_haut", {min:0});
+  antLierNombre(box.querySelector("#antMzb"), ANT.boite, "mz_bas", {min:0});
+  antLierNombre(box.querySelector("#antPml"), ANT.boite, "pml", {min:4, max:20, defaut:8, entier:true});
+  antLierNombre(box.querySelector("#antRa"), ANT.maillage, "res_air", {min:0});
+  antLierNombre(box.querySelector("#antRd"), ANT.maillage, "res_die", {min:0});
+  const tiers=box.querySelector("#antTiers");
+  if(tiers)tiers.onchange=function(){
     ANT.maillage.tiers=this.checked; antMaj(true);
   };
   const auto=box.querySelector("#bMargeAuto");
   if(auto)auto.onclick=function(){
     const k=(V.unite==="in")?(1/25.4):1;
     const c=ANT.modele.boite.marge_conseil*k;
-    ANT.boite.mx=ANT.boite.my=ANT.boite.mz_haut=ANT.boite.mz_bas=+c.toFixed(3);
+    const v=+c.toFixed(3);
+    ANT.boite.mx=ANT.boite.my=ANT.boite.mz_haut=ANT.boite.mz_bas=v;
+    ["#antMx","#antMy","#antMzh","#antMzb"].forEach(id=>{
+      const el=box.querySelector(id);
+      if(el)el.value=mdlNb(v);
+    });
     antMaj(true);
   };
 };
@@ -923,9 +1039,9 @@ ANT_CORPS.calcul=function(){
 
 <div class="champ ligne">
   <span><label>Arrêt à l'énergie résiduelle</label>
-    <input type="number" step="5" max="-10" id="antEn" value="${ANT.arret.energie}"> dB</span>
+    <input type="text" inputmode="decimal" spellcheck="false" id="antEn" value="${ANT.arret.energie}"> dB</span>
   <span><label>Pas de temps maximum</label>
-    <input type="number" step="1000" min="1000" id="antNmax" value="${ANT.arret.nmax}"></span>
+    <input type="text" inputmode="numeric" spellcheck="false" id="antNmax" value="${ANT.arret.nmax}"></span>
 </div>
 <p class="note">C'est l'énergie qui arrête en pratique ; le nombre de pas n'est
    qu'un garde-fou. −40 dB convient à une antenne ordinaire, −50 dB à un
@@ -962,16 +1078,12 @@ ${peut?"":`<p class="note alerte">openEMS n'est pas utilisable sur ce poste :
 };
 
 ANT_LIER.calcul=function(box){
-  box.querySelector("#antEn").oninput=function(){
-    const v=parseFloat(this.value);
-    if(isFinite(v))ANT.arret.energie=-Math.abs(v);
-    antMaj();
-  };
-  box.querySelector("#antNmax").oninput=function(){
-    const v=parseInt(this.value,10);
-    if(isFinite(v)&&v>0)ANT.arret.nmax=v;
-    antMaj();
-  };
+  antLierNombre(box.querySelector("#antEn"), ANT.arret, "energie", {
+    max: -1,
+    defaut: -40,
+    apres: v => { ANT.arret.energie = -Math.abs(v); }
+  });
+  antLierNombre(box.querySelector("#antNmax"), ANT.arret, "nmax", {min: 1000, defaut: 100000, entier: true});
   box.querySelector("#antNf").onchange=function(){
     ANT.nf2ff.actif=this.checked; antMaj(true);
   };

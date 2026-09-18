@@ -436,122 +436,164 @@ const CON_MOTIF_MONOPOLE={
    ========================================================================== */
 const CON_MOTIF_IFA={
   id:"ifa", nom:"F inversé (IFA)", role:"gnd",
-  aide:"quart d'onde replié, court-circuité par un via : compact, large bande",
+  aide:"quart d'onde replié Silicon Labs AN1088 : compact, large bande, plan TOP et couture de masse",
   besoin:"Il faut au moins deux couches de cuivre : un F inversé se "+
          "court-circuite à la masse.",
   champs:[
     {id:"La", nom:"longueur du bras",
-     aide:"avec la hauteur, elle forme le quart d'onde développé"},
+     aide:"longueur hors-tout du bras horizontal (AN1088 : 19,86 mm en 1,6 mm / 21,84 mm en 0,8 mm)"},
     {id:"ha", nom:"hauteur au-dessus de la masse",
-     aide:"elle compte dans le développé, et elle élargit la bande"},
-    {id:"wb", nom:"largeur du bras", aide:"plus large, plus large de bande"},
-    {id:"d",  nom:"court-circuit → alimentation",
-     aide:"le seul réglage d'impédance : il déplace peu la résonance"},
-    {id:"sc", nom:"enfoncement du court-circuit",
-     aide:"de combien le via entre dans la masse : cette longueur compte "+
-          "dans le développé"},
+     aide:"hauteur au-dessus du bord de masse (AN1088 : 8,31 mm en 1,6 mm / 7,90 mm en 0,8 mm)"},
+    {id:"wb", nom:"largeur du bras", aide:"largeur du bras horizontal (1,0 mm)"},
+    {id:"d",  nom:"écartement court-circuit → alim",
+     aide:"espace libre entre brins verticaux (AN1088 : 2,77 mm en 1,6 mm / 2,92 mm en 0,8 mm)"},
+    {id:"sc", nom:"enfoncement / patin court-circuit",
+     aide:"portée du patin de raccordement des 2 vias de court-circuit sur la masse"},
     {id:"ed", nom:"profondeur du décroché",
-     aide:"retrait de la masse sous le port : isole le brin d'alimentation"},
+     aide:"pénétration de la ligne d'alimentation dans la masse : isole l'alimentation"},
     {id:"gd", nom:"dégagement du décroché",
      aide:"largeur du vide de part et d'autre du brin d'alimentation"},
     {id:"Lg", nom:"plan de masse",
-     aide:"il fait partie de l'antenne : un quart d'onde au moins"},
-    {id:"wf", nom:"largeur du brin d'alimentation",
-     aide:"synthétisé pour 50 Ω"},
-    {id:"dVia", nom:"diamètre du via", aide:"le court-circuit, traversant"},
-    {id:"marge", nom:"marge de carte", aide:"le substrat qui dépasse du bras"},
+     aide:"longueur du plan de masse : un quart d'onde au moins"},
+    {id:"wf", nom:"largeur brins verticaux",
+     aide:"largeur du brin de court-circuit et d'alimentation (1,02 mm / 0,040\")"},
+    {id:"dVia", nom:"diamètre des vias", aide:"vias traversants de court-circuit et de couture"},
+    {id:"marge", nom:"marge de carte", aide:"substrat qui dépasse du bras à gauche"},
     {id:"masseTop", nom:"plan de masse dessus (TOP)", booleen:true, sym:"GND₂",
-     aide:"ajoute un plan de masse sur la face supérieure, relié au court-circuit et découpé autour du brin d'alimentation"}
+     aide:"plan de masse sur la face supérieure (recommandé et actif par défaut)"},
+    {id:"viasCouture", nom:"vias de couture de masse", booleen:true, sym:"Vias",
+     aide:"rangée de vias de couture espacés de 50 mil (1,27 mm) le long du bord de masse"}
   ],
   defauts:function(c){
     const quart=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
-    const ha=Math.max(quart*0.18,2.5);
-    const dVia=Math.min(CON.diametreVia,0.8);
-    /* Le via doit tomber ENTIÈREMENT sur le cuivre de masse : son
-       enfoncement ne descend donc jamais sous son propre rayon, augmenté
-       d'un dégagement du même ordre. */
-    const sc=Math.max(0.8,dVia);
-    const d=Math.max((quart-ha-sc)/4,1.5);
-    const ed=Math.max(0.8,sc);
-    const gd=Math.max(0.6,+(Math.min(c.wf,Math.max(0.6,(d-dVia)/2-0.2))).toFixed(3));
+    const kf=2.45e9/Math.max(c.f,1e6);
+    /* Préréglages Silicon Labs AN1088 adaptés à l'épaisseur du substrat */
+    const mince=(c.h<=1.1);
+    const La=+( (mince ? 21.84 : 19.86) * kf ).toFixed(2);
+    const ha=+( (mince ? 7.90  : 8.31 ) * kf ).toFixed(2);
+    const wb=+( 1.00 * kf ).toFixed(2);
+    const d =+( (mince ? 2.92  : 2.77 ) * kf ).toFixed(2);
+    const wf=+( 1.02 * kf ).toFixed(2);
+    const marge=+( 1.02 * kf ).toFixed(2);
+    const dVia=Math.min(CON.diametreVia||0.6, 0.6);
+    const sc=Math.max(0.8, dVia*1.2);
+    const ed=Math.max(3.0, +(4*c.h).toFixed(2));
+    const gd=0.6;
     return {
-      La:quart-ha-sc, ha:ha, sc:sc,
-      wb:Math.max(quart/12,1.0),
-      d:d, ed:ed, gd:gd,
-      Lg:Math.max(quart,15),
-      wf:c.wf,
+      La:La, ha:ha, wb:wb, d:d, wf:wf,
+      sc:sc, ed:ed, gd:gd,
+      Lg:Math.max(quart, 25),
       dVia:dVia,
-      marge:Math.max(3*c.h,2),
-      masseTop:0
+      marge:marge,
+      masseTop:1,
+      viasCouture:1
     };
   },
   tracer:function(c,p){
-    const Lb=p.La+2*p.marge+p.wb;
-    const Wb=p.Lg+p.ha+p.wb+p.marge;
-    const x0=p.marge;          // bord gauche du bras
-    const yg=p.Lg;             // bord de la masse
-    const yb=yg+p.ha;          // axe du bras horizontal
-    const ys=yg-p.sc;          // pied du court-circuit, sur la masse
-    const ed=Math.max(p.ed!=null?+p.ed:p.sc,0.2); // profondeur du décroché
-    const gd=Math.max(p.gd!=null?+p.gd:0.6,0.2); // dégagement latéral
-    const yd=yg-ed;            // fond du décroché
-    const xf=x0+p.d;           // axe du brin d'alimentation
-    const xg1=xf-p.wf/2-gd;    // bord gauche de l'encoche
-    const xg2=xf+p.wf/2+gd;    // bord droit de l'encoche
-    const dev=p.La+p.ha+p.sc;
-    const festim=CON_C0/(4*dev*Math.sqrt(c.eeffAir));
+    const wb=p.wb||1.0;
+    const wf=p.wf||1.02;
+    const marge=p.marge||1.02;
+    const d=p.d!=null?+p.d:2.77;
+    const ha=p.ha!=null?+p.ha:8.31;
+    const La=p.La!=null?+p.La:19.86;
+    const sc=Math.max(p.sc!=null?+p.sc:0.8, 0.4);
+    const ed=Math.max(p.ed!=null?+p.ed:3.0, 0.5);
+    const gd=Math.max(p.gd!=null?+p.gd:0.6, 0.2);
+    const dVia=Math.max(p.dVia!=null?+p.dVia:0.6, 0.2);
+
+    /* Coordonnées géométriques (AN1088) :
+       - x0 : axe du court-circuit = marge + wb/2
+       - xf : axe de l'alimentation = marge + wb + d + wf/2 (d = espace libre entre brins verticaux)
+       - xEnd : bout du bras horizontal = marge + La
+       - yg : frontière du plan de masse
+       - yb : axe du bras horizontal = yg + ha */
+    const x0=marge+wb/2;
+    const xf=marge+wb+d+wf/2;
+    const xEnd=marge+La;
+    const Lb=Math.max(xEnd+Math.max(marge,2.0), 30);
+    const yg=p.Lg;
+    const yb=yg+ha;
+    const ys=yg-sc;
+    const yd=yg-ed;
+    const Wb=yb+wb/2+Math.max(marge,1.5);
+
+    const xg1=xf-wf/2-gd;
+    const xg2=xf+wf/2+gd;
+
+    const dev=La+ha;
+    const eeffIFA=1.18;
+    /* `CON_C0` est en mm/s et `dev` en millimètres, comme partout dans ce
+       fichier : la division se fait TELLE QUELLE. Le facteur 1e-3 qui traînait
+       ici prenait le développé pour des mètres et rendait une résonance mille
+       fois trop haute — 2 320 GHz au lieu de 2,32. */
+    const festim=CON_C0/(4*dev*Math.sqrt(eeffIFA));
+
     const formes=[
-      gRect("bas","GND",0,0,Lb,p.Lg),
-      /* Décroché dans la masse sous le brin d'alimentation : le brin
-         n'est plus noyé dans le plan de masse */
-      gRect("bas","",xg1,yd,xg2,yg,true),
-      /* Le bras et son court-circuit : une seule piste coudée. */
-      gPiste("haut","ANTENNE",[[x0,ys],[x0,yb],[x0+p.La,yb]],p.wb),
-      /* Le brin d'alimentation descend dans le décroché jusqu'au fond */
-      gPiste("haut","ANTENNE",[[xf,yb],[xf,yd]],p.wf),
-      gVia("ANTENNE",x0,ys,p.dVia)
+      /* Plan de masse inférieur (continu sous toute la zone de masse) */
+      gRect("bas","GND",0,0,Lb,yg),
+
+      /* Le bras et son court-circuit : une seule piste coudée */
+      gPiste("haut","ANTENNE",[[x0,ys],[x0,yb],[xEnd,yb]],wb),
+
+      /* Le brin d'alimentation descend dans le plan de masse jusqu'à yd */
+      gPiste("haut","ANTENNE",[[xf,yb],[xf,yd]],wf),
+
+      /* 2 vias de court-circuit au raccordement du court-circuit à la masse (AN1088) */
+      gVia("ANTENNE", x0 - Math.min(wb*0.35, 0.35), (ys+yg)/2, dVia),
+      gVia("ANTENNE", x0 + Math.min(wb*0.35, 0.35), (ys+yg)/2, dVia)
     ];
+
     if(p.masseTop){
-      /* Plan de masse sur la face supérieure (TOP) : raccordement direct du
-         court-circuit à plat, avec décroché d'isolation autour de l'alimentation */
-      formes.push(gRect("haut","GND",0,0,Lb,p.Lg));
+      /* Plan de masse supérieur avec décroché d'isolation autour de l'alimentation */
+      formes.push(gRect("haut","GND",0,0,Lb,yg));
       formes.push(gRect("haut","",xg1,yd-0.3,xg2,yg,true));
     }
+
+    if(p.viasCouture){
+      /* Vias de couture le long du bord de masse (Ground Stitching Vias, espacement 50 mil / 1,27 mm) */
+      const yStitch=(ys+yg)/2;
+      const pas=1.27;
+      for(let x=pas; x<=Lb-pas/2; x+=pas){
+        if(Math.abs(x-x0)<wb+0.3)continue;
+        if(x>=xg1-0.4 && x<=xg2+0.4)continue;
+        formes.push(gVia("GND", +x.toFixed(3), yStitch, dVia));
+      }
+    }
+
     return {
       carte:{L:Lb, W:Wb},
       formes:formes,
-      port:{x:xf, y:yd, w:p.wf, l:Math.min(ed,0.6)},
+      port:{x:xf, y:yd, w:wf, l:Math.min(ed,0.6)},
+      ligne:{d:ed, w:wf},
       cotes:[
-        gCote("La",x0,Wb,x0+p.La,Wb,2.2,"La"),
+        gCote("La",marge,Wb,xEnd,Wb,2.2,"La"),
         gCote("ha",0,yg,0,yb,-2.2,"ha"),
-        gCote("Lg",Lb,0,Lb,p.Lg,2.2,"Lg"),
-        gCote("d",x0,yg,x0+p.d,yg,-1.4,"d"),
-        gCote("marge",0,Wb,x0,Wb,2.2,"m",true),
-        gRepere("wb",x0+p.La,yb+p.wb/2,Lb+3.5,yb+p.wb/2+2,"wb"),
-        gRepere("wf",xf+p.wf/2,(yd+yb)/2,xf+4,yg*0.62,"wf"),
+        gCote("Lg",Lb,0,Lb,yg,2.2,"Lg"),
+        gCote("d",x0+wb/2,yg,xf-wf/2,yg,-1.4,"d"),
+        gCote("marge",0,Wb,marge,Wb,2.2,"m",true),
+        gRepere("wb",xEnd,yb+wb/2,Lb+3.5,yb+wb/2+2,"wb"),
+        gRepere("wf",xf+wf/2,(yd+yb)/2,xf+4,yg*0.62,"wf"),
         gRepere("sc",x0,(ys+yg)/2,-4.5,yg-4,"sc"),
         gRepere("ed",xg2,(yd+yg)/2,xg2+5,(yd+yg)/2-2,"ed"),
-        gRepere("gd",xf+p.wf/2+gd/2,yg,xg2+5,yg*0.88,"gd"),
-        gRepere("dVia",x0+p.dVia/2,ys-p.dVia/2,-4.5,yg-9,"⌀via")
+        gRepere("gd",xf+wf/2+gd/2,yg,xg2+5,yg*0.88,"gd"),
+        gRepere("dVia",x0+wb/2+0.5,ys,-4.5,yg-9,"⌀via")
       ],
       calcul:{
-        titre:"F inversé imprimé",
-        resume:"bras "+conLong(p.La,2)+" à "+conLong(p.ha,2)+
-               " de la masse, alimentation à "+conLong(p.d,2)+
-               " du court-circuit, décroché "+conLong(ed,2)+" × "+conLong(p.wf+2*gd,2)+
-               (p.masseTop?" [masse TOP+BOT]":""),
+        titre:"F inversé imprimé (Silicon Labs AN1088)",
+        resume:"bras "+conLong(La,2)+" à "+conLong(ha,2)+
+               " de la masse, écartement "+conLong(d,2)+
+               (p.masseTop?" [masse TOP+BOT]":"")+
+               (p.viasCouture?" [vias de couture 50 mil]":""),
         festim:festim,
         lignes:[
-          ["Quart d'onde visé",
-             conLong(CON_C0/(4*c.f*Math.sqrt(c.eeffAir)),3)],
-          ["Développé dessiné (sc + ha + La)", conLong(dev,3)],
-          ["Court-circuit → alimentation", conLong(p.d,3)],
-          ["Décroché de masse (ed × (wf + 2·gd))",
-             conLong(ed,2)+" × "+conLong(p.wf+2*gd,2)+" — isole l'alimentation"],
-          ["Via de court-circuit", "⌀ "+conLong(p.dVia,2)+", traversant"],
+          ["Référence", "Silicon Labs AN1088 — Inverted-F Antenna"],
+          ["Longueur développée (La + ha)", conLong(dev,2)+" (≈ quart d'onde)"],
+          ["Écartement brins (d)", conLong(d,2)+" — règle l'impédance"],
+          ["Vias de court-circuit", "2 vias ⌀ "+conLong(dVia,2)+" (réduit l'inductance)"],
+          ["Vias de couture", p.viasCouture ? "espacés de 50 mil (1,27 mm) le long de la masse" : "aucun"],
           ["Plan de masse", p.masseTop
-             ? (conLong(p.Lg,1)+" — dessus (TOP) et dessous (BOTTOM)")
-             : (conLong(p.Lg,1)+" — il fait partie de l'antenne")],
+             ? (conLong(yg,1)+" — dessus (TOP) et dessous (BOTTOM)")
+             : (conLong(yg,1)+" — dessous uniquement")],
           ["Carte", conLong(Lb,2)+" × "+conLong(Wb,2)]
         ]
       }

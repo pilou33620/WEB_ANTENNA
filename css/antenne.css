@@ -83,8 +83,8 @@ input[type=number],input[type=text],select{
   border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:12px;
   min-width:0;width:100%;
 }
-input[type=number]{max-width:110px}
-input[type=number].petit{max-width:70px}
+input[type=number],input[inputmode=decimal],input[inputmode=numeric]{max-width:110px}
+input[type=number].petit,input[inputmode=decimal].petit,input[inputmode=numeric].petit{max-width:70px}
 select{max-width:100%}
 input:focus,select:focus{outline:none;border-color:var(--blue)}
 
@@ -380,8 +380,42 @@ body.con-dessin #carte{cursor:crosshair}
   align-self:flex-end;padding-bottom:6px;font-family:var(--mono);
   font-size:11px;color:var(--txt-dim);
 }
-.objet .ligne input[type=number]{max-width:92px}
+.objet .ligne input[type=number],.objet .ligne input[inputmode=decimal]{max-width:92px}
 .objet-tete .tb.mini[disabled]{opacity:.35;cursor:not-allowed}
+
+/* La coupe de l'empilage : elle se lit comme la feuille du fabricant — du
+   dessus vers le dessous — et elle se CLIQUE, une ligne ouvrant la fiche de
+   sa couche. Sans cela, un empilage à huit couches demanderait de dérouler
+   dix-sept fiches pour en régler une. */
+table.empilage.coupe{margin-bottom:9px}
+table.empilage.coupe tbody tr{cursor:pointer}
+table.empilage.coupe tbody tr:hover{background:var(--panel2)}
+table.empilage.coupe tbody tr.on{background:#20211c;
+  box-shadow:inset 3px 0 0 var(--yellow)}
+table.empilage.coupe td:first-child{width:14px;color:var(--txt-dim)}
+
+/* Le masque n'est pas un diélectrique comme les autres : il est optionnel, il
+   ne sépare aucun cuivre, et il coûte cher au maillage. Il se distingue donc
+   des âmes et des prépregs. */
+.objet.die.masque{border-left:3px solid var(--green)}
+
+/* La question de départ : combien de couches, et lequel des empilages qu'un
+   fabricant sait presser. Les modèles sont des boutons et non une liste
+   déroulante — on les COMPARE, on n'en cherche pas un dont on connaît déjà
+   le nom. */
+.champ.demarrage{
+  border:1px solid var(--border2);border-radius:6px;padding:10px 12px;
+  background:var(--panel2);
+}
+.modeles{display:flex;flex-direction:column;gap:5px;margin:9px 0}
+.modeles .tb.large{
+  display:flex;flex-direction:column;align-items:flex-start;gap:2px;
+  white-space:normal;text-align:left;width:100%;
+}
+.modeles .tb.large small{font-size:10.5px;color:var(--txt-dim);line-height:1.45}
+.modeles .tb.large.on{border-color:var(--yellow);background:#20211c}
+.modeles .tb.large.on small{color:var(--txt)}
+p.note.alerte{color:var(--yellow)}
 
 /* Une forme du dessin. Celle qui est choisie porte le même jaune que son
    liseré sur la carte : c'est le seul lien entre la fiche et le cuivre. */
@@ -466,7 +500,7 @@ body.con-dessin #carte{cursor:crosshair}
   text-transform:none;
 }
 .cotes-motif>span:hover label b{color:var(--yellow)}
-.cotes-motif input[type=number]{max-width:96px}
+.cotes-motif input[type=number],.cotes-motif input[inputmode=decimal]{max-width:96px}
 .cotes-motif .unite{
   align-self:flex-end;padding-bottom:6px;font-family:var(--mono);
   font-size:11px;color:var(--txt-dim);

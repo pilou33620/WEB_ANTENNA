@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="css/workspace.css">
 <link rel="stylesheet" href="css/antenne.css">
 <link rel="stylesheet" href="css/ia.css">
+<link rel="stylesheet" href="css/rapport.css">
 </head>
 <body>
 
@@ -35,6 +36,7 @@
          le manuel marchent sans réseau ni clé ; poser une question, non.
          Même bouton et même panneau que dans WEB_CAO — voir js/30-ia.js. -->
     <button class="tb tb-ia" id="bIaAssistant" title="Assistant IA technique — Google AI Studio. Vérification locale des réglages sans réseau ni clé ; rien ne s'applique sans un clic. (Alt+I)"><span class="ia-sparkle">✨</span> IA</button>
+    <button class="tb" id="bRapport" title="Générer un rapport d'ingénierie complet : résultats, empilage, géométrie, maillage et diagnostic des anomalies">📋 Rapport</button>
     <button class="tb" id="bScript" title="Écrire le script Python openEMS qui refait exactement cette simulation" disabled>⤓ Script .py</button>
     <button class="tb" id="bLancer" title="Lancer openEMS sur ce modèle" disabled>▶ Lancer</button>
     <button class="tb danger" id="bArreter" title="Arrêter la simulation en cours (conserve l'application ouverte)" style="display:none">■ Stop</button>
@@ -333,6 +335,7 @@
 <div id="floatLayer"></div>
 <div id="dropZone"></div>
 <div id="dragGhost"></div>
+<div id="rapportModal" class="rap-modal" hidden></div>
 
 <footer>
   <span>Fichier <b id="fNom">—</b></span>
@@ -400,6 +403,7 @@
      porte : il vient donc après tout le monde parmi les modules métier, et
      avant 28 qui, lui, enveloppe les fonctions de pose. -->
 <script src="js/30-ia.js"></script>
+<script src="js/31-rapport.js"></script>
 <!-- 28 vient en dernier des modules métier : il enveloppe `poser`, `antMaj`
      et `conAppliquer`, et il ne peut le faire qu'une fois que 06, 13 et 20
      les ont posées. -->

@@ -191,15 +191,51 @@ def generer(m, chemin_openems=None, dossier_sim=None):
     port = m["port"]
     maille = m["maillage"]
 
-    dll = ""
+    candidats = []
     if chemin_openems:
-        dll = (
-            "# Les DLL d'openEMS ne sont pas dans le PATH de cet environnement :\n"
-            "# sans cette ligne, « import CSXCAD » echoue sur un\n"
-            "# « DLL load failed » qui ne dit pas lequel manque.\n"
-            "if hasattr(os, \"add_dll_directory\") and os.path.isdir(r%r):\n"
-            "    os.add_dll_directory(r%r)\n\n" % (chemin_openems, chemin_openems)
-        )
+        candidats.append("        r%r," % chemin_openems)
+    candidats.extend([
+        '        os.path.join(_ici, "openEMS"),',
+        '        os.path.join(_ici, "openems"),',
+        '        os.path.join(_ici, "..", "openEMS"),',
+        '        os.path.join(_ici, "..", "openems"),',
+        '        os.path.join(_ici, "..", "..", "openEMS"),',
+        '        os.path.join(_ici, "..", "..", "openems"),',
+        '        os.path.join(os.getcwd(), "openEMS"),',
+        '        os.path.join(os.getcwd(), "openems"),',
+        '        os.environ.get("OPENEMS_DLL", ""),',
+        '        r"C:\\openEMS",',
+        '        r"C:\\openems",',
+    ])
+    liste_candidats = "\n".join(candidats)
+
+    dll = (
+        "# Les DLL d'openEMS ne sont pas dans le PATH de cet environnement :\n"
+        "# sans cette recherche, « import CSXCAD » echoue sur un\n"
+        "# « DLL load failed » qui ne dit pas lequel manque.\n"
+        "# Recherche automatique : dossier d'origine, relatif au script, ou OPENEMS_DLL.\n"
+        "if hasattr(os, \"add_dll_directory\"):\n"
+        "    _ici = os.path.dirname(os.path.abspath(__file__)) if \"__file__\" in locals() else os.getcwd()\n"
+        "    _candidats = [\n"
+        "%s\n"
+        "    ]\n"
+        "    for _d in _candidats:\n"
+        "        if _d and os.path.isdir(_d) and os.path.isfile(os.path.join(_d, \"CSXCAD.dll\")):\n"
+        "            try:\n"
+        "                os.add_dll_directory(os.path.realpath(_d))\n"
+        "                break\n"
+        "            except OSError:\n"
+        "                pass\n"
+        "    else:\n"
+        "        for _d in _candidats:\n"
+        "            if _d and os.path.isdir(_d):\n"
+        "                try:\n"
+        "                    os.add_dll_directory(os.path.realpath(_d))\n"
+        "                    break\n"
+        "                except OSError:\n"
+        "                    pass\n\n"
+        % liste_candidats
+    )
 
     sim = dossier_sim or os.path.join("~", "openems_antenne")
 
@@ -326,26 +362,29 @@ def generer(m, chemin_openems=None, dossier_sim=None):
         nom = _ident(bloc["couche"], "cu")
         if mode == "volume":
             a("\ncu_%s = CSX.AddMetal('cu_%s')\n" % (nom, nom))
-            for poly in bloc["polys"]:
-                a("cu_%s.AddLinPoly(%s, 'z', %s, %s, priority=10)\n"
-                  % (nom, _poly(poly["o"]), _f(bloc["z0"]),
-                     _f(bloc.get("ep_geo") or bloc["ep"])))
         elif mode == "pec":
             a("\ncu_%s = CSX.AddMetal('cu_%s')\n" % (nom, nom))
-            for poly in bloc["polys"]:
-                a("cu_%s.AddPolygon(%s, 'z', %s, priority=10)\n"
-                  % (nom, _poly(poly["o"]), _f(bloc["z0"])))
         else:
             a("\ncu_%s = CSX.AddConductingSheet('cu_%s', conductivity=%.4g,\n"
               "                                 thickness=%.6e)"
               "   # %s mm de cuivre\n"
               % (nom, nom, bloc.get("sigma", 5.8e7), bloc["ep"] * 1e-3,
                  _f(bloc["ep"], 4)))
-            for poly in bloc["polys"]:
-                a("cu_%s.AddPolygon(%s, 'z', %s, priority=10)\n"
-                  % (nom, _poly(poly["o"]), _f(bloc["z0"])))
+
+        # 1. Les versements portant des decoupes (plans de masse) a priorite 10.
         for poly in bloc["polys"]:
-            for trou in poly["t"]:
+            if poly.get("t"):
+                if mode == "volume":
+                    a("cu_%s.AddLinPoly(%s, 'z', %s, %s, priority=10)\n"
+                      % (nom, _poly(poly["o"]), _f(bloc["z0"]),
+                         _f(bloc.get("ep_geo") or bloc["ep"])))
+                else:
+                    a("cu_%s.AddPolygon(%s, 'z', %s, priority=10)\n"
+                      % (nom, _poly(poly["o"]), _f(bloc["z0"])))
+
+        # 2. Les decoupes dans ces versements a priorite 11 (remplies de dielectrique).
+        for poly in bloc["polys"]:
+            for trou in poly.get("t", ()):
                 # Le trou est rempli par le dielectrique qui se trouve juste
                 # sous la couche ; a defaut, de l'air.
                 sous = None
@@ -366,6 +405,19 @@ def generer(m, chemin_openems=None, dossier_sim=None):
                       "   # decoupe\n"
                       % (cible, _poly(trou), _f(bloc["z0"])))
                 n_trou += 1
+
+        # 3. Les conducteurs sans decoupe (pistes de signal, brins d'antenne, pastilles)
+        # a priorite 12. Ils passent PAR-DESSUS les decoupes pour ne pas etre
+        # effaces par une encoche d'isolation ou un degagement de plan de masse.
+        for poly in bloc["polys"]:
+            if not poly.get("t"):
+                if mode == "volume":
+                    a("cu_%s.AddLinPoly(%s, 'z', %s, %s, priority=12)\n"
+                      % (nom, _poly(poly["o"]), _f(bloc["z0"]),
+                         _f(bloc.get("ep_geo") or bloc["ep"])))
+                else:
+                    a("cu_%s.AddPolygon(%s, 'z', %s, priority=12)\n"
+                      % (nom, _poly(poly["o"]), _f(bloc["z0"])))
     a("\n")
 
     if m["vias"]:
@@ -378,7 +430,7 @@ def generer(m, chemin_openems=None, dossier_sim=None):
         a("# metallisation — un maillage dix fois plus fin pour rien.\n")
         a("vias = CSX.AddMetal('vias')\n")
         for v in m["vias"]:
-            a("vias.AddCylinder([%s, %s, %s], [%s, %s, %s], %s, priority=12)\n"
+            a("vias.AddCylinder([%s, %s, %s], [%s, %s, %s], %s, priority=13)\n"
               % (_f(v["x"]), _f(v["y"]), _f(v["z0"]),
                  _f(v["x"]), _f(v["y"]), _f(v["z1"]), _f(v["r"])))
         a("\n")

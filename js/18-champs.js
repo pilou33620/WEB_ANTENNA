@@ -94,23 +94,23 @@ ${d.actif?`
       aEsc(ANT_REGIONS[r])+'</option>').join("")}
   </select>
   ${d.region==="plan_z"?`<div class="ligne">
-    <span><label>Hauteur Z</label><input type="number" step="0.05" id="antDumpZ" value="${d.z}"></span>
+    <span><label>Hauteur Z</label><input type="text" inputmode="decimal" spellcheck="false" id="antDumpZ" value="${mdlNb(d.z)}"></span>
     <span class="unite">${antUnite()}</span>
     <span class="note-inline">Le cuivre du dessus est à
       ${ANT.modele?antLongModele(ANT.modele.conducteurs[ANT.modele.conducteurs.length-1].z0,3):"—"},
       celui du dessous à 0.</span>
   </div>`:""}
   ${d.region==="coupe_x"?`<div class="ligne">
-    <span><label>Abscisse X</label><input type="number" step="0.5" id="antDumpX" value="${d.x}"></span>
+    <span><label>Abscisse X</label><input type="text" inputmode="decimal" spellcheck="false" id="antDumpX" value="${mdlNb(d.x)}"></span>
     <span class="unite">${antUnite()}</span></div>`:""}
   ${d.region==="coupe_y"?`<div class="ligne">
-    <span><label>Ordonnée Y</label><input type="number" step="0.5" id="antDumpY" value="${d.y}"></span>
+    <span><label>Ordonnée Y</label><input type="text" inputmode="decimal" spellcheck="false" id="antDumpY" value="${mdlNb(d.y)}"></span>
     <span class="unite">${antUnite()}</span></div>`:""}
 </div>
 
 <div class="champ ligne">
   <span><label>Une cellule sur</label>
-    <input type="number" step="1" min="1" max="20" id="antDumpSous" value="${d.sous_ech}"></span>
+    <input type="text" inputmode="numeric" spellcheck="false" id="antDumpSous" value="${d.sous_ech}"></span>
   <span class="note-inline">Un champ vu une cellule sur deux se lit aussi
     bien et pèse huit fois moins.</span>
 </div>
@@ -144,16 +144,13 @@ function antChampsLier(box){
   const reg=box.querySelector("#antDumpRegion");
   if(reg)reg.onchange=function(){ ANT.dumps.region=this.value; antMaj(true); };
 
-  const nb=function(id,cle){
+  const nb=function(id,cle,ent){
     const el=box.querySelector(id);
     if(!el)return;
-    el.oninput=function(){
-      const v=parseFloat(String(el.value).replace(",","."));
-      if(isFinite(v)){ ANT.dumps[cle]=v; antMaj(); }
-    };
+    antLierNombre(el, ANT.dumps, cle, {entier: !!ent});
   };
   nb("#antDumpZ","z"); nb("#antDumpX","x"); nb("#antDumpY","y");
-  nb("#antDumpSous","sous_ech");
+  nb("#antDumpSous","sous_ech",true);
 }
 
 /* ==========================================================================

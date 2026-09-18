@@ -642,6 +642,70 @@ netlist, pas d'empreintes. Des surfaces de cuivre, un empilage, des
 matériaux — ce qu'un solveur de champ sait lire, et rien de plus. Une carte
 dessinée ici ne se fabrique pas ; elle se simule.
 
+### L'empilage — la première question, et elle vient avant le premier trait
+
+Un patch n'a pas de cotes dans l'absolu : il en a **sur un substrat**. Dessiné
+pour un FR-4 de 1,6 mm puis reporté tel quel sur un RO4350B de 0,762 mm, il
+n'est plus un patch — c'est un rectangle de cuivre, à plusieurs centaines de
+mégahertz de la bande visée. C'est pourquoi le mode conception s'ouvre sur
+l'empilage, tant que rien n'est dessiné et que changer d'avis ne coûte rien :
+**combien de couches de cuivre**, et **lequel des empilages qu'un fabricant
+sait presser**.
+
+**Les modèles d'usine.** Un fabricant ne vend pas « quatre couches » : il vend
+des cuivres, des âmes et des prépregs d'épaisseurs données, tombant sur une
+épaisseur totale normalisée. La liste va du double face FR-4 1,6 mm au huit
+couches, en passant par les stratifiés hyperfréquence (RO4350B 0,508 et
+0,762 mm, RO4003C, RT/duroid 5880 et 5870, RO3003), le polyimide souple, le
+patch suspendu sur air et l'empilage hybride — RO4350B en surface, FR-4 au
+milieu, qui est celui des cartes radio réelles. **Chaque modèle tombe
+exactement sur l'épaisseur qu'il annonce**, et le banc d'essai le vérifie : un
+empilage proposé ici se commande tel quel.
+
+**Puis chaque couche se règle.** La coupe se lit comme la feuille d'empilage du
+fabricant — du dessus vers le dessous, avec le nom, la matière, le rôle, le
+poids de cuivre en onces, l'épaisseur, le Dk et le Df —, et une ligne cliquée
+ouvre la fiche de sa couche : rôle (signal, masse, alimentation), métal et
+conductivité, épaisseur normalisée pour un cuivre ; matériau de catalogue ou
+valeurs libres, nature (âme ou prépreg), épaisseur, εᵣ et tanδ pour un
+diélectrique. Un empilage à huit couches fait dix-sept lignes : tout déplier
+rendrait illisible ce qu'on vient précisément comparer.
+
+| ce que le panneau ajoute | à quoi cela sert |
+|---|---|
+| **épaisseur visée** et **répartir** | ramener l'empilage sur 1,6 mm — ou sur la cote mécanique imposée — en répartissant l'écart sur les diélectriques ; le cuivre et le masque ne bougent pas, ils se commandent |
+| **synthèse** | l'épaisseur obtenue, le stratifié nu, le cuivre total, l'écart sur la visée |
+| **symétriser** | un empilage asymétrique se voile à la cuisson : le fabricant le refuse, ou le compense à sa façon — et rend une carte dont l'empilage n'est plus celui qu'on a simulé |
+| **masque** | le vernis épargne, 25 µm d'εᵣ 3,8 sur les deux faces |
+
+**Changer le nombre de couches ne perd pas le dessin.** Les formes désignent
+leur couche par un identifiant stable : le cuivre du dessus reste le cuivre du
+dessus, celui du dessous aussi, les internes suivent par rang, et les formes
+d'une couche interne qui disparaît sont reportées sur la voisine **et
+comptées**. Ce qui est signalé aussi, parce que rien d'autre ne le dirait : un
+**port devenu faux**. Un port qui reliait le dessus au dessous d'un double face
+relie, sur un quatre couches, deux cuivres séparés par deux plans — les deux
+couches existent toujours, le solveur ne se plaindra pas, et le S₁₁ sera celui
+d'une antenne alimentée en travers de sa masse.
+
+**Le masque n'est pas posé d'usine, et c'est un arbitrage chiffré.** Il compte
+— 25 µm d'εᵣ 3,8 abaissent la résonance d'environ 1 % — mais chaque interface
+de l'empilage porte une ligne de maillage obligatoire : le masque pose deux
+lignes distantes de 25 µm là où la plus petite cellule du modèle en faisait 37,
+et le pas de temps FDTD suit la plus petite cellule du domaine. Mesuré sur le
+patch 2,45 GHz de l'exemple : **une fois et demie le temps de calcul** pour 2 %
+de cellules en plus. On le pose au dernier tour, quand la géométrie est
+arrêtée ; pas pendant qu'on la cherche.
+
+**Et tout cela va jusqu'au solveur, par le même chemin que le reste.**
+L'empilage réglé ici devient le tableau `empilage` du document — une entrée par
+couche, avec son épaisseur, son εᵣ, sa tanδ, sa conductivité et son rôle —, que
+`python/openems_modele.py` transforme en cotes z : chaque diélectrique devient
+un volume de matériau à pertes, chaque cuivre un plan (ou un volume, au choix
+du modèle de cuivre), et chaque interface une ligne de maillage. Le masque y
+arrive comme les autres. Il n'y a aucun chemin propre au mode conception : une
+carte dessinée et une carte importée donnent le même document.
+
 ### Les matériaux — les deux nombres qu'aucun fichier ne porte
 
 Une permittivité fausse de 10 % déplace la résonance d'environ 5 %. C'est
@@ -662,7 +726,8 @@ c'est elle qui sépare un rendement de 80 % d'un rendement de 60 % sur une
 antenne sérigraphiée. Un fichier IPC-2581 ne dit jamais de quel métal est sa
 couche ; le cuivre reste donc le repli là-bas, et le choix n'existe qu'ici.
 
-L'épaisseur de cuivre se prend en onces, comme on la commande.
+L'épaisseur de cuivre se prend en onces, comme on la commande — et la
+coupe de l'empilage la redonne en onces à côté des micromètres.
 
 ### Les motifs d'antenne — un point de départ, pas une antenne finie
 
@@ -845,8 +910,8 @@ de cet outil viennent de sa visionneuse. On y retrouve, à l'identique :
 
 * la **barre de connexion** qui demande la clé, avec son œil pour la relire et
   son lien vers la clé gratuite ;
-* la **barre d'état** une fois connecté : le modèle (Gemini 2.5 Flash, Gemini
-  2.5 Pro, Gemma 4 31B), le contexte détecté, « Vider », « Oublier clé » ;
+* la **barre d'état** une fois connecté : le modèle (Gemma 4 31B, Gemini 3.8
+  Flash, Gemini 3.8 Flash Thinking), le contexte détecté, « Vider », « Oublier clé » ;
 * les **bulles** de discussion, les **puces de questions**, le **manuel local**
   sur fond jaune, les **cartes d'action** bleues ;
 * le **menu du clic droit** sur la carte — `js/04-interaction.js` appelait déjà
@@ -1087,7 +1152,7 @@ tous les outils liraient sans broncher et dont la moitié serait inventée.
 python python/test/banc-openems.py
 ```
 
-466 vérifications sans solveur : cotes en z, sens des polygones, maillage,
+556 vérifications sans solveur : cotes en z, sens des polygones, maillage,
 refus attendus, conversion pouces/millimètres, script généré, les deux
 modèles de pertes, les quatre primitives, la conductivité déclarée d'un
 conducteur, le poids des enregistrements, les ports multiples et leurs refus,
@@ -1126,7 +1191,10 @@ banc appelle lui-même quand il est installé : le découpage des découpes
 (`test/banc-polygones.js`, cas dégénérés compris) et la logique de la page
 (`test/banc-interface.js` : la liste des ports, la description d'un balayage,
 les conversions d'unité, les motifs d'antenne, les gestes du dessin avec leur
-historique, l'ordre des colonnes d'un fichier Touchstone, et le balayage d'une
+historique, l'**empilage du mode conception** — chaque modèle d'usine tombe-t-il
+sur l'épaisseur qu'il annonce, le dessin survit-il à un changement de nombre de
+couches, le masque arrive-t-il au solveur, un port devenu faux est-il vu —,
+l'ordre des colonnes d'un fichier Touchstone, et le balayage d'une
 cote de **motif** — que le dessin revienne en place au bit près, que la carte
 et le port suivent la cote, qu'un second port survive au point, et que les
 cotes du motif disparaissent dès que le dessin n'en est plus la copie). Ce sont les

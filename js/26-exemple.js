@@ -85,6 +85,9 @@ function exPoser(){
   conEntrer();
   CON.pile=conPileDefaut();
   CON.coucheActive=conPremierCuivre();
+  /* L'exemple a répondu lui-même à la question de l'empilage : le panneau
+     n'a pas à la reposer par-dessus une carte déjà dessinée. */
+  CON.demarrage=false;
 
   /* 2. La fréquence visée, puis le gabarit. Le gabarit se charge du reste :
         il dessine le patch et sa ligne, règle la bande à ±15 %, pose le port
