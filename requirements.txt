@@ -1,7 +1,7 @@
 # =============================================================================
 # Antenne openEMS — dépendances Python
 #
-# LE SERVEUR ET LE PARSEUR N'EN ONT AUCUNE. `serveur.py`, `ipc2581_parser.py`
+# LE SERVEUR ET LE PARSEUR N'EN ONT AUCUNE. `web_antenna.py`, `ipc2581_parser.py`
 # et `openems_modele.py` fonctionnent avec la bibliothèque standard seule :
 # sur un poste où rien de ce qui suit n'est installé, la page s'ouvre, les
 # fichiers IPC-2581 se lisent, les modèles se préparent et se vérifient, et
@@ -10,7 +10,7 @@
 # PRÉREQUIS D'INSTALLATION :
 # 1. Utiliser Python 3.10 ou 3.11 (64 bits) impérativement.
 # 2. Avoir extrait l'archive binaire openEMS pour Windows dans le dossier
-#    « openEMS/ » à côté de serveur.py AVANT de lancer pip.
+#    « openEMS/ » à côté de web_antenna.py AVANT de lancer pip.
 #
 #   pip install -r requirements.txt
 #

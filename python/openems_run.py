@@ -45,7 +45,7 @@ import uuid
 import openems_modele
 import openems_script
 
-# Racine du depot : python/ est a cote de serveur.py, openEMS/ aussi.
+# Racine du depot : python/ est a cote de web_antenna.py, openEMS/ aussi.
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 MAX_CORPS = openems_modele.MAX_CORPS
@@ -90,10 +90,10 @@ def _preparer_env():
 # Quel Python lance le solveur
 # ==========================================================================
 # CE N'EST PAS FORCEMENT CELUI QUI FAIT TOURNER LE SERVEUR, et c'est la
-# deuxieme surprise de l'installation apres les DLL. `serveur.py` n'a aucune
+# deuxieme surprise de l'installation apres les DLL. `web_antenna.py` n'a aucune
 # dependance : il demarre parfaitement sous le Python du systeme. openEMS,
 # numpy et h5py, eux, sont presque toujours dans un environnement virtuel a
-# cote — et un `python serveur.py` lance depuis une invite ordinaire
+# cote — et un `python web_antenna.py` lance depuis une invite ordinaire
 # n'utiliserait alors PAS cet environnement. Le bouton « Lancer » resterait
 # eteint sur un poste ou tout est pourtant installe.
 #
@@ -185,7 +185,7 @@ def etat(refaire=False):
             "openEMS et CSXCAD s'installent en deux morceaux : le module "
             "Python (« pip install openEMS CSXCAD ») et les binaires. Sur "
             "Windows, posez l'archive binaire dans un dossier « openEMS » a "
-            "cote de serveur.py : ce module y cherche CSXCAD.dll et l'ajoute "
+            "cote de web_antenna.py : ce module y cherche CSXCAD.dll et l'ajoute "
             "au chemin de recherche lui-meme.")
         # LE CAS LE PLUS FREQUENT, ET LE PLUS DEROUTANT : tout est installe,
         # mais dans un environnement virtuel que le Python du serveur ne voit
@@ -199,7 +199,7 @@ def etat(refaire=False):
         else:
             conseil += ("\nUn seul interpreteur a ete essaye (%s) : si openEMS "
                         "vit dans un environnement virtuel, posez-le dans un "
-                        "dossier « env » a cote de serveur.py, ou lancez le "
+                        "dossier « env » a cote de web_antenna.py, ou lancez le "
                         "serveur avec le python de cet environnement."
                         % sys.executable)
         out["conseil"] = conseil
@@ -657,7 +657,7 @@ class Tache(object):
             return ("Les liaisons Python d'openEMS n'ont pas pu etre chargees. "
                     "Verifiez que le dossier openEMS/ contient bien les DLL "
                     "(CSXCAD.dll, openEMS.dll) et qu'il est a cote de "
-                    "serveur.py.")
+                    "web_antenna.py.")
         if "MemoryError" in texte or "bad_alloc" in texte:
             return ("Memoire insuffisante pour ce maillage. Elargissez le pas "
                     "de maillage ou reduisez la bande vers le haut : le "
@@ -1483,7 +1483,7 @@ def _dossier_de(ident):
     bien autre chose que ParaView.
 
     LA LISTE DES TACHES NE SURVIT PAS AU SERVEUR, LES DOSSIERS SI. `_TACHES`
-    est un dictionnaire en memoire : redemarrer serveur.py le vide, et la page
+    est un dictionnaire en memoire : redemarrer web_antenna.py le vide, et la page
     restee ouverte garde pourtant l'identifiant de son calcul. Refuser alors
     par « cette simulation n'existe plus » serait faux deux fois — elle existe,
     ses fichiers sont la, et le message accuserait un oubli au bout de douze

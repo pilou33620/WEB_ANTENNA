@@ -522,7 +522,7 @@ function prjDate(ms){
 function prjEteint(){
   return '<p class="intro">Les projets demandent le serveur : c\'est lui '+
     'qui écrit sur le disque. '+aEsc(PRJ.erreur||"Il ne répond pas.")+'</p>'+
-    '<p class="note">Lancez <code>python serveur.py</code> depuis le dossier '+
+    '<p class="note">Lancez <code>python web_antenna.py</code> depuis le dossier '+
     'du dépôt, puis ouvrez cette page par l\'adresse qu\'il affiche. Sans lui, '+
     'le travail se garde par « Exporter .json » et se rouvre par '+
     '« Ouvrir un fichier ».</p>';

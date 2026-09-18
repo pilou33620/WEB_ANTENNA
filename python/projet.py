@@ -32,10 +32,19 @@
 #   Le serveur, lui, est deja la, tourne sur le poste, et c'est deja lui qui
 #   ecrit les .vtr.
 #
-#   CE QUE CE MODULE NE FAIT PAS : il n'efface rien. Aucune route de
+#   CE QUE CE MODULE NE FAIT PAS : il n'efface pas de PROJET. Aucune route de
 #   suppression, aucun ecrasement d'un dossier qui n'est pas un projet. Un
 #   outil qui ecrit dans un dossier choisi a la main par l'utilisateur ne
 #   doit pas avoir de moyen d'en detruire le contenu par une requete.
+#
+#   LA SEULE EXCEPTION, ET ELLE EST BORNEE : `enregistrer` retire `carte.json`
+#   ou `resultats.json` quand la charge les porte a `null` — c'est ainsi qu'un
+#   projet repart d'un dessin apres avoir ete ouvert sur un fichier, et il faut
+#   bien que la carte d'hier s'en aille. Absent et nul ne se confondent donc
+#   pas : ABSENT veut dire « inchange, n'y touche pas », NUL veut dire « il n'y
+#   en a plus ». Cela ne porte que sur ces deux fichiers-la, nommes en dur, et
+#   dans un dossier dont le nom a passe `_verifier_nom` et la comparaison a la
+#   racine. Rien d'autre n'est jamais retire.
 #
 # Fonctions : etat, definir_racine, liste, ouvrir, enregistrer, ouvert,
 #            fermer, dossier_calculs, ouvrir_explorateur,

@@ -189,13 +189,34 @@ function ant3dMaj(){
   ant3dPoserCamera();
 }
 
+/* TOUT CE QUI A ÉTÉ ALLOUÉ SUR LA CARTE GRAPHIQUE EST RENDU, Y COMPRIS CE QUI
+   N'EST PAS UN MAILLAGE. Un `ArrowHelper` — la flèche d'excitation d'un port,
+   les trois axes du trièdre — est un GROUPE : sa tige et son cône sont des
+   ENFANTS, et ne portent eux-mêmes ni `geometry` ni `material`. La boucle
+   d'avant ne dépilait que le premier niveau : les flèches n'étaient donc
+   jamais libérées, et la scène est refaite à chaque changement d'empreinte du
+   modèle. On descend l'arbre.
+
+   UNE GÉOMÉTRIE PARTAGÉE N'EST LIBÉRÉE QU'UNE FOIS. Les vias se dessinent
+   tous sur le même cylindre unité (voir `ant3dVias`) : le libérer une fois
+   par via redéclencherait autant de fois l'événement que le moteur de rendu
+   écoute. Un ensemble de ce qu'on a déjà vu suffit. */
 function ant3dVider(){
   const r=ANT3D.racine;
   if(!r)return;
+  const vus=new Set();
+  const rendre=function(o){
+    if(o.geometry&&!vus.has(o.geometry)){ vus.add(o.geometry); o.geometry.dispose(); }
+    const m=o.material;
+    if(m){
+      for(const um of (Array.isArray(m)?m:[m]))
+        if(um&&!vus.has(um)){ vus.add(um); um.dispose(); }
+    }
+  };
   while(r.children.length){
     const o=r.children.pop();
-    if(o.geometry)o.geometry.dispose();
-    if(o.material)o.material.dispose();
+    if(typeof o.traverse==="function")o.traverse(rendre);
+    else rendre(o);
   }
 }
 
@@ -251,15 +272,25 @@ function ant3dSubstrat(m,T){
   }
 }
 
+/* UNE SEULE GÉOMÉTRIE POUR TOUS LES VIAS, ET CETTE FOIS C'EST VRAI. Le
+   commentaire l'annonçait déjà, le code en fabriquait une par via : mille
+   vias faisaient mille géométries de douze faces, alors qu'une carte à mille
+   vias est un cas ordinaire.
+
+   CE QUI L'EMPÊCHAIT est que deux vias n'ont ni le même rayon ni la même
+   portée. Un cylindre UNITÉ — rayon 1, hauteur 1 — et une échelle par via le
+   règlent : `scale` s'applique dans le repère local, donc avant la rotation
+   qui couche l'axe, et `scale.y` reste bien le long du cylindre. C'est le
+   nombre d'OBJETS qui coûte à l'affichage, mais c'est le nombre de
+   géométries qui coûte à la mémoire de la carte graphique — et c'était le
+   second qu'on payait pour rien. */
 function ant3dVias(m,T){
   if(!m.vias.length)return;
   const mat=new THREE.MeshLambertMaterial({color:0xc0c6cc});
-  /* Une seule géométrie pour tous les vias, réutilisée : mille cylindres de
-     douze faces, c'est douze mille triangles — c'est le nombre d'OBJETS qui
-     coûte, pas celui des faces. */
+  const geo=new THREE.CylinderGeometry(1,1,1,12);
   for(const v of m.vias){
-    const geo=new THREE.CylinderGeometry(v.r,v.r,Math.max(1e-4,v.z1-v.z0),12);
     const mesh=new THREE.Mesh(geo,mat);
+    mesh.scale.set(v.r,Math.max(1e-4,v.z1-v.z0),v.r);
     mesh.rotation.x=Math.PI/2;            // le cylindre de three.js est selon y
     const p=T(v.x,v.y,(v.z0+v.z1)/2);
     mesh.position.set(p[0],p[1],p[2]);

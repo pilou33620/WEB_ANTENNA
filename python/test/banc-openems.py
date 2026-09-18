@@ -128,6 +128,31 @@ verifie("en mode volume, il fait substrat + 2 x cuivre",
         abs(mv["z_haut"] - (2 * 0.035 + H)) < 1e-9,
         "z_haut = %s" % mv["z_haut"])
 
+# L'ENERGIE D'ARRET, ET POURQUOI ELLE A SA PLACE DANS UN BANC. Elle est
+# NEGATIVE — des decibels sous le maximum —, et la seule fonction de lecture
+# qui rendait son defaut sur toute valeur <= 0 l'a rendue muette pendant
+# longtemps : le document disait -50 dB, le modele et le script disaient -40.
+# Rien ne le montrait, puisque le calcul tournait et rendait une courbe. Le
+# document d'essai porte -30 dB : c'est ce nombre-la qu'on relit.
+verifie("l'energie d'arret saisie est celle qui part au solveur",
+        abs(m["arret"]["energie_dB"] + 30.0) < 1e-9,
+        "energie_dB = %s, attendu -30" % m["arret"]["energie_dB"])
+verifie("une energie plus basse est suivie, et non ramenee au defaut",
+        abs(openems_modele.normaliser(
+            document(arret={"energie": -55, "nmax": 20000}))
+            ["arret"]["energie_dB"] + 55.0) < 1e-9)
+verifie("le signe est normalise : 50 et -50 disent la meme chose",
+        abs(openems_modele.normaliser(
+            document(arret={"energie": 50, "nmax": 20000}))
+            ["arret"]["energie_dB"] + 50.0) < 1e-9)
+verifie("une energie absente retombe sur le defaut",
+        abs(openems_modele.normaliser(document(arret={"nmax": 20000}))
+            ["arret"]["energie_dB"] - openems_modele.ENERGIE_DEFAUT) < 1e-9)
+verifie("une energie nulle aussi : elle n'arreterait jamais rien",
+        abs(openems_modele.normaliser(
+            document(arret={"energie": 0, "nmax": 20000}))
+            ["arret"]["energie_dB"] - openems_modele.ENERGIE_DEFAUT) < 1e-9)
+
 verifie("le port occupe le dielectrique et non le metal",
         abs(m["port"]["z1"] - cu["BOTTOM"]["z1"]) < 1e-9
         and abs(m["port"]["z2"] - cu["TOP"]["z0"]) < 1e-9,

@@ -1,7 +1,7 @@
 "use strict";
 /* =============================================================================
    Antenne openEMS — 13-assistant.js
-   Les six étapes, et ce qu'elles refusent de laisser passer.
+   Les sept étapes, et ce qu'elles refusent de laisser passer.
 
    CE QUE CET ASSISTANT EST, ET CE QU'IL N'EST PAS. Il n'est pas un habillage
    de formulaire : chacune de ses étapes existe parce qu'une simulation FDTD
@@ -53,6 +53,13 @@ function antLongModele(v,dec){
 let ANT_ATTENTE=0;
 
 function antMaj(immediat){
+  /* L'ÂGE VIEILLIT ICI, ET TOUT DE SUITE — pas dans le travail différé. Les
+     appelants modifient l'état PUIS appellent `antMaj` ; ce qui est en cache
+     décrit donc déjà l'état d'avant au moment où l'on entre. Attendre les
+     220 ms du délai laisserait la surimpression repeindre l'ancien cuivre
+     pendant ce temps, c'est-à-dire exactement pendant qu'on regarde si le
+     clic a pris. Voir `ANT_AGE` dans 10-etat.js. */
+  antVieillir();
   clearTimeout(ANT_ATTENTE);
   const faire=async function(){
     if(!V.modele)return;
@@ -467,8 +474,14 @@ ANT_LIER.empilage=function(box){
   };
 };
 
+/* L'ÉTAPE 3 — « Autour » — N'EST PAS DANS CE FICHIER, et le saut de numéro
+   est le seul endroit où cela se voit. Elle s'enregistre elle-même dans
+   `ANT_CORPS` / `ANT_LIER` depuis 17-objets.js, qui est chargé après celui-ci :
+   l'assistant n'a rien à savoir de ce qu'elle contient, et c'est ainsi qu'une
+   étape s'ajoute sans toucher au squelette. */
+
 /* ==========================================================================
-   Étape 3 — la bande
+   Étape 4 — la bande
    ========================================================================== */
 ANT_CORPS.bande=function(){
   const k=antKf();
@@ -540,7 +553,7 @@ ANT_LIER.bande=function(box){
 };
 
 /* ==========================================================================
-   Étape 4 — le port
+   Étape 5 — le port
    ========================================================================== */
 ANT_CORPS.port=function(){
   const cuivres=LT.cu.map(function(e){ return {nom:e.nom}; });
@@ -554,22 +567,32 @@ ANT_CORPS.port=function(){
   const z0=antCoaxZ0(p);
   const ecart=p.R>0?100*Math.abs(z0-p.R)/p.R:0;
 
-  /* LES ONGLETS DE PORTS. Un seul port : rien ne s'affiche, et l'étape a
-     exactement l'allure qu'elle avait. Deux : la liste apparaît, et avec elle
-     la question qui n'existait pas avant — lequel excite. */
-  const onglets=ANT.ports.length>1||ANT.ports.length<8 ? `
-<div class="ports-barre">
-  ${ANT.ports.map(function(q,i){
+  /* LES ONGLETS DE PORTS. Un seul port : pas de liste — il n'y a rien à
+     choisir, et un onglet unique laisserait croire le contraire. Deux : la
+     liste apparaît, et avec elle la question qui n'existait pas avant —
+     lequel excite.
+
+     LE BOUTON « + PORT », LUI, RESTE. La condition disait d'abord
+     `length>1 || length<8`, qui est vraie pour tout nombre de ports entre un
+     et huit : la barre s'affichait toujours, à l'exact inverse de ce que ce
+     commentaire annonçait. La corriger en `length>1` aurait enterré le seul
+     chemin qui mène au second port — on n'aurait plus jamais eu de S₂₁. Les
+     deux morceaux se règlent donc séparément : c'est la LISTE qui naît au
+     second port, pas la barre. */
+  const pluriel=ANT.ports.length>1;
+  const onglets=`
+<div class="ports-barre${pluriel?"":" seule"}">
+  ${pluriel?ANT.ports.map(function(q,i){
     return '<button class="jeton'+(i===ANT.portActif?" on":"")+
       (q.excite?" excite":"")+'" data-port="'+i+'" title="'+
       (q.excite?"Ce port excite : c\'est lui qui donne le S₁₁"
                :"Ce port est en charge : il mesure, il n\'émet pas")+'">'+
       (q.excite?"⚡ ":"")+'port '+(i+1)+
       (q.type==="coaxial"?" ⌾":"")+
-      (ANT.ports.length>1?' <b data-retirer="'+i+'">✕</b>':'')+'</button>';
-  }).join("")}
+      ' <b data-retirer="'+i+'">✕</b></button>';
+  }).join(""):""}
   ${ANT.ports.length<8?'<button class="jeton plus" id="bPortPlus" title="Un second port donne le S₂₁ : le couplage entre deux antennes, qui ne se déduit d\'aucun S₁₁">+ port</button>':""}
-</div>`:"";
+</div>`;
 
   return `
 <p class="intro">Le port est l'endroit où l'onde entre, et c'est lui qui donne
@@ -792,7 +815,7 @@ ANT_LIER.port=function(box){
 };
 
 /* ==========================================================================
-   Étape 5 — la boîte
+   Étape 6 — la boîte
    ========================================================================== */
 ANT_CORPS.boite=function(){
   const m=ANT.modele;
@@ -889,7 +912,7 @@ ANT_LIER.boite=function(box){
 };
 
 /* ==========================================================================
-   Étape 6 — le calcul
+   Étape 7 — le calcul
    ========================================================================== */
 ANT_CORPS.calcul=function(){
   const e=ANT.etatServeur;

@@ -398,7 +398,7 @@ function antVerdictTexte(r,bp,nf){
   if(!nf)
     dits.push({rang:"info",t:"Le diagramme de rayonnement n'a pas été calculé : "+
       "le S₁₁ seul ne dit rien du rendement ni de la direction d'émission. "+
-      "Cochez « Calculer le diagramme de rayonnement » à l'étape 6."});
+      "Cochez « Calculer le diagramme de rayonnement » à l'étape 7."});
   if(!dits.length)return "";
   return '<div class="avis">'+dits.map(d=>
     '<div class="av '+d.rang+'"><span>'+aEsc(d.t)+'</span></div>').join("")+'</div>';

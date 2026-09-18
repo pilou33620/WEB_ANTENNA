@@ -28,7 +28,7 @@ L'outil nécessite trois éléments essentiels :
 
 ```bash
 # Démarrer le serveur (détecte et bascule automatiquement dans env/ s'il existe)
-python serveur.py
+python web_antenna.py
 ```
 
 La page s'ouvre toute seule dans votre navigateur. **Le port affiché au démarrage n'est pas
@@ -74,21 +74,21 @@ serveur qui **démarre en annonçant une adresse qui n'est pas la sienne** :
 
 ### Quel Python
 
-`serveur.py` n'a **aucune dépendance** : il démarre sous le Python du système.
+`web_antenna.py` n'a **aucune dépendance** : il démarre sous le Python du système.
 openEMS, numpy et h5py, eux, vivent presque toujours dans un environnement
-virtuel à côté — et un `python serveur.py` lancé depuis une invite ordinaire
+virtuel à côté — et un `python web_antenna.py` lancé depuis une invite ordinaire
 ne l'utiliserait pas : le bouton « Lancer » resterait éteint sur un poste où
 tout est pourtant installé.
 
 Le serveur cherche donc l'interpréteur qui sait **vraiment** importer CSXCAD :
 celui qui le fait tourner d'abord, puis `env/`, `.venv/`, `venv/` à côté de
-`serveur.py`. Celui qui est retenu est annoncé au démarrage, et la liste des
+`web_antenna.py`. Celui qui est retenu est annoncé au démarrage, et la liste des
 essais figure dans l'état renvoyé à la page.
 
 ## Arborescence
 
 ```
-├── serveur.py              le serveur : trois choses qu'un navigateur ne sait pas faire
+├── web_antenna.py          le serveur : trois choses qu'un navigateur ne sait pas faire
 ├── index.html              la page
 ├── css/
 │   ├── theme.css           le thème « dashboard nocturne »
@@ -116,7 +116,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── openems_modele.py   le document relu, vérifié, complété, maillé, chiffré
 │   ├── openems_script.py   le modèle → un script Python autonome
 │   ├── openems_run.py      l'exécution en sous-processus, et son suivi
-│   ├── openems_antenne.py  la façade : les seules fonctions que serveur.py connaît
+│   ├── openems_antenne.py  la façade : les seules fonctions que web_antenna.py connaît
 │   ├── projet.py           les projets sur le disque : où on les range, et comment on les rouvre
 │   └── test/banc-openems.py
 ├── test/
@@ -148,12 +148,14 @@ Et une quatrième, minuscule, qui tient à la même raison que la troisième :
 
 4. **relire la clé du mode IA.** `GET /api/ia/cle` rend ce qu'il trouve dans
    `api_key_free_ia_studio.txt` ou dans `GEMINI_API_KEY`. Il ne la garde pas,
-   ne s'en sert pas, et n'appelle personne avec — voir « Le mode IA ».
+   ne s'en sert pas, et n'appelle personne avec — voir « Le mode IA ». C'est
+   la **seule route réservée à la boucle locale** : elle rend un secret
+   facturable, et ce serveur écoute le réseau local par défaut.
 
 Tout le reste — l'affichage, la désignation du cuivre, l'assistant, la 3D, les
 courbes — est dans le navigateur et n'a besoin de personne.
 
-`serveur.py` n'a **aucune dépendance externe** : bibliothèque standard
+`web_antenna.py` n'a **aucune dépendance externe** : bibliothèque standard
 seulement.
 
 ## Les projets — choisir où ranger, et reprendre où l'on s'était arrêté
@@ -903,6 +905,17 @@ Elle vient du poste : `GET /api/ia/cle` rend celle que le serveur trouve dans
 `api_key_free_ia_studio.txt` à la racine du dépôt, ou dans la variable
 d'environnement `GEMINI_API_KEY`. Le fichier est dans `.gitignore`.
 
+**Et elle ne sort pas de ce poste.** C'est la seule route qui exige une
+adresse de boucle locale, et la raison tient en une phrase : le contrôle
+d'origine arrête les *pages*, pas les *clients*. Une page ouverte sur
+`evil.com` ne peut pas lire la réponse d'une route d'ici — il n'y a pas
+d'en-tête `Access-Control-Allow-Origin` pour elle — mais un `curl` lancé
+depuis n'importe quelle machine du réseau local n'envoie aucun `Origin`, et
+rien ne le distinguait du navigateur de la tablette. C'est délibéré pour les
+autres routes ; ça ne l'était pas pour une clé personnelle et facturable.
+Depuis le réseau, la page demande donc sa clé comme sur un poste qui n'en a
+pas — et elle ne vivra que dans cet onglet-là.
+
 Sans elle, la barre de connexion la demande. Elle ne vit alors qu'**en mémoire
 vive et dans le `sessionStorage` de cet onglet** : ni stockage local, ni
 cookie, ni projet — et **fermer le panneau l'efface**, par le ✕, par Alt+I, par
@@ -1259,7 +1272,7 @@ L'archive officielle openEMS pour Windows contient **à la fois** les binaires C
 1. **Télécharger l'archive binaire openEMS pour Windows (64-bit)** :
    - Disponible sur le site officiel : [openems.de/download](https://www.openems.de/download/)
    - Ou depuis les releases GitHub du projet : [openEMS-project Releases](https://github.com/thliebig/openEMS-project/releases) (ex. `openEMS-v0.0.36-win64.zip`)
-2. **Extraire l'archive** dans un dossier nommé `openEMS/` placé **directement à la racine du projet** (à côté de `serveur.py`).
+2. **Extraire l'archive** dans un dossier nommé `openEMS/` placé **directement à la racine du projet** (à côté de `web_antenna.py`).
 3. **Vérifier l'arborescence** : le dossier `openEMS/` doit contenir directement :
    ```
    openEMS/
@@ -1296,7 +1309,7 @@ py -3.10 -m venv env
 pip install -r requirements.txt
 ```
 
-> **Bascule automatique dans `env/` :** `serveur.py` détecte automatiquement si vous le lancez depuis une invite ordinaire avec le Python système. S'il trouve `env/` à la racine, il se relance de lui-même avec l'interpréteur de l'environnement virtuel.
+> **Bascule automatique dans `env/` :** `web_antenna.py` détecte automatiquement si vous le lancez depuis une invite ordinaire avec le Python système. S'il trouve `env/` à la racine, il se relance de lui-même avec l'interpréteur de l'environnement virtuel.
 
 ---
 

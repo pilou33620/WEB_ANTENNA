@@ -183,7 +183,45 @@ function antPadEnPoly(q){
    sautent ce qui y est déjà entré : le même polygone deux fois au même
    endroit, ce sont des arêtes en double à mailler, pour rien.
 */
+/* LE RÉSULTAT EST RETENU, PARCE QU'IL EST DEMANDÉ BIEN PLUS SOUVENT QU'IL NE
+   CHANGE. Cinq endroits l'appellent, et l'un d'eux est la surimpression de la
+   carte (15-overlay2d.js) — c'est-à-dire le chemin de `peindre`, donc CHAQUE
+   image d'un déplacement ou d'un zoom. Sur une carte de fabrication dont le
+   plan de masse porte mille sommets, c'était quelques milliers d'allocations
+   par image pour redonner exactement le même tableau.
+
+   DEUX CLÉS, ET IL EN FALLAIT DEUX. L'âge de l'état (`ANT_AGE`, voir
+   10-etat.js) dit qu'une décision a changé — un net désigné, une couche
+   décochée. L'identité de `V.modele` dit que la CARTE a changé, ce que l'âge
+   ne verrait pas : le balayage recharge un modèle par point sans passer par
+   `antMaj`, et rendre là le cuivre du point précédent enverrait N documents
+   identiques au solveur — N courbes superposées qu'on prendrait pour un
+   résultat. C'est exactement la faute que 24-balayage.js existe pour éviter.
+
+   EFFET DE BORD RANGÉ AU PASSAGE. Cette fonction ÉCRIT `ANT.viasSupposes`,
+   que l'étape « Le cuivre » affiche. Il était donc recalculé pendant un
+   repaint : un état de l'assistant que le zoom pouvait toucher. Il ne bouge
+   plus qu'avec le résultat qu'il décrit.
+
+   CE QUI EST RENDU N'EST PAS UNE COPIE : les cinq appelants le lisent, aucun
+   ne le modifie, et en faire une copie profonde coûterait ce qu'on vient
+   d'économiser. Un appelant qui voudrait y toucher doit copier ce qu'il prend.
+*/
+const ANT_CUIVRE_CACHE={age:-1, modele:null, valeur:null};
+
 function antCuivreDuModele(){
+  if(ANT_CUIVRE_CACHE.valeur &&
+     ANT_CUIVRE_CACHE.age===ANT_AGE &&
+     ANT_CUIVRE_CACHE.modele===V.modele)
+    return ANT_CUIVRE_CACHE.valeur;
+  const valeur=antCuivreCalcul();
+  ANT_CUIVRE_CACHE.age=ANT_AGE;
+  ANT_CUIVRE_CACHE.modele=V.modele;
+  ANT_CUIVRE_CACHE.valeur=valeur;
+  return valeur;
+}
+
+function antCuivreCalcul(){
   const blocs=new Map();          // index de couche -> {couche, polys}
   const compte={pistes:0,arcs:0,plans:0,pads:0,fins:0};
 

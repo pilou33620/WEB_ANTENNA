@@ -214,6 +214,29 @@ verifie("une seconde plage vide fait retomber sur un seul axe",
         antBalayageSpec().croise===false);
 ANT.balayage.croise=false;
 
+/* OUVRIR UN AUTRE FICHIER REMET LE BALAYAGE A NEUF — LES DEUX AXES. Le second
+   avait ete oublie, et l'oubli ne se voyait pas : `croise` repartait a
+   `undefined`, donc faux, donc le bloc croise ne s'affichait pas. Il ne se
+   serait vu qu'au premier « Croiser » coche apres une seconde ouverture, sous
+   la forme de trois champs de saisie nes a « undefined ». Un etat a moitie
+   remis a neuf est pire qu'un etat garde : on ne sait plus lequel on lit. */
+ANT.balayage={actif:true, source:"p0.x", nom:"port — X", min:1, max:9, pas:1,
+              croise:true, source2:"p0.y", min2:2, max2:8, pas2:2,
+              points:[{etiquette:"vieux"}], devis:{cellules:1}};
+antRaz();
+verifie("ouvrir une autre carte remet le balayage a neuf, second axe compris",
+        ["actif","source","nom","min","max","pas","croise","source2",
+         "min2","max2","pas2","points","devis"]
+          .every(k=>k in ANT.balayage),
+        Object.keys(ANT.balayage).join());
+verifie("et aucun de ses champs ne reste indefini",
+        Object.keys(ANT.balayage).every(k=>ANT.balayage[k]!==undefined),
+        Object.keys(ANT.balayage)
+              .filter(k=>ANT.balayage[k]===undefined).join() || "(aucun)");
+verifie("les deux plages sont bien vides",
+        ANT.balayage.min2===0&&ANT.balayage.max2===0&&ANT.balayage.pas2===0&&
+        ANT.balayage.croise===false&&ANT.balayage.source2==="");
+
 console.log("");
 console.log("3. Les unites du mode conception");
 global.CON={unite:"mm"};
@@ -1202,6 +1225,21 @@ verifie("la consigne liste tous les chemins de la liste blanche, et eux seuls",
 verifie("le texte du modele est echappe avant d'etre rendu",
         iaMd("<img src=x onerror=alert(1)>").indexOf("<img")<0);
 
+/* UN BLOC DE CODE EST RENDU TEL QUEL, Y COMPRIS SES DOLLARS. Les blocs sont
+   mis de cote pendant le rendu puis reinseres a leur place ; tant que la
+   reinsertion se faisait par une CHAINE, `$&`, `$'` et « $-accent-grave » y
+   etaient lus comme des motifs de remplacement — et un bloc de shell ou de
+   perl se reecrivait tout seul. Ce n'etait pas une faille, tout est deja
+   echappe a ce stade ; c'etait un bloc de code qui n'etait plus celui qu'on
+   avait ecrit, ce qui est le pire defaut possible pour un bloc de code. */
+const IA_D=iaMd("Avant.\n```sh\necho \"$& et $' et $\\u0060\"\n```\nApres.");
+verifie("un bloc de code garde ses dollars, sans se reecrire",
+        IA_D.indexOf("$&amp;")>=0&&IA_D.indexOf("$&#39;")>=0&&
+        IA_D.indexOf("CODEBLOCK")<0,
+        IA_D.replace(/\s+/g," ").slice(0,160));
+verifie("et le texte autour du bloc est intact",
+        IA_D.indexOf("Avant.")>=0&&IA_D.indexOf("Apres.")>=0);
+
 /* -- les blocs d'action deviennent des cartes ---------------------------- */
 /* Le rendu est celui de WEB_CAO : un bloc ```action devient une carte, et un
    bloc casse est ignore SANS emporter la reponse qui l'entoure. */
@@ -1355,7 +1393,71 @@ antBasculerVueMaillage();
 verifie("antBasculerVueMaillage() inverse l'etat",
         ANT.vueMaillage === false);
 
+console.log("");
+console.log("21. Le cuivre retenu, et pourquoi il est garde en cache");
+/* CE QUI S'EPROUVE ICI N'EST PAS LA GEOMETRIE, C'EST LA DISCIPLINE DU CACHE.
+   `antCuivreDuModele` epaissit chaque polyligne de l'antenne en rectangles et
+   en octogones : c'est le calcul le plus lourd de la page, et la surimpression
+   de la carte l'appelle a chaque image d'un deplacement ou d'un zoom. Il est
+   donc retenu — et c'est precisement une mise en cache qui peut rendre FAUX
+   un outil qui etait seulement lent.
 
+   Les trois verifications ci-dessous sont les trois facons de se tromper :
+   ne pas retenir (on n'a rien gagne), retenir trop longtemps apres un geste
+   (l'assistant montre le cuivre d'avant), et surtout retenir d'une CARTE a
+   l'autre — ce dernier cas est celui du balayage, qui recharge un modele par
+   point sans passer par `antMaj` : rendre la le cuivre du point precedent
+   enverrait N documents identiques au solveur, et N courbes superposees
+   qu'on prendrait pour un resultat.
+
+   On compte les calculs plutot que de dresser une carte : c'est la regle de
+   rafraichissement qu'on met a l'epreuve, pas l'epaississement des traits —
+   celui-la se lit dans le modele que le banc Python normalise. */
+charger("11-geometrie.js");
+const vraiCalcul = global.antCuivreCalcul;
+let calculs = 0;
+global.antCuivreCalcul = function(){
+  calculs++;
+  return {blocs:[], vias:[], compte:{pistes:0,arcs:0,plans:0,pads:0,fins:0}};
+};
+
+V.modele = {marque:"carte A"};
+antVieillir();
+const c1 = antCuivreDuModele();
+const c2 = antCuivreDuModele();
+verifie("deux appels de suite ne calculent qu'une fois",
+        calculs === 1, calculs + " calcul(s)");
+verifie("et rendent le meme objet, sans le recopier",
+        c1 === c2);
+
+antVieillir();
+antCuivreDuModele();
+verifie("un geste de l'utilisateur fait recalculer",
+        calculs === 2, calculs + " calcul(s)");
+
+/* LE CAS DU BALAYAGE, ET C'EST LE SEUL QUI RENDRAIT L'OUTIL FAUX. `antMaj`
+   n'est pas appele : seul `V.modele` a change, comme le fait `mdlCharger`
+   dans `balDocumentPour`. */
+V.modele = {marque:"carte B"};
+antCuivreDuModele();
+verifie("une carte rechargee fait recalculer, meme sans geste",
+        calculs === 3, calculs + " calcul(s)");
+antCuivreDuModele();
+verifie("et la nouvelle carte est retenue a son tour",
+        calculs === 3, calculs + " calcul(s)");
+
+/* CE QUE CE BANC NE PEUT PAS PROUVER, ET OU CELA SE LIT. Le troisieme maillon
+   est que `antMaj` — le passage oblige apres chaque modification acceptee —
+   appelle bien `antVieillir()`, et qu'il le fasse TOUT DE SUITE plutot que
+   dans son travail differe de 220 ms : sinon la carte repeindrait l'ancien
+   cuivre pendant qu'on regarde si le clic a pris. `antMaj` vit dans
+   13-assistant.js, qui demande un DOM et que ce banc remplace par un bouchon
+   (voir plus haut) ; l'appel est donc a relire la-bas, en premiere ligne de
+   la fonction. Ce qui s'eprouve ici est la regle de rafraichissement, qui est
+   la partie ou l'on se trompe. */
+
+global.antCuivreCalcul = vraiCalcul;
+V.modele = null;
 
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")

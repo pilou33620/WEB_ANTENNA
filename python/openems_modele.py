@@ -21,7 +21,7 @@
 #   millions de cellules, compte deux heures ». Sur un poste ou les DLL
 #   d'openEMS manquent, ce module fonctionne quand meme, et l'outil reste
 #   utilisable pour preparer et exporter le script. C'est la meme tolerance
-#   que serveur.py applique a ses solveurs.
+#   que web_antenna.py applique a ses solveurs.
 #
 # Fonctions : etat, normaliser, ErreurModele
 # ==========================================================================
@@ -1905,7 +1905,23 @@ def normaliser(doc):
                        "lambda_min_mm": C0 / bande["f2"] * 1000.0,
                        "lambda_max_mm": C0 / bande["f1"] * 1000.0},
         "arret": {
-            "energie_dB": -abs(_nb_pos(arret.get("energie"), abs(ENERGIE_DEFAUT))),
+            # L'ENERGIE D'ARRET EST NEGATIVE, ET C'EST TOUT LE PIEGE. Elle
+            # s'ecrit en decibels sous le maximum : -40 dB, -50 dB pour un
+            # resonateur a fort Q. La page l'envoie donc toujours negative
+            # (voir `ANT.arret.energie = -Math.abs(v)` dans 13-assistant.js).
+            # La passer a `_nb_pos`, qui rend son defaut des que la valeur est
+            # <= 0, rendait le champ MUET : toute saisie retombait sur -40, y
+            # compris le -50 dB que l'interface conseille elle-meme. C'est
+            # `_nb` qu'il faut, et le `or` ne couvre que le zero — une bande
+            # d'arret nulle n'arreterait jamais rien.
+            #
+            # LE SIGNE EST NORMALISE ET NON EXIGE : ecrire 50 ou -50 veut dire
+            # la meme chose pour qui parle de « cinquante decibels sous le
+            # maximum », et refuser l'un des deux ne protegerait de rien.
+            # La VALEUR, elle, n'est pas bornee : une valeur saisie reste une
+            # valeur saisie, comme pour le pas de maillage plus haut.
+            "energie_dB": -abs(_nb(arret.get("energie"), ENERGIE_DEFAUT)
+                               or ENERGIE_DEFAUT),
             "nmax": int(_nb_pos(arret.get("nmax"), NMAX_DEFAUT)),
         },
         "nf2ff": {

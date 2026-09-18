@@ -12,12 +12,12 @@
 
    L'adresse du serveur est cherchée dans le même ordre que pour la recherche
    de composants :
-     1. l'origine qui sert la page (cas normal : c'est serveur.py) ;
-     2. le même hôte sur le port par défaut de serveur.py ;
+     1. l'origine qui sert la page (cas normal : c'est web_antenna.py) ;
+     2. le même hôte sur le port par défaut de web_antenna.py ;
      3. http://127.0.0.1:8000 (page ouverte en file://).
    ============================================================================= */
 
-const API_PORT=8000;                   // DEFAULT_PORT de serveur.py
+const API_PORT=8000;                   // DEFAULT_PORT de web_antenna.py
 const API_ROUTE="/api/ipc2581";
 
 let API_BASE=null;                     // racine retenue, "" = même origine
@@ -66,7 +66,7 @@ async function apiConnecter(){
     }
   }
   throw new Error("Aucun serveur pour lire l'IPC-2581.\n\n"+
-    "Le parseur est en Python : lancez « python serveur.py » depuis le dossier "+
+    "Le parseur est en Python : lancez « python web_antenna.py » depuis le dossier "+
     "du dépôt, puis ouvrez cette page par l'adresse qu'il affiche.\n\n"+
     "Tentatives :\n  "+essais.join("\n  "));
 }

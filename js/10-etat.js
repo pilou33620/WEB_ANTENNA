@@ -16,7 +16,7 @@
    dupliquer ici aurait fait deux vérités pour une seule grandeur.
    ============================================================================= */
 
-/* Les six étapes, dans l'ordre où les décisions se prennent. Cet ordre n'est
+/* Les sept étapes, dans l'ordre où les décisions se prennent. Cet ordre n'est
    pas décoratif : on ne peut pas poser un port avant de savoir entre quelles
    couches il va, ni dimensionner une boîte d'air avant de connaître la bande
    — c'est la longueur d'onde la plus basse qui donne la marge. */
@@ -80,7 +80,7 @@ const ANT={
      un radôme. Saisis à la main, en coordonnées, dans l'unité du fichier. */
   primitives:[],
 
-  /* -- 3. la bande ------------------------------------------------------- */
+  /* -- 4. la bande ------------------------------------------------------- */
   bande:{f1:2.4e9, f2:2.5e9, n:401, fcible:2.45e9},
   /* L'unité de saisie des fréquences. Elle n'existe pas par confort : écrire
      « 868 » dans un champ étiqueté GHz est une faute qui ne se voit pas, et
@@ -88,7 +88,7 @@ const ANT={
      fois trop haute et un résultat qui a l'air d'en être un. */
   uniteF:"GHz",
 
-  /* -- 4. les ports ------------------------------------------------------ */
+  /* -- 5. les ports ------------------------------------------------------ */
   /* UN TABLEAU, ET NON UN PORT. Un seul port donne le S₁₁ ; deux donnent en
      plus le S₂₁, c'est-à-dire la seule grandeur qui dise si deux antennes se
      gênent. Elle ne se déduit d'aucun S₁₁, et c'est elle qui décide du sort
@@ -112,13 +112,13 @@ const ANT={
      l'étape 1 : « vide » ne veut pas dire « traversant ». */
   viasSupposes:0,
 
-  /* -- 5. la boîte ------------------------------------------------------- */
+  /* -- 6. la boîte ------------------------------------------------------- */
   /* Zéro veut dire « laisse l'assistant décider » : le serveur remplace alors
      par le quart de la longueur d'onde basse et le dit. */
   boite:{mx:0, my:0, mz_haut:0, mz_bas:0, pml:8},
   maillage:{res_air:0, res_die:0, tiers:true},
 
-  /* -- 6. le calcul ------------------------------------------------------ */
+  /* -- 7. le calcul ------------------------------------------------------ */
   arret:{energie:-40, nmax:30000},
   /* Le balayage parametrique : une cote, une plage, une simulation par
      valeur. `source` designe la cote dans la liste que 24-balayage.js dresse
@@ -148,6 +148,36 @@ const ANT={
   vue:"2d",
   vueMaillage:false
 };
+
+/* ==========================================================================
+   L'âge de l'état
+   --------------------------------------------------------------------------
+   UN SEUL NOMBRE, QUI NE SERT QU'À DIRE « QUELQUE CHOSE A CHANGÉ ». Il est là
+   pour `antCuivreDuModele()` (11-geometrie.js), qui épaissit chaque polyligne
+   de l'antenne en rectangles et en octogones : c'est le calcul le plus lourd
+   de la page, et il était refait À CHAQUE IMAGE de déplacement ou de zoom,
+   parce que la surimpression de la carte l'appelle (15-overlay2d.js).
+
+   POURQUOI UN COMPTEUR ET NON UNE EMPREINTE DE L'ÉTAT. Ce qui commande le
+   résultat, ce sont deux `Set` et un tableau d'objets du modèle : `ANT.nets`,
+   `ANT.couches`, `ANT.formes`. Les trois se modifient EN PLACE — `add`,
+   `delete`, `splice` —, si bien qu'aucune comparaison d'identité ne les
+   verrait bouger, et qu'en faire une empreinte coûterait le prix qu'on essaie
+   d'éviter. Le compteur, lui, ne suppose rien de leur forme.
+
+   OÙ IL EST INCRÉMENTÉ, ET POURQUOI C'EST SUFFISANT. Dans `antMaj()`, qui est
+   le passage obligé après CHAQUE modification acceptée — c'est l'invariant que
+   `conAppliquer` énonce déjà, et il vaut ici pour la même raison : un geste
+   ajouté demain passera par là sans qu'on ait rien à écrire. Et dans
+   `antRaz()`, qui vide tout.
+
+   CE QU'IL NE COUVRE PAS, ET CE QUI S'EN CHARGE : la carte elle-même. Le
+   balayage recharge un modèle par point sans passer par `antMaj` — c'est tout
+   l'intérêt de `balDocumentPour`. La mise en cache compare donc AUSSI
+   l'identité de `V.modele`, que `mdlCharger` remplace à chaque appel.
+   ========================================================================== */
+let ANT_AGE=0;
+function antVieillir(){ ANT_AGE++; }
 
 /* ==========================================================================
    Les ports
@@ -264,6 +294,7 @@ function antUnite(){ return V.unite==="in" ? "in" : "mm"; }
    simulation sur des index qui ne désignent plus le même cuivre — une faute
    silencieuse, et la pire espèce. */
 function antRaz(){
+  antVieillir();
   ANT.etape=0;
   ANT.nets=new Set();
   ANT.formes=[];
@@ -271,7 +302,14 @@ function antRaz(){
   ANT.couches=new Set();
   ANT.ports=[antPortNeuf()]; ANT.portActif=0;
   ANT.posePort=false; ANT.viasSupposes=0;
+  /* LES CHAMPS DU SECOND AXE SONT REMIS AUSSI, et les oublier ne se voyait
+     pas : `croise` repartait à `undefined`, donc faux, donc le bloc croisé ne
+     s'affichait pas — et le jour où l'on cochait « Croiser » après avoir
+     ouvert un second fichier, trois champs de saisie naissaient à
+     « undefined ». Un état partiellement remis à neuf est pire qu'un état
+     gardé : on ne sait plus lequel des deux on lit. */
   ANT.balayage={actif:false, source:"", nom:"", min:0, max:0, pas:0,
+                croise:false, source2:"", min2:0, max2:0, pas2:0,
                 points:[], devis:null};
   document.body.classList.remove("pose-port");
   ANT.boite={mx:0,my:0,mz_haut:0,mz_bas:0,pml:8};

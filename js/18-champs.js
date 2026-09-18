@@ -46,7 +46,14 @@ function antPoids(octets){
   return (mo/1024).toFixed(1).replace(".",",")+" Go";
 }
 
-/* Le morceau qui s'insère dans l'étape « Le calcul ». */
+/* Le morceau qui s'insère dans l'étape « Le calcul ».
+
+   LES HAUTEURS DE L'EMPILAGE PASSENT PAR `antLongModele`, ET NON PAR `aNb`.
+   Le modèle travaille en millimètres — c'est le serveur qui a converti, une
+   fois —, alors que le champ « Hauteur Z » juste à côté est dans l'unité du
+   fichier. Écrire « 1,600 mm » en face d'un champ étiqueté « in » met deux
+   unités sur la même ligne, et l'on saisit alors une hauteur qui n'est pas
+   celle qu'on vient de lire. La conversion est celle de 13-assistant.js. */
 function antChampsHtml(){
   const d=ANT.dumps, m=ANT.modele;
   const info=(m&&m.dumps&&m.dumps.actif)?m.dumps:null;
@@ -90,7 +97,7 @@ ${d.actif?`
     <span><label>Hauteur Z</label><input type="number" step="0.05" id="antDumpZ" value="${d.z}"></span>
     <span class="unite">${antUnite()}</span>
     <span class="note-inline">Le cuivre du dessus est à
-      ${ANT.modele?aNb(ANT.modele.conducteurs[ANT.modele.conducteurs.length-1].z0,3):"—"} mm,
+      ${ANT.modele?antLongModele(ANT.modele.conducteurs[ANT.modele.conducteurs.length-1].z0,3):"—"},
       celui du dessous à 0.</span>
   </div>`:""}
   ${d.region==="coupe_x"?`<div class="ligne">
@@ -167,7 +174,7 @@ function antVoirHtml(){
 </div>
 <p class="note" id="voirDit" hidden></p>
 ${pv?"":'<p class="note alerte">ParaView est introuvable sur ce poste : posez-le '+
-  'à côté de serveur.py, ou ouvrez le dossier et servez-vous de votre outil.</p>'}
+  'à côté de web_antenna.py, ou ouvrez le dossier et servez-vous de votre outil.</p>'}
 ${eut?"":'<p class="note">Aucun champ n\'a été enregistré pour ce calcul — '+
   'la case est plus haut, et elle doit être cochée <b>avant</b> de lancer.</p>'}`;
 }

@@ -6,7 +6,7 @@
 # Date: 2026-09-14
 # Explication : la porte unique de l'outil « Antenne openEMS ».
 #
-#   serveur.py n'importe que ce module, et n'en connait que ses fonctions.
+#   web_antenna.py n'importe que ce module, et n'en connait que ses fonctions.
 #   Tout le reste — la lecture du document, le maillage, la generation du
 #   script, le lancement du solveur — est derriere.
 #
@@ -14,7 +14,7 @@
 #   peuvent manquer independamment. openems_modele ne depend de rien et
 #   fonctionne toujours : l'assistant, les verifications et le script
 #   s'obtiennent sur n'importe quel poste. openems_run, lui, a besoin
-#   d'openEMS installe. Sans la facade, serveur.py devrait porter cette
+#   d'openEMS installe. Sans la facade, web_antenna.py devrait porter cette
 #   nuance dans ses routes ; avec elle, il pose la question une fois et la
 #   reponse dit exactement ce qui marche et ce qui ne marche pas.
 #

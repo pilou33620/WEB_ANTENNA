@@ -1,7 +1,7 @@
 "use strict";
 /* =============================================================================
    Antenne openEMS — 17-objets.js
-   Étape « Autour » : ce qui n'est pas sur la carte.
+   Étape 3, « Autour » : ce qui n'est pas sur la carte.
 
    UNE ANTENNE NE RAYONNE JAMAIS TOUTE SEULE. Elle est dans un boîtier, au
    dessus d'une batterie, à côté d'un écran, au bout d'un câble. Le fichier

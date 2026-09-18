@@ -11,7 +11,7 @@
 
    Le doigt est traité comme la souris (pointer events), et deux doigts pincent
    pour zoomer : ce dépôt se consulte aussi depuis une tablette, c'est même la
-   raison d'être de serveur.py.
+   raison d'être de web_antenna.py.
    ============================================================================= */
 
 /* Tolérance de désignation : trois pixels, quel que soit le zoom. En dessous,

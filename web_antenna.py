@@ -3,7 +3,7 @@
 # ==========================================================================
 # Antenne openEMS -- le serveur.
 #
-#   python serveur.py
+#   python web_antenna.py
 #
 # IL NE SERT QUE TROIS CHOSES QU'UN NAVIGATEUR NE SAIT PAS FAIRE :
 #
@@ -30,6 +30,8 @@
 #      de l'ecrire dans le stockage local du navigateur -- en clair, pour
 #      toujours, dans un dossier que personne ne surveille. Le serveur ne la
 #      garde pas et ne s'en sert pas : il la relit et la rend. Voir _ia_cle.
+#      C'est la SEULE route reservee a la boucle locale : elle rend un secret
+#      facturable, et ce serveur ecoute le reseau local par defaut.
 #
 # Tout le reste -- l'affichage, la designation du cuivre, l'assistant, la 3D,
 # les courbes -- est dans le navigateur et n'a besoin de personne.
@@ -177,6 +179,29 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             self._json({"detail": "Origine inter-site refusee"}, 403)
             return False
         return True
+
+    def _boucle_locale(self):
+        """La requete vient-elle de CETTE machine ?
+
+        LE CONTROLE D'ORIGINE NE SUFFIT PAS ICI, ET C'EST LA NUANCE QUI
+        COMPTE. `_csrf` et `_cors` protegent contre une PAGE : un navigateur
+        qui charge evil.com ne peut pas lire la reponse d'une route d'ici,
+        faute d'en-tete `Access-Control-Allow-Origin`. Mais ils ne protegent
+        de rien contre un client qui n'est pas un navigateur : un `curl` sur
+        le reseau local n'envoie aucun `Origin`, et `_csrf` le laisse passer
+        — deliberement, puisque c'est ainsi qu'une tablette ouvre la page.
+
+        Pour la cle du mode IA, ce marche-la ne tient plus : elle est
+        personnelle et facturable, et le serveur ecoute sur toutes les
+        interfaces par defaut pour que la tablette y arrive. Une adresse de
+        boucle locale est le seul filtre qui distingue « ce poste » de « le
+        reseau », et c'est exactement la distinction qu'on veut ici.
+        """
+        hote = (self.client_address[0] if self.client_address else "") or ""
+        # ::ffff:127.0.0.1 : une IPv4 vue par la socket en double pile.
+        if hote.startswith("::ffff:"):
+            hote = hote[7:]
+        return hote == "::1" or hote == "127.0.0.1" or hote.startswith("127.")
 
     def _json(self, charge, code=200):
         corps = json.dumps(charge).encode("utf-8")
@@ -480,13 +505,36 @@ class Poste(http.server.SimpleHTTPRequestHandler):
     # LA CLE N'EST PAS UN SECRET DE CE SERVEUR : il ne la garde pas, ne
     # l'utilise pas, et n'appelle personne avec. Il la relit a chaque
     # demande et la rend a la page, qui la garde en memoire vive le temps
-    # de la session (voir js/30-ia.js). Le serveur n'ecoute que sur la
-    # boucle locale ; une cle rendue ici ne sort pas du poste autrement
-    # que par l'appel que la page fait elle-meme a Google AI Studio.
+    # de la session (voir js/30-ia.js).
+    #
+    # MAIS CE SERVEUR N'ECOUTE PAS QUE LA BOUCLE LOCALE, et c'est ce qui a
+    # manque longtemps ici. Il se lie a toutes les interfaces par defaut
+    # pour qu'une tablette puisse ouvrir la page -- il faut `--local` pour
+    # qu'il s'en abstienne. Le controle d'origine, lui, arrete les pages et
+    # non les clients : un `curl` du reseau local n'envoie aucun `Origin` et
+    # passait donc, cle comprise. C'est la seule route ou ce marche ne tient
+    # pas, et c'est la seule qui exige desormais une adresse de boucle
+    # locale -- voir `_boucle_locale`. Depuis le reseau, la page demande sa
+    # cle comme sur un poste qui n'en a pas.
     CLE_IA = "api_key_free_ia_studio.txt"
 
     def _ia_cle(self):
-        """GET /api/ia/cle : la cle Google AI Studio posee sur ce poste."""
+        """GET /api/ia/cle : la cle Google AI Studio posee sur ce poste.
+
+        ELLE NE SORT PAS DE CETTE MACHINE, et c'est la seule route qui le
+        vérifie. Voir `_boucle_locale` pour pourquoi le controle d'origine
+        n'y suffisait pas : il arrete les pages, pas les clients. Une
+        tablette qui ouvre la page depuis le reseau local voit donc l'ecran
+        de saisie de cle, comme n'importe quel poste sans fichier — ce qui
+        est exactement ce qu'on veut, la cle du poste restant au poste.
+        """
+        if not self._boucle_locale():
+            return {"dispo": False, "cle": "", "origine": "",
+                    "fichier": self.CLE_IA,
+                    "detail": "La cle de ce poste n'est rendue qu'a la "
+                              "machine qui fait tourner le serveur. Depuis "
+                              "le reseau, saisissez la votre dans le "
+                              "panneau : elle ne vivra que dans cet onglet."}
         cle = (os.environ.get("GEMINI_API_KEY")
                or os.environ.get("GOOGLE_API_KEY") or "").strip()
         origine = "environnement"
@@ -792,9 +840,9 @@ def _pourquoi(exc):
 
 
 def _reexecuter_dans_env():
-    """Relance serveur.py dans l'environnement virtuel du projet s'il existe.
+    """Relance web_antenna.py dans l'environnement virtuel du projet s'il existe.
 
-    Sur Windows, lancer « python serveur.py » depuis une invite ordinaire
+    Sur Windows, lancer « python web_antenna.py » depuis une invite ordinaire
     utilise le Python du systeme (ex: 3.12 ou 3.13), alors que les paquets
     compiles d'openEMS sont installes dans le venv « env/ » (Python 3.10 ou 3.11).
     Cette fonction detecte l'interpreteur du venv et s'y relance directement.
@@ -916,7 +964,7 @@ def main(argv=None):
               % ("pret" if etat.get("lancer")
                  else "indisponible (%s)" % etat.get("lancer_detail", "?")))
         # QUEL PYTHON LANCERA LE SOLVEUR. Il n'est pas forcement celui qui
-        # fait tourner ce serveur : serveur.py n'a aucune dependance et
+        # fait tourner ce serveur : web_antenna.py n'a aucune dependance et
         # demarre sous le Python du systeme, alors qu'openEMS vit presque
         # toujours dans un environnement virtuel a cote. Le dire evite une
         # demi-heure de recherche quand « Lancer » reste eteint.

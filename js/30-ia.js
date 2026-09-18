@@ -1418,9 +1418,19 @@ grammaire(),
     }
     if(inList) out.push("</ul>");
 
+    /* LE BLOC EST RÉINSÉRÉ PAR UNE FONCTION, ET NON COMME CHAÎNE. Le second
+       argument de `String.replace` est un MOTIF quand c'est une chaîne : `$&`
+       y vaut le texte trouvé, `$'` tout ce qui le suit, `` $` `` tout ce qui le
+       précède. Un bloc de code contenant l'un des trois — et `$&` n'a rien
+       d'exotique dans du shell ou du perl — se réécrivait donc tout seul.
+       Aucune faille : tout est déjà échappé à ce stade, et ce qui serait
+       recopié est du HTML sûr. Mais le bloc affiché n'était plus celui que le
+       modèle avait écrit, et c'est exactement ce qu'on ne veut pas d'un bloc
+       de code. La forme fonction ne fait aucune substitution. */
     let finalHtml = out.join("");
     codeBlocks.forEach(function(bloc, idx){
-      finalHtml = finalHtml.replace("%%CODEBLOCK_" + idx + "%%", bloc);
+      finalHtml = finalHtml.replace("%%CODEBLOCK_" + idx + "%%",
+                                    function(){ return bloc; });
     });
     return finalHtml;
   }

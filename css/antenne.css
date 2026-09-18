@@ -219,6 +219,11 @@ table.empilage tr.manque{background:rgba(232,68,58,.10)}
 .ports-barre .jeton.plus{border-style:dashed;color:var(--txt-dim)}
 .ports-barre .jeton b{opacity:.55;padding-left:2px}
 .ports-barre .jeton b:hover{opacity:1;color:var(--red)}
+/* UN SEUL PORT : la barre se réduit à « + port », et elle doit alors se lire
+   comme une offre et non comme une liste d'un élément. On la pousse à droite
+   et on lui laisse plus d'air en dessous — l'étape reprend l'allure qu'elle
+   avait avant que les ports multiples existent. */
+.ports-barre.seule{justify-content:flex-end;margin-bottom:12px}
 
 /* ---------- le balayage ---------- */
 .verdict.bal{padding-bottom:9px;margin-bottom:10px;
