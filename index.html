@@ -29,7 +29,12 @@
     <div class="sep"></div>
     <!-- Les trois gestes de l'outil, dans l'ordre où on les fait. -->
     <button class="tb" id="bConcevoir" title="Dessiner une antenne et sa carte au lieu d'en importer une : empilage, matériaux, gabarits">✏️ Concevoir</button>
-    <button class="tb" id="bExemple" title="Poser un cas complet et déjà réglé — patch 2,45 GHz sur FR-4 — pour vérifier que toute la chaîne fonctionne">🧪 Exemple</button>
+    <button class="tb" id="bExemple" title="Poser un cas complet et déjà réglé — patch 2,45 GHz sur FR-4, cotes recalées en 3D — pour vérifier que toute la chaîne fonctionne">🧪 Patch</button>
+    <!-- LE SECOND CAS DE DÉMONSTRATION. Même bande, même empilage, mais une
+         autre antenne de bout en bout : un quart d'onde replié, court-circuité
+         par des vias, avec masse sur les deux faces et port au fond d'un
+         décroché — voir l'en-tête de js/26-exemple.js. -->
+    <button class="tb" id="bExempleIfa" title="Poser un F inversé (IFA) 2,45 GHz adapté — quart d'onde recalé en 3D, plan de masse 50 × 50 mm, vias de court-circuit et couture de masse">🧪 IFA</button>
     <button class="tb" id="bAssistant" title="Ouvrir l'assistant : il mène de la carte au modèle FDTD en sept étapes">🧭 Assistant</button>
     <!-- Le relecteur. Il ne décide de rien : il vérifie, il explique, et ce
          qu'il propose ne s'applique qu'au clic. « Vérifier les réglages » et
@@ -104,13 +109,15 @@
           <div class="ou">
             <span>ou bien</span>
             <button class="tb" id="bConcevoir2" title="Dessiner l'antenne et la carte ici même">✏️ Concevoir une antenne</button>
-            <button class="tb" id="bExemple2" title="Un patch 2,45 GHz déjà dimensionné et réglé : de quoi vérifier l'installation d'un bout à l'autre">🧪 Poser l'exemple</button>
+            <button class="tb" id="bExemple2" title="Un patch 2,45 GHz déjà dimensionné et réglé : de quoi vérifier l'installation d'un bout à l'autre">🧪 Exemple : patch</button>
+            <button class="tb" id="bExempleIfa2" title="Un F inversé (IFA) 2,45 GHz adapté : quart d'onde recalé en 3D, plan de masse 50 × 50 mm, court-circuité par des vias et large de bande">🧪 Exemple : IFA</button>
             <small>Pas encore de fichier : on dessine le cuivre, on choisit le
               substrat et ses matériaux, et un gabarit donne le premier
               dessin à la fréquence visée.<br>
-              L'exemple, lui, ne demande rien : il pose un cas connu — patch
-              2,45 GHz sur FR-4 — et il ne reste qu'à lancer le solveur pour
-              voir si tout répond.</small>
+              Les exemples, eux, ne demandent rien : ils posent un cas connu
+              — patch 2,45 GHz sur FR-4 ou F inversé (IFA) 2,45 GHz adapté sur
+              plan 50 × 50 mm, tous deux recalés en 3D — et il ne reste qu'à
+              lancer le solveur pour voir si tout répond.</small>
           </div>
         </div>
       </div>
@@ -228,6 +235,25 @@
       </span>
     </header>
     <div class="pnl-body"><div class="scroll" id="resultats"></div></div>
+  </section>
+
+  <!-- ===================================================================
+       LES CHAMPS. La carte animée du courant et du champ, lue directement
+       dans les .vtr du calcul — sans ParaView. C'est la réponse à la
+       question qu'un S₁₁ ne répond pas : « où passe le courant, et à quel
+       moment ». Voir js/32-visionneuse.js et python/openems_champs.py.
+       =================================================================== -->
+  <section class="pnl" data-pnl="champs" data-title="Champs">
+    <header class="pnl-head">
+      <span class="pnl-grip">⠿</span><span class="pnl-title">Champs</span>
+      <span class="pnl-acts">
+        <button class="pnl-btn" data-act="collapse" title="Replier">▾</button>
+        <button class="pnl-btn" data-act="maximize" title="Plein écran">□</button>
+        <button class="pnl-btn" data-act="float" title="Détacher / rattacher">⬒</button>
+        <button class="pnl-btn" data-act="close" title="Fermer">✕</button>
+      </span>
+    </header>
+    <div class="pnl-body chp-body" id="champsCorps"></div>
   </section>
 
   <section class="pnl" data-pnl="journal" data-title="Journal du solveur">
@@ -404,6 +430,10 @@
      avant 28 qui, lui, enveloppe les fonctions de pose. -->
 <script src="js/30-ia.js"></script>
 <script src="js/31-rapport.js"></script>
+<!-- 32 lit les .vtr que le solveur a laissés et les anime dans un panneau :
+     il vient après 16 et 18, dont il prolonge le travail — les résultats
+     chiffrés d'un côté, la carte de champ de l'autre. -->
+<script src="js/32-visionneuse.js"></script>
 <!-- 28 vient en dernier des modules métier : il enveloppe `poser`, `antMaj`
      et `conAppliquer`, et il ne peut le faire qu'une fois que 06, 13 et 20
      les ont posées. -->

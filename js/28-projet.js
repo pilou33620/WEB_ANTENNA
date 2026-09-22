@@ -499,6 +499,96 @@ async function prjEnregistrer(nom){
   return out;
 }
 
+/* ==========================================================================
+   Ranger le dossier de calcul AVEC le reste
+   --------------------------------------------------------------------------
+   CE QUE « ENREGISTRER » NE FAISAIT PAS. Un projet ouvert AVANT le lancement
+   reçoit les calculs chez lui : le serveur pose la racine des calculs à
+   chaque ouverture et à chaque enregistrement, et openEMS écrit ses .vtr
+   dans `<projet>/calculs/<id>/`. Mais un calcul lancé SANS projet ouvert —
+   le cas de loin le plus courant, parce qu'on nomme son travail quand il a
+   donné quelque chose — a écrit dans le dossier temporaire du système. On
+   gardait alors les courbes et l'on perdait les champs : `resultats.json`
+   pointait sur un chemin que le nettoyage de disque de Windows vide un jour,
+   sans rien annoncer, et « Voir les champs » répondait des mois plus tard
+   que la simulation n'existait plus.
+
+   C'EST DONC LE MÊME GESTE, ET PAS UN BOUTON DE PLUS. « Enregistrer »
+   enregistre tout ce qu'il y a à garder — y compris les centaines de
+   méga-octets que le solveur a écrites ailleurs. Un bouton séparé aurait été
+   un bouton qu'on oublie, exactement comme la case « Enregistrer les champs »
+   qu'on oublie de cocher avant de lancer.
+   ========================================================================== */
+function prjArchivable(){
+  const t=ANT.tache;
+  return !!(t&&t.id&&(t.etat==="fini"||t.etat==="arrete"||t.etat==="echoue"));
+}
+
+async function prjArchiverCalcul(id){
+  return prjPost(PRJ_ROUTE+"/archiver",{id:id});
+}
+
+/* LES DOSSIERS DE CALCUL DU PROJET, et un dossier venu d'ailleurs.
+
+   POURQUOI IL FALLAIT LES DEUX. `resultats.json` ne retient qu'UN calcul,
+   le dernier ; un projet en accumule un par simulation lancée. Après cinq
+   simulations, cinq dossiers sont sur le disque avec leurs champs, et la
+   page n'en atteignait qu'un — les quatre autres étaient là, invisibles,
+   et il fallait ParaView pour les revoir.
+
+   `prjImporterCalcul` fait entrer dans cette même liste un dossier qui n'y
+   était pas : une clé USB, un partage réseau, un calcul mené à la main sur
+   une autre machine. Le serveur le COPIE — il ne le déplace pas : ce
+   dossier-là appartient à quelqu'un, et le vider en croyant l'ouvrir serait
+   la faute la plus grave que cet outil puisse commettre. */
+async function prjCalculs(){
+  return prjAppel(PRJ_ROUTE+"/calculs");
+}
+
+async function prjImporterCalcul(chemin){
+  return prjPost(PRJ_ROUTE+"/importer",{chemin:chemin});
+}
+
+/* Le geste complet : le document, puis le dossier de calcul, puis le document
+   à nouveau SI le dossier a bougé — car `resultats.json` porte son chemin, et
+   un chemin qui ment vaut moins que pas de chemin du tout.
+
+   UN ÉCHEC D'ARCHIVAGE NE FAIT PAS ÉCHOUER L'ENREGISTREMENT. Le projet, lui,
+   est écrit : le dire perdu parce que quelques fichiers .vtr n'ont pas pu
+   être déplacés ferait recommencer un travail qui est en réalité sauvé. On
+   rend donc l'ennui, et l'appelant l'affiche. */
+async function prjEnregistrerTout(nom){
+  const out=await prjEnregistrer(nom);
+  if(!prjArchivable())return {projet:out, calcul:null};
+  let arch=null;
+  try{
+    arch=await prjArchiverCalcul(ANT.tache.id);
+    if(arch&&arch.dossier&&ANT.tache.dossier!==arch.dossier){
+      ANT.tache.dossier=arch.dossier;
+      /* La carte n'est pas renvoyée une seconde fois : `prjCapturer` ne la
+         joint que si elle a changé ou si le nom a changé, et ni l'un ni
+         l'autre n'est vrai ici. Ce second enregistrement ne pèse que le
+         document. */
+      await prjEnregistrer(out.nom);
+    }
+  }catch(e){
+    arch={erreur:e.message||String(e)};
+  }
+  return {projet:out, calcul:arch};
+}
+
+/* La phrase à ajouter après « projet enregistré ». Elle ne dit rien quand il
+   n'y a rien à dire — un projet sans calcul, ou un calcul déjà rangé. */
+function prjDireCalcul(arch){
+  if(!arch)return "";
+  if(arch.erreur)
+    return " Le dossier de calcul, lui, n'a pas pu être rangé : "+arch.erreur;
+  if(arch.deplace)
+    return " Le dossier de calcul ("+antPoids(arch.octets)+
+           ") a été rangé dans le projet.";
+  return "";
+}
+
 async function prjOuvrir(nom){
   const charge=await prjAppel(PRJ_ROUTE+"/ouvrir?nom="+encodeURIComponent(nom));
   await prjAppliquer(charge);
@@ -577,6 +667,12 @@ function prjBlocProjet(){
               (PRJ.carteAEcrire?"":" (déjà écrite, non réenvoyée)"));
   quoi.push("les réglages de simulation et le cuivre désigné");
   if(ANT.resultat)quoi.push("le dernier résultat");
+  /* LE DOSSIER DE CALCUL EST ANNONCÉ PARCE QU'IL PÈSE. Les autres lignes
+     décrivent des kilo-octets ; celle-ci peut valoir plusieurs centaines de
+     méga-octets de champs, et l'enregistrement prendra alors le temps de les
+     déplacer. Le dire ici, c'est éviter de croire à un outil bloqué. */
+  if(prjArchivable())
+    quoi.push("le dossier de calcul d'openEMS, champs compris");
 
   return '<div class="champ"><label>Ce projet</label>'+
     '<p class="note">'+etat+'</p>'+
@@ -700,8 +796,9 @@ function prjLier(corps){
     const champ=document.getElementById("prjNom");
     const nom=(champ&&champ.value||"").trim();
     try{
-      const out=await prjGeste("Enregistrer le projet",prjEnregistrer(nom));
-      hint("Projet « "+out.nom+" » enregistré dans "+out.dossier+".");
+      const r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(nom));
+      hint("Projet « "+r.projet.nom+" » enregistré dans "+r.projet.dossier+
+           "."+prjDireCalcul(r.calcul));
     }catch(e){}
     prjRendre();
   });
@@ -786,6 +883,24 @@ function prjAccueilRendre(){
   }
 })();
 
+/* LA FIN D'UN CALCUL EST UNE MODIFICATION, ET C'EST LA PLUS CHÈRE À PERDRE.
+   Les trois fonctions enveloppées au-dessus couvrent les RÉGLAGES ; aucune
+   n'est appelée quand une simulation se termine — `oeSuivre` pose le résultat
+   et rend la main. Un projet enregistré juste avant le lancement s'affichait
+   donc « à jour » deux heures plus tard, alors que `resultats.json` ne
+   contenait pas les courbes qui venaient d'arriver, et que le dossier de
+   calcul attendait toujours dans le dossier temporaire. */
+(function(){
+  const base=window.oeSuivre;
+  if(typeof base!=="function")return;
+  window.oeSuivre=async function(){
+    const out=await base.apply(this,arguments);
+    if(!PRJ.modifie){ PRJ.modifie=true; prjBoutonEtat(); }
+    prjRendreDouce();
+    return out;
+  };
+})();
+
 /* Fermer l'onglet sur du travail non enregistré. Le garde-fou de
    19-demarrage.js ne parle que d'un calcul en cours ; celui-ci parle du
    dessin, et c'est lui qui ne se rattrape pas. */
@@ -835,9 +950,9 @@ window.addEventListener("DOMContentLoaded",function(){
       hint("Donnez un nom au projet, puis « Enregistrer ».");
       return;
     }
-    prjGeste("Enregistrer le projet",prjEnregistrer(PRJ.nom))
-      .then(function(out){
-        hint("Projet « "+out.nom+" » enregistré.");
+    prjGeste("Enregistrer le projet",prjEnregistrerTout(PRJ.nom))
+      .then(function(r){
+        hint("Projet « "+r.projet.nom+" » enregistré."+prjDireCalcul(r.calcul));
         prjRendre();
       }).catch(function(){ prjRendre(); });
   });

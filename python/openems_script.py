@@ -33,7 +33,15 @@ C0 = 299792458.0
 EPS0 = 8.8541878128e-12
 
 
-def _f(v, dec=6):
+# LA PRECISION D'ECRITURE, UNE SEULE POUR TOUT LE SCRIPT. Elle n'est pas un
+# detail de presentation : une cote de port et la ligne de maillage sur
+# laquelle elle doit tomber sont le MEME nombre dans le modele, et deux
+# arrondis differents suffisent a les separer de quatre microns -- de quoi
+# qu'une boite d'excitation plate n'excite plus rien. Voir `_coller_ports`.
+DEC = 6
+
+
+def _f(v, dec=DEC):
     """Un flottant ecrit court : les coordonnees viennent d'un fichier de
     CAO au micron, dix-sept chiffres apres la virgule n'apprennent rien."""
     s = ("%." + str(dec) + "f") % float(v)
@@ -494,17 +502,36 @@ def generer(m, chemin_openems=None, dossier_sim=None):
     a("# conseilles (lambda/4 a %.4g GHz)%s.\n"
       % (b["f1"] / 1e9,
          "" if box["marge_suffisante"] else " — C'EST INSUFFISANT"))
-    a("mesh.SetLines('x', np.array(%s))\n" % _liste(maille["x"], 5, 8, 4))
-    a("mesh.SetLines('y', np.array(%s))\n" % _liste(maille["y"], 5, 8, 4))
-    a("mesh.SetLines('z', np.array(%s))\n" % _liste(maille["z"], 5, 8, 4))
+    # LA MEME PRECISION QUE PARTOUT AILLEURS, ET C'EST UNE CORRECTION. Les
+    # lignes s'ecrivaient a CINQ decimales quand les cotes des ports
+    # s'ecrivaient a six : un port a y = 30,111544 tombait sur une grille qui
+    # disait 30,11154, sa boite d'excitation -- plate en x et en y -- ne
+    # contenait alors aucune composante de champ, et openEMS calculait
+    # jusqu'au bout une energie rigoureusement nulle. Voir `_coller_ports`
+    # dans openems_modele.py : deux nombres egaux dans le modele doivent
+    # s'ecrire pareil dans le script, sinon le collage ne sert a rien.
+    a("mesh.SetLines('x', np.array(%s))\n" % _liste(maille["x"], DEC, 8, 4))
+    a("mesh.SetLines('y', np.array(%s))\n" % _liste(maille["y"], DEC, 8, 4))
+    a("mesh.SetLines('z', np.array(%s))\n" % _liste(maille["z"], DEC, 8, 4))
     if m["maillage_tiers"]:
         a("\n# La regle du tiers : au bord d'un conducteur la ligne ne se pose\n")
         a("# pas SUR l'arete mais a un tiers dehors, deux tiers dedans. C'est\n")
         a("# ce qui rend la densite de courant de bord correcte sans raffiner\n")
-        a("# partout ailleurs.\n")
-        a("FDTD.AddEdges2Grid(dirs='xy', properties=[%s], metal_edge_res=%s)\n"
-          % (", ".join("cu_%s" % _ident(c["couche"], "cu") for c in m["cuivre"]),
-             _f(res["die"] / 2.0, 5)))
+        a("# partout ailleurs. Ces lignes-la sont DEJA dans la grille\n")
+        a("# ci-dessus, avec les bandes fines posees en travers du cuivre\n")
+        a("# etroit : ce qui est ecrit plus haut est la grille du calcul,\n")
+        a("# entiere.\n")
+        a("#\n")
+        a("# ET CE N'EST PAS `AddEdges2Grid` QUI LES POSAIT, contrairement a\n")
+        a("# ce que ce script a longtemps appele. Cette fonction demande a\n")
+        a("# chaque primitive un « hint » de maillage, et\n")
+        a("# `mesh_hint_from_primitive` (openEMS/automesh.py) n'en rend que\n")
+        a("# pour un POINT ou une BOITE : pour un polygone elle rend None,\n")
+        a("# sans un mot. Or tout le cuivre ci-dessus part en AddPolygon et\n")
+        a("# en AddLinPoly. L'appel etait donc sans effet -- verifie sur\n")
+        a("# CSXCAD 0.6.3 et openEMS 0.0.36, grille identique avant et\n")
+        a("# apres --, et le garder laissait croire que le raffinement des\n")
+        a("# aretes venait d'ailleurs que du modele.\n")
     a("\n")
 
     a(_bloc_ports(m))
@@ -836,6 +863,24 @@ def _bloc_ports(m):
               % " et ".join("« %s »" % d["couche"] for d in c["degagements"]))
             a("# court-circuit franc, le S11 vaut 0 dB sur toute la bande, et\n")
             a("# rien dans le resultat ne dit pourquoi.\n")
+        # AU-DESSUS DU CUIVRE, ET C'EST TOUT LE SUJET. Le degagement etait
+        # emis a la priorite 11, celle des DECOUPES d'un versement -- or un
+        # plan de masse SANS decoupe n'est pas emis comme un versement : il
+        # part avec les pistes, a la priorite 12 (voir le bloc du cuivre,
+        # « 3. Les conducteurs sans decoupe »). Douze bat onze : le
+        # degagement ne percait rien, l'ame du coaxial touchait le plan, et
+        # le port etait un court-circuit franc. La simulation le dit sans
+        # ambiguite -- Z = 0,0 + 1,5j ohms au plan de reference, |S11| = 0
+        # dB sur toute la bande, et openEMS signale en passant un
+        # « Unused primitive (type: Polygon) » sur le dielectrique.
+        #
+        # QUINZE, ET NON TREIZE : treize est la priorite des vias. Un via
+        # pris dans le degagement d'un connecteur est une faute de dessin,
+        # et c'est alors la geometrie du connecteur qui doit se voir --
+        # mais surtout, deux primitives de meme priorite se departagent dans
+        # un ordre que rien ne garantit. L'ame et la gaine, elles, restent
+        # a 20 : le degagement creuse le cuivre, il ne creuse pas le
+        # connecteur.
         for d in c["degagements"]:
             i = _die_contre(m, d["z0"])
             if i is None:
@@ -843,12 +888,12 @@ def _bloc_ports(m):
             cible = ("sub_%d" % i) if i is not None else _air()
             disque = _disque(p["x"], p["y"], d["r"])
             if mode == "volume":
-                a("%s.AddLinPoly(%s, 'z', %s, %s, priority=11)"
+                a("%s.AddLinPoly(%s, 'z', %s, %s, priority=15)"
                   "   # degagement dans %s\n"
                   % (cible, _poly(disque), _f(d["z0"]),
                      _f(d["z1"] - d["z0"]), d["couche"]))
             else:
-                a("%s.AddPolygon(%s, 'z', %s, priority=11)"
+                a("%s.AddPolygon(%s, 'z', %s, priority=15)"
                   "   # degagement dans %s\n"
                   % (cible, _poly(disque), _f(d["z0"]), d["couche"]))
         a("port_%d = PortCoaxial(CSX, %d, %s, %s, %s, %s, %s, %s, %s,\n"

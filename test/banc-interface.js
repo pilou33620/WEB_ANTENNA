@@ -366,7 +366,7 @@ verifie("la bande est ouverte a +/-15 % autour de la cible",
         Math.abs(ANT.bande.f1-0.85*CON.fcible)<1&&
         Math.abs(ANT.bande.f2-1.15*CON.fcible)<1);
 
-/* -- l'IFA : le court-circuit et les coutures sont réels (Silicon Labs AN1088) -- */
+/* -- l'IFA : le court-circuit et les coutures sont réels -------------- */
 conGabaritPoser("ifa");
 const viasAnt=CON.elements.filter(e=>e.type==="via"&&e.net==="ANTENNE");
 verifie("l'IFA pose 2 vias de court-circuit", viasAnt.length===2);
@@ -393,9 +393,23 @@ const mesure=function(t){
                   bras.pts[i][1]-bras.pts[i-1][1]);
   return d;
 };
-verifie("le bras dessine de l'IFA mesure La + ha + sc (AN1088)",
+verifie("le bras dessine de l'IFA mesure sc + ha + La - wb/2",
         Math.abs(mesure(tIfa)-(pIfa.La-pIfa.wb/2+pIfa.ha+pIfa.sc))<0.1,
         mesure(tIfa).toFixed(4));
+/* ET CE DEVELOPPE EST LE QUART D'ONDE DU MOTIF, a l'arrondi d'affichage des
+   cotes pres. C'est ce que les proportions classiques promettent : `La` est
+   choisie pour boucler le compte, et si la formule de `conIfaClassique` et
+   celle de `tracer` cessaient de s'accorder, c'est ici que ca se verrait. */
+const quartIfa=CON_C0/(4*cx.f*Math.sqrt(CON_IFA_EEFF));
+verifie("le developpe de l'IFA vaut le quart d'onde du motif",
+        Math.abs(mesure(tIfa)-quartIfa)<0.02,
+        mesure(tIfa).toFixed(4)+" pour "+quartIfa.toFixed(4)+" mm");
+/* La resonance annoncee par la fiche doit donc retomber sur la cible : c'est
+   la meme egalite, lue du cote de la frequence. */
+verifie("et la resonance annoncee retombe sur la frequence visee",
+        Math.abs(tIfa.calcul.festim-cx.f)<cx.f*0.005,
+        (tIfa.calcul.festim/1e9).toFixed(4)+" GHz pour "+
+        (cx.f/1e9).toFixed(4)+" GHz");
 verifie("l'alimentation est entre le court-circuit et le bout du bras",
         pIfa.d>0&&pIfa.d<pIfa.La);
 verifie("le port de l'IFA est au fond du decroche",
@@ -468,6 +482,34 @@ verifie("une cote reprise a la main est signalee",
           Object.assign({},pPatch,{L:pPatch.L+1})).length===1);
 verifie("une cote laissee telle quelle ne l'est pas",
         conGabaritEcarts(CON_MOTIF_PATCH,cx,pPatch).length===0);
+
+/* -- une cote IMPOSEE survit au rafraichissement du panneau --------------- */
+/* LE PIEGE ETAIT SILENCIEUX, ET C'EST POURQUOI IL A DURE. `conGabaritPoser`
+   pose les cotes recues dans le dessin, mais `conGabaritRafraichir` ne garde
+   que celles qui sont marquees comme reprises a la main et rend les autres au
+   calcul. L'exemple patch etait donc DESSINE a 27,5 mm -- la carte le prouve --
+   pendant que l'etat du panneau retombait aux 29,16 mm du calcul. Le dessin
+   n'etait alors plus la copie du motif que l'etat decrit, et le balayage de
+   cote, qui repose le motif a chaque point, refusait de se proposer. */
+conGabaritPoser("patch",{L:27.5,y0:8.1,g:1.49});
+verifie("une cote imposee reste dans l'etat apres rafraichissement",
+        (conGabaritRafraichir(),
+         Math.abs(CON.gabaritP.L-27.5)<1e-6&&
+         Math.abs(CON.gabaritP.y0-8.1)<1e-6&&
+         Math.abs(CON.gabaritP.g-1.49)<1e-6),
+        JSON.stringify(CON.gabaritP));
+verifie("elle est signalee comme reprise, et elle seule",
+        CON.gabaritTouche.L===true&&CON.gabaritTouche.y0===true&&
+        CON.gabaritTouche.g===true&&CON.gabaritTouche.W===undefined);
+verifie("le dessin reste donc la copie exacte du motif : le balayage est offert",
+        conGabaritConforme()===true);
+/* Une cote posee SUR la valeur du calcul n'est pas une reprise : la fiche ne
+   doit pas annoncer un ecart qui n'existe pas. */
+const dPatch=conGabaritDefauts(CON_MOTIF_PATCH,cx);
+conGabaritPoser("patch",{L:dPatch.L});
+verifie("reposer une cote sur la valeur du calcul n'est pas une reprise",
+        CON.gabaritTouche.L===undefined);
+conGabaritPoser("patch",null);
 
 /* -- l'apercu ne dessine rien -------------------------------------------- */
 /* C'EST LA GARANTIE DE TOUT LE MODE : regarder un motif ne doit pas effacer
@@ -1253,6 +1295,145 @@ verifie("la carte montre l'avant en face de l'apres",
 verifie("un bloc casse est ignore sans emporter la reponse",
         IA_H.indexOf("Voici.")>=0&&IA_H.indexOf("bloc casse")>=0);
 
+/* -- la geometrie libre : la seule carte qui pose du CUIVRE --------------- */
+/* POURQUOI CELLE-CI MERITE SES PROPRES EPREUVES. Les trois autres cartes
+   deplacent des nombres qu'un humain relit ; celle-ci ecrit dans le dessin,
+   c'est-a-dire dans l'antenne. Une forme qui passe la barriere alors qu'elle
+   n'aurait pas du ne fait rien planter : elle pose du cuivre quelque part, la
+   simulation tourne, et le resultat a l'air d'un resultat. On eprouve donc
+   les deux sens — ce qui est refuse, et ce qui se defait. */
+CON.actif=false;
+verifie("hors du mode conception, une carte « formes » ne pose rien",
+        iaProposition({type:"formes", elements:[
+          {type:"rect", couche:"haut", x1:0, y1:0, x2:10, y2:10}
+        ]}).refus.length===1);
+
+CON.actif=true;
+CON.pile=conPileDefaut();
+CON.coucheActive=conPremierCuivre();
+CON.carte.L=40; CON.carte.W=45;
+CON.elements=[]; CON.sel=-1; CON.gabarit=null; CON.calcul=null;
+ANT.ports=[antPortNeuf(true)]; ANT.portActif=0;
+conHistRaz();
+
+const IA_F=iaProposition({type:"formes", titre:"Essai",
+  elements:[
+    {type:"rect",  couche:"bas",  net:"GND",     x1:0, y1:0, x2:40, y2:45},
+    {type:"poly",  couche:"haut", net:"ANTENNE", pts:[[8,12],[30,12],[30,36],[8,36]]},
+    {type:"piste", couche:"haut", net:"ANTENNE", pts:[[20,0],[20,12]], w:3.06},
+    {type:"via",   couche:"haut", net:"GND",     x:5, y:5, d:0.6},
+    {type:"rect",  couche:"Cuivre dessous", net:"GND", x1:1, y1:1, x2:3, y2:3},
+    {type:"cercle",couche:"haut", cx:5, cy:5, r:1},
+    {type:"poly",  couche:"haut", pts:[[0,0],[1,0]]},
+    {type:"rect",  couche:"haut", x1:100, y1:100, x2:110, y2:110},
+    {type:"rect",  couche:"couche imaginaire", x1:0, y1:0, x2:5, y2:5}
+  ],
+  port:{x:20, y:0.4, w:3.06, l:0.8}});
+
+verifie("une geometrie libre prepare ses formes une par une",
+        IA_F.els.length===5&&IA_F.refus.length===4,
+        IA_F.els.length+" posees, "+IA_F.refus.length+" refusees");
+verifie("un genre inconnu est refuse en le nommant",
+        IA_F.refus.some(r=>r.indexOf("cercle")>=0));
+verifie("un polygone de deux sommets est refuse comme au dessin",
+        IA_F.refus.some(r=>r.indexOf("trois sommets")>=0));
+verifie("une forme entierement hors de la carte est refusee",
+        IA_F.refus.some(r=>r.indexOf("hors de la carte")>=0));
+verifie("une couche qui n'existe pas est refusee",
+        IA_F.refus.some(r=>r.indexOf("imaginaire")>=0));
+verifie("le nom exact d'une couche vaut le raccourci qui la designe",
+        IA_F.els[4].cu===IA_F.els[0].cu);
+verifie("les nets proposes sont repris tels quels",
+        IA_F.els[0].net==="GND"&&IA_F.els[1].net==="ANTENNE");
+verifie("preparer une geometrie n'ecrit rien",
+        CON.elements.length===0&&ANT.port.pose===false);
+
+iaAppliquer(IA_F);
+verifie("l'appliquer pose le cuivre ET le port",
+        CON.elements.length===5&&ANT.port.pose===true&&
+        Math.abs(ANT.port.x-20)<1e-9&&ANT.port.dir==="z",
+        CON.elements.length+" formes");
+/* LA MEME RAISON QUE POUR LE TRACE D'UN MOTIF : la proposition est recalculee
+   a chaque reaffichage de la liste, et un dessin qui partagerait ses points
+   avec elle changerait sous le doigt. */
+verifie("les formes posees sont des copies, pas les objets prepares",
+        CON.elements[1].pts!==IA_F.els[1].pts);
+iaAnnuler(IA_F);
+verifie("l'annuler rend le dessin et le port a ce qu'ils etaient",
+        CON.elements.length===0&&ANT.port.pose===false);
+
+/* -- le garde-fou du nombre de formes ------------------------------------- */
+const IA_FN=[];
+for(let i=0;i<60;i++)IA_FN.push({type:"rect",couche:"haut",
+                                 x1:0,y1:0,x2:1,y2:1});
+verifie("au-dela du garde-fou, aucune forme n'est preparee",
+        iaProposition({type:"formes", elements:IA_FN}).els.length===0);
+
+/* -- la carte est jugee AVANT les formes qu'elle accueille ---------------- */
+/* Une forme mesuree contre l'ANCIENNE taille serait refusee alors que la
+   proposition agrandit justement la carte pour elle. */
+const IA_FC=iaProposition({type:"formes", carte:{L:60, W:50},
+  elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:0,y1:0,x2:55,y2:48}]});
+verifie("une forme qui n'entre que dans la carte proposee est acceptee",
+        IA_FC.els.length===1&&IA_FC.refus.length===0,
+        (IA_FC.refus[0]||""));
+
+/* -- ce qui deborde est pose, mais dit --------------------------------- */
+const IA_FD=iaProposition({type:"formes",
+  elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:-5,y1:5,x2:10,y2:15}]});
+verifie("une forme a cheval sur le bord est posee, et la carte le signale",
+        IA_FD.els.length===1&&IA_FD.avis.some(a=>a.indexOf("borde")>=0));
+
+/* UNE PISTE SE JUGE SUR SON AXE, ET C'EST MESURE. `conBoite` elargit une
+   piste d'une demi-largeur : une ligne d'alimentation qui vient mourir au
+   bord de la carte — ce que font les six motifs de l'outil — debordait donc
+   toujours de w/2, et l'avis se serait allume sur presque chaque
+   proposition. Un avis qui se declenche tout le temps ne se lit plus. */
+const IA_FL=iaProposition({type:"formes",
+  elements:[{type:"piste",couche:"haut",net:"ANTENNE",
+             pts:[[20,0],[20,12]], w:3.06}]});
+verifie("une ligne qui meurt au bord de la carte ne passe pas pour un debord",
+        IA_FL.els.length===1&&!IA_FL.avis.some(a=>a.indexOf("borde")>=0),
+        IA_FL.avis.join(" | "));
+
+/* -- « remplacer » efface, et l'annulation rend tout ---------------------- */
+CON.elements=[{type:"rect", cu:conPremierCuivre(), net:"ANTENNE", trou:false,
+               x1:1, y1:1, x2:5, y2:5}];
+ANT.port.pose=true; ANT.port.x=9; ANT.port.y=9;
+const IA_FX=iaProposition({type:"formes", remplacer:true,
+  elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:2,y1:2,x2:8,y2:8}]});
+iaAppliquer(IA_FX);
+verifie("« remplacer » efface le dessin et depose les ports",
+        CON.elements.length===1&&CON.elements[0].x2===8&&
+        ANT.port.pose===false);
+iaAnnuler(IA_FX);
+verifie("et l'annuler rend le dessin d'avant ET le port qui allait avec",
+        CON.elements.length===1&&CON.elements[0].x2===5&&
+        ANT.port.pose===true&&ANT.port.x===9);
+
+/* -- la consigne envoyee au modele decrit bien cette quatrieme carte ------ */
+verifie("la consigne annonce la geometrie libre et ses genres",
+        window.iaPromptSysteme().indexOf('"type":"formes"')>=0&&
+        window.iaPromptSysteme().indexOf("GEOMETRIE LIBRE")>=0);
+
+/* -- la carte rendue LISTE ce qu'elle va poser --------------------------- */
+/* C'est la moitie visible de la barriere : une carte qui annoncerait
+   « 2 formes » sans les dire demanderait de presser pour savoir ce qu'on pose,
+   et un refus qu'elle tairait ferait croire au dessin qu'on vient de lire. */
+const IA_HF=iaMd("Voici.\n```action\n"+JSON.stringify({type:"formes",
+  titre:"Essai de trace",
+  elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:2,y1:2,x2:12,y2:22},
+            {type:"trapeze",couche:"haut"}]})+"\n```\n");
+verifie("la carte d'une geometrie libre liste chaque forme qu'elle pose",
+        IA_HF.indexOf("ia-action-liste")>=0&&IA_HF.indexOf("rectangle")>=0,
+        IA_HF.replace(/\s+/g," ").slice(0,200));
+verifie("et elle affiche le refus a cote de ce qu'elle pose",
+        IA_HF.indexOf("ia-action-refus")>=0&&IA_HF.indexOf("trapeze")>=0);
+
+CON.actif=false;
+CON.elements=[]; CON.sel=-1;
+ANT.ports=[antPortNeuf(true)]; ANT.portActif=0;
+
 /* ==========================================================================
    10. La barre de chargement et le bouton d'arret de simulation
    ========================================================================== */
@@ -1378,6 +1559,20 @@ charger("26-exemple.js");
 charger("15-overlay2d.js");
 verifie("l'exemple patch porte des cotes adaptees",
         typeof EX==="object"&&EX.cotes&&EX.cotes.L===27.5&&EX.cotes.y0===8.1&&EX.cotes.g===1.49);
+/* L'EXEMPLE IFA PORTE SES COTES RECALÉES EN 3D FDTD (openEMS) :
+   - La = 24.35 mm (corrige le décalage de +9,85 % vers 2,45 GHz)
+   - d = 3.80 mm (remonte l'impédance vers 50 Ω au lieu de 33 Ω)
+   - Lg = 50.0 mm et Lb = 50.0 mm (plan de masse étendu à 50 × 50 mm pour 45-55 % de rendement) */
+verifie("l'exemple IFA porte des cotes adaptees 3D",
+        typeof EX_IFA==="object"&&EX_IFA.motif==="ifa"&&
+        EX_IFA.cotes&&EX_IFA.cotes.La===24.35&&EX_IFA.cotes.d===3.8&&
+        EX_IFA.cotes.Lg===50&&EX_IFA.cotes.Lb===50&&EX_IFA.f===2.45e9);
+verifie("les deux exemples sont deux cas distincts",
+        EX.motif==="patch"&&EX_CAS.patch===EX&&EX_CAS.ifa===EX_IFA);
+/* Le motif que l'exemple designe doit exister : une cle mal orthographiee ne
+   se verrait qu'au clic, et le bouton ne ferait rien. */
+verifie("les deux exemples designent des motifs du catalogue",
+        Object.keys(EX_CAS).every(k=>!!conGabarit(EX_CAS[k].motif)));
 verifie("l'etat initial du maillage est desactive",
         ANT.vueMaillage === false);
 antBasculerVueMaillage(true);
@@ -1639,6 +1834,72 @@ verifie("un modele d'un autre compte refait l'empilage",
 CON.pile=conPileDefaut();
 CON.elements=[];
 
+/* -- les revetements EXTERIEURS de l'empilage ----------------------------- */
+/* CE QUE LE PANNEAU NE MONTRAIT PAS, ET QUI COUTAIT LE PLUS CHER. Un vernis
+   epargne n'est ni un conducteur ni un intervalle entre deux conducteurs : il
+   est pose SUR le cuivre exterieur. Le tableau de l'empilage ne montre que les
+   deux premieres sortes, si bien que les 15 microns de resine partaient au
+   solveur sans jamais s'afficher -- et leurs deux faces, toutes deux
+   obligatoires dans le maillage, commandaient a elles seules le pas de temps
+   de toute la simulation. */
+LT.pile=[
+  {nom:"Resist-A", cuivre:false, ep:0.015, er:3.7, df:0.029},
+  {nom:"TOP",      cuivre:true,  ep:0.035},
+  {nom:"CORE",     cuivre:false, ep:1.6,   er:4.3, df:0.02},
+  {nom:"BOTTOM",   cuivre:true,  ep:0.035},
+  {nom:"Resist-B", cuivre:false, ep:0.015, er:3.7, df:0.029}
+];
+LT.cu=[{nom:"TOP", rang:1, ep:0.035, role:"signal"},
+       {nom:"BOTTOM", rang:3, ep:0.035, role:"gnd"}];
+LT.gap=[];
+ANT.revetements={}; ANT.modele=null;
+verifie("les deux vernis sont reconnus comme revetements exterieurs",
+        antRevetements().map(r=>r.nom).join(",")==="Resist-A,Resist-B",
+        JSON.stringify(antRevetements()));
+verifie("le substrat INTERIEUR n'est jamais candidat",
+        !antRevetements().some(r=>r.nom==="CORE"));
+verifie("sous 50 microns, aucun n'entre dans le maillage",
+        antRevetements().every(r=>!r.garde&&!r.choisi));
+verifie("et le document ne porte « garder » tant que personne n'a tranche",
+        antEmpilage().every(e=>!("garder" in e)),
+        JSON.stringify(antEmpilage()));
+ANT.revetements["Resist-A"]=true;
+verifie("une case cochee part au serveur, et sur CETTE couche seulement",
+        antEmpilage().filter(e=>"garder" in e)
+                     .map(e=>e.nom+"="+e.garder).join(",")==="Resist-A=true",
+        JSON.stringify(antEmpilage().filter(e=>"garder" in e)));
+verifie("la page l'affiche alors comme un choix, pas comme un defaut",
+        antRevetements().some(r=>r.nom==="Resist-A"&&r.garde&&r.choisi));
+/* L'ORDRE DU SERVEUR EST L'INVERSE DE CELUI DU TABLEAU -- il range son
+   empilage du bas vers le haut pour poser ses cotes en z. Les deux lignes ne
+   doivent pas sauter de place a la premiere reponse. */
+ANT.modele={revetements:[{nom:"Resist-B", ep:0.015, er:3.7, df:0.029, garde:false, choisi:false},
+                         {nom:"Resist-A", ep:0.015, er:3.7, df:0.029, garde:true,  choisi:true}]};
+verifie("le modele renvoye ne reordonne pas le tableau",
+        antRevetements().map(r=>r.nom).join(",")==="Resist-A,Resist-B",
+        antRevetements().map(r=>r.nom).join(","));
+ANT.revetements={}; ANT.modele=null;
+
+/* EN CONCEPTION, LE MASQUE N'EST PAS UN ACCIDENT DE FICHIER. Le mode ne le
+   pose pas d'usine : il le propose, ecrit ce qu'il coute — une fois et demie
+   le temps de calcul sur le patch de l'exemple — et laisse cocher. Present, il
+   a donc ete demande, et la borne des 50 microns ne doit pas defaire le choix
+   qu'on vient de faire deux panneaux plus loin. */
+const conSauve=CON.actif;
+CON.actif=true;
+verifie("un masque pose expres en conception reste dans le maillage",
+        antRevetements().every(r=>r.garde)&&
+        antEmpilage().filter(e=>e.garder===true).map(e=>e.nom).join(",")
+          ==="Resist-A,Resist-B",
+        JSON.stringify(antEmpilage().filter(e=>"garder" in e)));
+ANT.revetements["Resist-A"]=false;
+verifie("et il se retire quand meme si on decoche la case",
+        antEmpilage().find(e=>e.nom==="Resist-A").garder===false&&
+        antRevetements().find(r=>r.nom==="Resist-A").garde===false);
+CON.actif=conSauve;
+ANT.revetements={}; ANT.modele=null;
+LT.pile=[]; LT.cu=[]; LT.gap=[];
+
 /* =============================================================================
    13. Le Rapport d'Ingénierie & Diagnostics FDTD
    ============================================================================= */
@@ -1692,8 +1953,66 @@ donneesMaille.maillage.res_die_mm = 2.5; // trop grand pour lambda_d / 15
 donneesMaille.maillage.lambda_min_mm = 60.0;
 donneesMaille.maillage.er_max = 4.3; // lambda_d/15 = 60 / (15 * 2.07) = 1.93 mm
 const diagsMaille = rapDiagnostiquer(donneesMaille);
+/* LE FAUX POSITIF QUI CRIAIT AU LOUP SUR TOUT MODELE A MARGES AUTOMATIQUES.
+   La boite automatique se pose EXACTEMENT au conseil : air utile (lambda/4) +
+   epaisseur de PML. L'air qui reste une fois la PML retranchee vaut donc
+   lambda/4 tout rond -- c'est juste, et ce doit etre muet. Le diagnostic
+   comparait cet air restant a la marge conseillee COMPLETE, PML comprise, et
+   se declenchait donc toujours. */
+(function(){
+  const sauve = ANT.modele;
+  ANT.modele = {boite:{air_restant:36.0, air_utile:36.0, marge_conseil:78.6,
+                       ep_pml:42.6, pml:8},
+                estimation:{}, resolution:{die:0.25, air:5.0}, arret:{}};
+  const d1 = rapCollecterDonnees();
+  verifie("une boite posee au conseil ne declenche plus l'alerte PML",
+          !rapDiagnostiquer(d1).some(x=>x.id==="pml_proche"));
+  ANT.modele.boite.air_restant = 12.0;
+  const d2 = rapCollecterDonnees();
+  verifie("mais une PML vraiment trop proche est toujours signalee",
+          rapDiagnostiquer(d2).some(x=>x.id==="pml_proche"));
+  ANT.modele = sauve;
+})();
+
 verifie("un maillage diélectrique supérieur à lambda_d/15 est signalé",
         diagsMaille.some(d => d.id === "maillage_grossier"));
+
+/* -- LA CELLULE MINUSCULE, ET LA COUCHE QUI LA FABRIQUE ------------------- */
+/* Le conseil etait ecrit en dur et renvoyait au DESSIN : « verifiez qu'aucun
+   sommet n'est decale d'une fraction de micron ». Sur antenna4c, la cellule de
+   15 microns etait le vernis epargne de l'empilage — rien a corriger dans le
+   dessin, et la seule couche du modele que le panneau de l'empilage ne montrait
+   pas. La cause vient desormais du modele (`estimation.cellule`), et le rapport
+   la nomme. */
+const donneesCell = JSON.parse(JSON.stringify(rapDonneesInit));
+donneesCell.maillage.min_cell_mm = [0.1997, 0.1997, 0.015];
+donneesCell.maillage.dt_ps = 0.0497;
+donneesCell.maillage.cellule = {mm:0.015, axe:"z", quoi:"dielectrique",
+                                couche:"Resist-A", ep:0.015, revetement:true};
+const diagCellRev = rapDiagnostiquer(donneesCell)
+  .find(x => x.id === "cellule_minuscule");
+verifie("le rapport nomme la couche qui fabrique la cellule minuscule",
+        !!diagCellRev && diagCellRev.desc.indexOf("Resist-A") >= 0,
+        diagCellRev ? diagCellRev.desc : "aucun diagnostic");
+verifie("et pour un revetement exterieur, il dit ou le decocher",
+        !!diagCellRev && /rev\u00eatement EXT\u00c9RIEUR/.test(diagCellRev.conseil)
+        && /L'empilage/.test(diagCellRev.conseil),
+        diagCellRev ? diagCellRev.conseil : "aucun conseil");
+donneesCell.maillage.cellule = {mm:0.012, axe:"z", quoi:"dielectrique",
+                                couche:"PREPREG", ep:0.012, revetement:false};
+const diagCellSub = rapDiagnostiquer(donneesCell)
+  .find(x => x.id === "cellule_minuscule");
+verifie("un substrat INTERIEUR, lui, doit rester : le rapport ne dit pas de l'oter",
+        !!diagCellSub && /doit rester/.test(diagCellSub.conseil)
+        && !/d\u00e9cocher/.test(diagCellSub.conseil),
+        diagCellSub ? diagCellSub.conseil : "aucun conseil");
+donneesCell.maillage.cellule = {mm:0.035, axe:"z", quoi:"cuivre",
+                                couche:"TOP", ep:0.035, revetement:false};
+verifie("et en mode volume, il renvoie au mode feuille",
+        /mode .{0,3}feuille/.test((rapDiagnostiquer(donneesCell)
+          .find(x => x.id === "cellule_minuscule") || {}).conseil || ""),
+        String((rapDiagnostiquer(donneesCell)
+          .find(x => x.id === "cellule_minuscule") || {}).conseil));
 
 // Test cas d'impédance anormale (court-circuit)
 const donneesCourtJus = JSON.parse(JSON.stringify(donneesConv));
@@ -1725,10 +2044,124 @@ verifie("le rapport Markdown contient les titres et données structurées",
         mdRapport.includes("## 4. Empilage PCB (Stack-up)"));
 
 console.log("\n14. La saisie décimale robuste dans l'assistant");
+console.log("");
+console.log("15. Les reglages calcules : la valeur s'affiche, l'etat reste a zero");
+/* CE QUI S'EPROUVE ICI EST UN EQUILIBRE, ET LES DEUX COTES SE CASSENT
+   SILENCIEUSEMENT. D'un cote, un champ qui affiche « 0 » ne dit pas ce qui
+   part au solveur : c'est la plainte d'ou vient cette section. De l'autre,
+   ecrire la valeur calculee DANS l'etat pour l'afficher la figerait au
+   maillage du jour — et le pas de temps, donc le nombre de pas, change des
+   qu'on retouche la grille. L'affichage doit donc etre rempli et l'etat
+   rester a zero, ce qu'aucun clic ne montre.
+
+   VRAI DES TROIS ORIGINES. Le meme etat sert au fichier IPC-2581, au mode
+   conception et aux exemples : `antRaz()` est le passage oblige de toute
+   ouverture de carte, et c'est lui qui rend les sept reglages au calcul. */
+extraire("02-modele.js", "mdlNb");
+extraire("02-modele.js", "mdlEntier");
+charger("13-assistant.js");
+antRaz();
+verifie("une carte qui s'ouvre rend les sept reglages au calcul",
+        ANT.boite.mx === 0 && ANT.boite.my === 0 && ANT.boite.mz_haut === 0 &&
+        ANT.boite.mz_bas === 0 && ANT.maillage.res_air === 0 &&
+        ANT.maillage.res_die === 0 && ANT.arret.nmax === 0);
+verifie("et les sept champs calcules sont bien ces sept-la",
+        ANT_AUTO.length === 7 &&
+        ANT_AUTO.map(c => c.c).join(",") ===
+          "mx,my,mz_haut,mz_bas,res_air,res_die,nmax");
+
+/* Un faux panneau : chaque champ est un objet, comme dans la section 14. */
+function champFaux(){ return {value:"", dataset:{}, classList:{
+  _n:{}, toggle(c,v){ this._n[c]=!!v; }, contient(c){ return !!this._n[c]; }}}; }
+const CH={}, ETQ={};
+ANT_AUTO.forEach(c => { CH[c.id]=champFaux(); });
+["antMargeEtq","antRaEtq","antRdEtq","antNmaxEtq"].forEach(
+  i => { ETQ[i]={textContent:"", className:"", disabled:false, title:"",
+                onclick:null}; });
+const panneau={ querySelector(sel){ const id=sel.slice(1);
+  return CH[id]||ETQ[id]||null; } };
+/* L'espace fine insecable des milliers, celle que `mdlEntier` pose. Ecrire
+   une espace ordinaire ici ferait echouer la comparaison sur un caractere
+   qu'aucun oeil ne distingue. */
+const FIN = String.fromCharCode(8239);
+
+ANT.modele={
+  boite:{marge_conseil:69.3},
+  resolution:{air:4.164, die:0.25, detail:{air:4.164, die:0.25,
+              lambda:2.95, largeur_cuivre:1.0, plancher:0.15, bornee:false}},
+  arret:{nmax:49691, nmax_calcule:49691, nmax_auto:true,
+         nmax_detail:{impulsion:31125, decroissance:49691, periodes:40,
+                      f_res:2.45e9}}
+};
+antAutoEcrire(panneau);
+verifie("un reglage laisse a zero affiche la valeur que le modele calcule",
+        CH.antRd.value === "0,25" && CH.antRa.value === "4,164" &&
+        CH.antMx.value === "69,3" && CH.antNmax.value === "49"+FIN+"691",
+        CH.antRd.value+" / "+CH.antRa.value+" / "+CH.antNmax.value);
+verifie("... sans rien ecrire dans l'etat, qui reste a zero",
+        ANT.maillage.res_die === 0 && ANT.arret.nmax === 0 &&
+        ANT.boite.mx === 0);
+verifie("... et le dit : le champ est marque calcule",
+        CH.antRd.classList.contient("auto") &&
+        ETQ.antRdEtq.textContent === "calculé" &&
+        ETQ.antRdEtq.disabled === true);
+
+/* LE NOMBRE AFFICHE N'EST PAS UNE SAISIE. Le retrouver a l'identique — un
+   passage de tabulation, un « valider » sans rien changer — ne doit pas
+   figer le reglage : c'est le nombre qu'on a mis dans le champ soi-meme. */
+extraire("13-assistant.js", "antLierNombre");
+let majAuto = 0;
+global.antMaj = function(){ majAuto++; };
+antLierNombre(CH.antNmax, ANT.arret, "nmax", {min:0, defaut:0, entier:true});
+CH.antNmax.onchange();
+verifie("revalider la valeur calculee sans la changer ne la fige pas",
+        ANT.arret.nmax === 0 && majAuto === 0,
+        "nmax="+ANT.arret.nmax);
+/* ... et le nombre groupe par milliers se relit quand meme : « 49 691 »
+   passe par parseInt, qui s'arrete au premier espace et lisait 49. */
+CH.antNmax.value = "60 000";
+CH.antNmax.onchange();
+verifie("un nombre groupe par milliers se relit en entier",
+        ANT.arret.nmax === 60000, "nmax="+ANT.arret.nmax);
+
+antAutoEcrire(panneau);
+verifie("un reglage impose est marque comme tel, et se rend",
+        !CH.antNmax.classList.contient("auto") &&
+        ETQ.antNmaxEtq.textContent === "imposé ↺" &&
+        ETQ.antNmaxEtq.disabled === false &&
+        typeof ETQ.antNmaxEtq.onclick === "function");
+ETQ.antNmaxEtq.onclick();
+verifie("le rendre remet l'etat a zero, donc au calcul",
+        ANT.arret.nmax === 0);
+/* Une etiquette pour quatre champs : elle ne dit « calcule » que si les
+   QUATRE le sont, sinon le bouton de retour manquerait pour les trois
+   autres. */
+ANT.boite.my = 12;
+antAutoEcrire(panneau);
+verifie("une seule marge imposee suffit a rendre l'etiquette des quatre",
+        ETQ.antMargeEtq.textContent === "imposé ↺");
+ETQ.antMargeEtq.onclick();
+verifie("et le retour rend les quatre a la fois",
+        ANT.boite.mx === 0 && ANT.boite.my === 0 &&
+        ANT.boite.mz_haut === 0 && ANT.boite.mz_bas === 0);
+
+/* La note qui dit LEQUEL des deux criteres tient le compteur : sans elle, le
+   nombre est un nombre de plus. */
+const noteNmax = antNmaxNoteHtml(ANT.modele);
+verifie("la note du compteur dit les deux criteres et celui qui gagne",
+        noteNmax.includes("49"+FIN+"691") && noteNmax.includes("31"+FIN+"125") &&
+        noteNmax.includes("teindre"), noteNmax);
+ANT.modele.arret.nmax = 40000; ANT.modele.arret.nmax_auto = false;
+verifie("et devant un compteur impose, elle dit ce qu'il refuse",
+        antNmaxNoteHtml(ANT.modele).includes("calculerait"));
+
 extraire("02-modele.js", "mdlNb");
 extraire("13-assistant.js", "antLierNombre");
 
-const elTest = { value: "0" };
+/* `dataset` EXISTE SUR TOUT ELEMENT REEL, et la liaison s'en sert pour
+   reconnaitre une valeur calculee affichee dans le champ (section 15). Un
+   faux element sans `dataset` eprouverait un cas qui n'arrive jamais. */
+const elTest = { value: "0", dataset: {} };
 const cibleTest = { res_die: 0.5 };
 let majCompteur = 0;
 global.antMaj = function() { majCompteur++; };

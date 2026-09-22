@@ -128,6 +128,122 @@ verifie("en mode volume, il fait substrat + 2 x cuivre",
         abs(mv["z_haut"] - (2 * 0.035 + H)) < 1e-9,
         "z_haut = %s" % mv["z_haut"])
 
+# -- LE VERNIS EPARGNE, ET LES 20 HEURES QU'IL COUTAIT ---------------------
+# Un IPC-2581 declare son masque de soudure dans l'empilage comme une couche
+# ordinaire : 15 microns, dehors, sur le cuivre exterieur. Il ne porte aucun
+# champ de ligne, mais ses deux faces portent deux lignes de maillage
+# OBLIGATOIRES, et la cellule de 15 microns qui en resulte commande le pas de
+# temps de TOUT le domaine : sur une carte d'essai qui reprend l'empilage
+# d'antenna4c.xml, 21 h annoncees au lieu de 2 h 30 pour cent mille cellules
+# de plus sur quatre millions. Et l'avis accusait « deux aretes de cuivre
+# presque confondues » -- c'est-a-dire le dessin, ou il n'y avait rien a
+# corriger.
+VERNIS = 0.015
+PILE_VERNIS = [
+    {"nom": "VERNIS-A", "cuivre": False, "ep": VERNIS,
+     "er": 3.7, "df": 0.029, "seq": 0},
+    {"nom": "TOP", "cuivre": True, "ep": 0.035, "seq": 1, "role": "signal"},
+    {"nom": "CORE", "cuivre": False, "ep": H, "er": ER, "df": 0.02, "seq": 2},
+    {"nom": "BOTTOM", "cuivre": True, "ep": 0.035, "seq": 3, "role": "gnd"},
+    {"nom": "VERNIS-B", "cuivre": False, "ep": VERNIS,
+     "er": 3.7, "df": 0.029, "seq": 4},
+]
+
+
+def pile_vernis(**quoi):
+    """L'empilage au vernis, avec un « garder » pose sur les couches nommees."""
+    import copy as _c
+    pile = _c.deepcopy(PILE_VERNIS)
+    for e in pile:
+        if e["nom"] in quoi:
+            e["garder"] = quoi[e["nom"]]
+    return pile
+
+
+mvz = openems_modele.normaliser(document(empilage=pile_vernis()))
+verifie("un vernis exterieur de 15 microns n'entre pas dans la geometrie",
+        abs(mvz["z_haut"] - H) < 1e-9
+        and [d["nom"] for d in mvz["dielectriques"]] == ["CORE"],
+        "z_haut = %s, dielectriques = %s"
+        % (mvz["z_haut"], [d["nom"] for d in mvz["dielectriques"]]))
+verifie("il n'est pas ecarte en silence : le modele le nomme",
+        [(r["nom"], r["garde"], r["choisi"]) for r in mvz["revetements"]]
+        == [("VERNIS-B", False, False), ("VERNIS-A", False, False)],
+        str(mvz["revetements"]))
+verifie("et un avis le dit, les deux vernis nommes et au pluriel",
+        any(a["titre"] == "Revetements exterieurs hors du maillage"
+            and "VERNIS-A" in a["texte"] and "VERNIS-B" in a["texte"]
+            and "les couches restent" in a["texte"] for a in mvz["avis"]),
+        str([(a["titre"], a["texte"]) for a in mvz["avis"]]))
+verifie("sans lui, aucune cellule minuscule ne commande le pas de temps",
+        min(mvz["estimation"]["plus_petite_cellule_mm"])
+        > mvz["resolution"]["die"] / 20.0,
+        "plus petite cellule %.6f mm, pas vise %.4f"
+        % (min(mvz["estimation"]["plus_petite_cellule_mm"]),
+           mvz["resolution"]["die"]))
+
+# ... ET IL SE REMET, parce qu'un coverlay de flex ou un radome mince, eux,
+# comptent : la borne est un defaut, pas une doctrine.
+mvo = openems_modele.normaliser(
+    document(empilage=pile_vernis(**{"VERNIS-A": True})))
+verifie("une case cochee remet le vernis dans la geometrie",
+        abs(mvo["z_haut"] - (H + VERNIS)) < 1e-9
+        and "VERNIS-A" in [d["nom"] for d in mvo["dielectriques"]],
+        "z_haut = %s, dielectriques = %s"
+        % (mvo["z_haut"], [d["nom"] for d in mvo["dielectriques"]]))
+verifie("et le modele distingue ce choix-la d'un defaut",
+        [r["choisi"] for r in mvo["revetements"] if r["nom"] == "VERNIS-A"]
+        == [True],
+        str(mvo["revetements"]))
+# LE COUT REVIENT AVEC LUI, et c'est tout l'interet de le dire : la cellule
+# minuscule reparait, et l'avis NOMME desormais la couche qui la fabrique au
+# lieu de proposer deux causes probables.
+_av = [a for a in mvo["avis"] if a["titre"] == "Une cellule minuscule ralentit tout"]
+verifie("le vernis remis fabrique de nouveau la cellule minuscule", len(_av) == 1,
+        str([a["titre"] for a in mvo["avis"]]))
+verifie("et l'avis nomme la couche, au lieu de faire deviner",
+        bool(_av) and "VERNIS-A" in _av[0]["texte"] and "en z" in _av[0]["texte"],
+        _av[0]["texte"] if _av else "aucun avis")
+
+# UNE COUCHE ENTRE DEUX CUIVRES N'EST JAMAIS ECARTEE, si mince soit-elle :
+# c'est un substrat, il porte le champ, et le supprimer collerait les deux
+# conducteurs l'un sur l'autre.
+_pile_mince = [
+    {"nom": "TOP", "cuivre": True, "ep": 0.035, "seq": 1, "role": "signal"},
+    {"nom": "PREPREG", "cuivre": False, "ep": 0.012, "er": ER, "df": 0.02,
+     "seq": 2},
+    {"nom": "CORE", "cuivre": False, "ep": H, "er": ER, "df": 0.02, "seq": 3},
+    {"nom": "BOTTOM", "cuivre": True, "ep": 0.035, "seq": 4, "role": "gnd"},
+]
+mvi = openems_modele.normaliser(document(empilage=_pile_mince))
+verifie("un dielectrique mince ENTRE deux cuivres reste dans le modele",
+        [d["nom"] for d in mvi["dielectriques"]] == ["CORE", "PREPREG"]
+        and not mvi["revetements"],
+        "%s, revetements = %s"
+        % ([d["nom"] for d in mvi["dielectriques"]], mvi["revetements"]))
+verifie("et c'est lui que l'avis nomme alors",
+        any("PREPREG" in a["texte"] for a in mvi["avis"]
+            if a["titre"] == "Une cellule minuscule ralentit tout"),
+        str([a["texte"] for a in mvi["avis"]
+             if a["titre"] == "Une cellule minuscule ralentit tout"]))
+
+# UN REVETEMENT EPAIS, LUI, EST GARDE PAR DEFAUT : la borne ne parle que de ce
+# qui coute plus qu'il ne rapporte.
+_pile_radome = pile_vernis()
+_pile_radome[0]["ep"] = 1.0
+mvr = openems_modele.normaliser(document(empilage=_pile_radome))
+verifie("un revetement exterieur epais est garde sans qu'on le demande",
+        "VERNIS-A" in [d["nom"] for d in mvr["dielectriques"]]
+        and [r["garde"] for r in mvr["revetements"]
+             if r["nom"] == "VERNIS-A"] == [True],
+        str(mvr["revetements"]))
+mvd = openems_modele.normaliser(document(
+    empilage=[dict(e, **({"garder": False} if e["nom"] == "VERNIS-A" else {}))
+              for e in _pile_radome]))
+verifie("et une case decochee le sort quand meme",
+        "VERNIS-A" not in [d["nom"] for d in mvd["dielectriques"]],
+        str([d["nom"] for d in mvd["dielectriques"]]))
+
 # L'ENERGIE D'ARRET, ET POURQUOI ELLE A SA PLACE DANS UN BANC. Elle est
 # NEGATIVE — des decibels sous le maximum —, et la seule fonction de lecture
 # qui rendait son defaut sur toute valeur <= 0 l'a rendue muette pendant
@@ -152,6 +268,19 @@ verifie("une energie nulle aussi : elle n'arreterait jamais rien",
         abs(openems_modele.normaliser(
             document(arret={"energie": 0, "nmax": 20000}))
             ["arret"]["energie_dB"] - openems_modele.ENERGIE_DEFAUT) < 1e-9)
+
+# TROIS CELLULES DANS LE SUBSTRAT, ET ELLES SURVIVENT. L'intention etait
+# ecrite dans `_maillage` depuis toujours : « au moins trois cellules dans un
+# substrat, une seule ne represente pas le champ qui se courbe sous une
+# piste ». Elle n'avait jamais eu lieu -- ces lignes etaient rangees dans le
+# REMPLISSAGE, et le seuil du tiers du pas les effacait toutes les trois. Le
+# patch d'essai tournait donc avec UNE cellule pour ses 1,6 mm de FR-4, et
+# c'est ce champ-la qui fait l'impedance de la ligne.
+_zin = [v for v in m["maillage"]["z"] if 1e-9 < v < H - 1e-9]
+verifie("le substrat recoit au moins trois cellules en z",
+        len(_zin) >= openems_modele.CELLULES_PAR_SUBSTRAT - 1,
+        "%d ligne(s) interieure(s) : %s"
+        % (len(_zin), ["%.4f" % v for v in _zin]))
 
 verifie("le port occupe le dielectrique et non le metal",
         abs(m["port"]["z1"] - cu["BOTTOM"]["z1"]) < 1e-9
@@ -210,19 +339,102 @@ verifie("une piste de 2 mm impose quatre cellules en travers",
 verifie("et le pas de l'air, lui, ne bouge pas",
         abs(_m_fin["resolution"]["air"] - res["air"]) < 1e-9)
 
-# LA REGLE S'ARRETE OU LE BUDGET S'ARRETE, et la carte d'essai fait 70 mm :
-# une piste de 1 mm y demanderait 0,25 mm de pas, soit 280 lignes par axe. Le
-# plancher tient a 0,35 mm — et l'avis le dit, ce qui est la seule chose qui
-# distingue une borne assumee d'un silence.
+# LE FOND S'ARRETE OU LE BUDGET DE LIGNES S'ARRETE, et la carte d'essai fait
+# 70 mm : une piste de 1 mm y demanderait 0,25 mm de pas sur TOUTE l'emprise,
+# soit 280 lignes par axe. Le fond tient donc a 0,35 mm.
+#
+# MAIS LA PISTE, ELLE, EST MAILLEE FIN QUAND MEME. C'est tout l'objet des
+# bandes : le pas de 0,25 mm n'est pose qu'EN TRAVERS du ruban, sur un
+# millimetre et sur le seul axe ou il est etroit. Avant, l'outil renoncait et
+# disait « retirez ce cuivre de la selection » ; il ne renonce plus, et ce qu'
+# il depense pour cela se chiffre.
 _d_1mm = document()
 _d_1mm["cuivre"][0]["polys"].append({"o": rect(5.0, 5.0, 20.0, 1.0)})
 _m_1mm = openems_modele.normaliser(_d_1mm)
-verifie("sous le budget de lignes, le pas s'arrete au plancher",
+_det1 = _m_1mm["resolution"]["detail"]
+_md1 = _m_1mm["maillage_detail"]
+verifie("sous le budget de lignes, le FOND s'arrete au plancher",
         abs(_m_1mm["resolution"]["die"] - PLAN / 200.0) < 1e-6,
         "%.4f pour une carte de %.0f mm" % (_m_1mm["resolution"]["die"], PLAN))
-verifie("et l'avis nomme la piste qui n'est pas resolue",
-        any("pas resolu" in a["titre"] for a in _m_1mm["avis"]),
+verifie("mais une bande fine descend en travers de la piste",
+        abs(_det1["fin"] - 1.0 / openems_modele.CELLULES_PAR_PISTE) < 1e-6,
+        "pas fin = %.4f, voulu %.4f" % (_det1["fin"], _det1["fin_voulu"]))
+verifie("et sur le SEUL axe ou la piste est etroite",
+        _md1["bandes_y"] == 1 and _md1["bandes_x"] == 0,
+        "x=%d y=%d" % (_md1["bandes_x"], _md1["bandes_y"]))
+verifie("la piste a desormais ses quatre cellules en travers",
+        _det1["pistes"]["cellules"] > 3.99,
+        "%.2f cellules pour %.3f mm"
+        % (_det1["pistes"]["cellules"], _det1["pistes"]["largeur"]))
+verifie("openEMS ne laissera plus tomber aucun polygone",
+        _det1["pistes"]["ignores"] == 0,
+        "%d ignore(s)" % _det1["pistes"]["ignores"])
+# ET LE PRIX EST LA MOITIE DE LA QUESTION. Un maillage fin partout aurait
+# coute des dizaines de fois le fond ; la bande en coute une fraction.
+verifie("l'affinage ne coute qu'une fraction du maillage de fond",
+        _det1["cout"] < _det1["cout_fond"] * 1.5,
+        "%.3g contre %.3g" % (_det1["cout"], _det1["cout_fond"]))
+verifie("et l'avis dit ce qui a ete affine, et ce que cela coute",
+        any("affine en travers" in a["titre"] for a in _m_1mm["avis"]),
         str([a["titre"] for a in _m_1mm["avis"]]))
+verifie("plus personne ne declare cette piste non resolue",
+        not any("pas resolu" in a["titre"] for a in _m_1mm["avis"]),
+        str([a["titre"] for a in _m_1mm["avis"]]))
+
+# LE BUDGET MORD, ET C'EST SA RAISON D'ETRE. Vingt pistes fines eparpillees
+# sur la carte demandent vingt bandes : le pas fin recule alors d'un cran a la
+# fois jusqu'a ce que le prix tienne. « Affiner le maillage » ne doit pas
+# vouloir dire « multiplier la duree par cinquante » sans que personne l'ait
+# demande.
+# Vingt pistes de 0,5 mm tiennent encore : quatre cellules chacune pour un
+# tiers de maillage en plus.
+_d_20 = document()
+for _i in range(20):
+    _d_20["cuivre"][0]["polys"].append({"o": rect(3.0 + 3.0 * _i, 5.0, 0.5, 40.0)})
+_m_20 = openems_modele.normaliser(_d_20)
+_det_20 = _m_20["resolution"]["detail"]
+verifie("vingt pistes de 0,5 mm : toutes resolues, pour un tiers de plus",
+        not _det_20["fin_borne"] and _det_20["pistes"]["cellules"] > 3.99
+        and _det_20["cout"] < _det_20["cout_fond"] * 1.5,
+        "%.2f cellules, cout x%.2f"
+        % (_det_20["pistes"]["cellules"],
+           _det_20["cout"] / _det_20["cout_fond"]))
+
+# Les memes en 0,3 mm, elles, ne tiennent plus : le pas voulu descendrait a
+# 0,075 mm et le calcul passerait le plafond. L'affinage recule alors d'un cran
+# a la fois -- trois cellules en travers au lieu de quatre, et le prix tenu.
+_d_fines = document()
+for _i in range(20):
+    _d_fines["cuivre"][0]["polys"].append(
+        {"o": rect(3.0 + 3.0 * _i, 5.0, 0.3, 40.0)})
+_m_20 = openems_modele.normaliser(_d_fines)
+_det20 = _m_20["resolution"]["detail"]
+verifie("vingt pistes de 0,3 mm : le budget arrete l'affinage",
+        _det20["fin_borne"] and _det20["fin"] > _det20["fin_voulu"],
+        "pas fin %.4f, voulu %.4f" % (_det20["fin"], _det20["fin_voulu"]))
+verifie("il recule d'un cran a la fois, il ne renonce pas",
+        _det20["pistes"]["cellules"] > 2.0,
+        "%.2f cellules en travers" % _det20["pistes"]["cellules"])
+verifie("et le prix reste sous le plafond qu'on s'est donne",
+        _det20["cout"] <= _det20["cout_fond"]
+        * openems_modele.AFFINAGE_COUT_MAX * 1.001,
+        "%.3g contre %.3g x %g"
+        % (_det20["cout"], _det20["cout_fond"],
+           openems_modele.AFFINAGE_COUT_MAX))
+verifie("le maillage reste tout de meme meilleur que le fond seul",
+        _det20["pistes"]["cellules"] > 0.3 / _m_20["resolution"]["die"],
+        "%.2f cellules en travers de 0,3 mm"
+        % _det20["pistes"]["cellules"])
+verifie("et l'avis dit que le budget a arrete l'affinage",
+        any("budget" in a["texte"] for a in _m_20["avis"]),
+        str([a["titre"] for a in _m_20["avis"]]))
+
+# QUAND LE FOND SUFFIT, ON N'AFFINE PAS : une piste de 2 mm tire deja le fond
+# a 0,5 mm (quatre cellules en travers), et une bande par-dessus ne serait
+# qu'un pas de temps plus court pour rien.
+verifie("aucune bande quand le fond resout deja le cuivre",
+        (_m_fin["resolution"]["detail"]["fin"] or 0.0) == 0.0,
+        "pas fin = %s" % _m_fin["resolution"]["detail"].get("fin"))
 
 # Une pastille de 50 microns ne doit pas emmener toute la carte avec elle.
 _d_pad = document()
@@ -231,6 +443,13 @@ _m_pad = openems_modele.normaliser(_d_pad)
 verifie("un detail minuscule est borne, pas suivi",
         _m_pad["resolution"]["die"] >= res["die"] / 8.0 - 1e-9,
         "%.4f" % _m_pad["resolution"]["die"])
+# ET AUCUNE BANDE NE VIENT LE SAUVER : une bande plus mince que le pas fin
+# retenu poserait une cellule de sa largeur -- 50 microns -- laquelle
+# commanderait le pas de temps de TOUT le domaine, pour un cuivre qu'elle ne
+# resout meme pas. Le budget recule jusqu'a ce que la bande disparaisse.
+verifie("et aucune bande fine n'est posee sur une pastille de 50 microns",
+        (_m_pad["resolution"]["detail"]["fin"] or 0.0) == 0.0,
+        "pas fin = %s" % _m_pad["resolution"]["detail"].get("fin"))
 verifie("et l'avis dit que ce cuivre-la n'est pas resolu",
         any("pas resolu" in a["titre"] for a in _m_pad["avis"]),
         str([a["titre"] for a in _m_pad["avis"]]))
@@ -283,6 +502,97 @@ verifie("en mode volume aussi, les quatre interfaces sont maillees",
             for z in (0.0, 0.035, 0.035 + H, mv["z_haut"])))
 verifie("les lignes de maillage sont strictement croissantes",
         all(lignes_z[i] < lignes_z[i + 1] for i in range(len(lignes_z) - 1)))
+
+# -- AUCUNE CELLULE-COPEAU, ET C'EST LE PAS DE TEMPS QUI SE JOUE LA ----------
+# Le pas de temps FDTD est commande par la plus petite cellule de TOUT le
+# domaine : une seule cellule dix fois plus fine que le pas vise multiplie par
+# dix le nombre de pas a calculer, sans rien decrire de plus. Deux mecanismes
+# en fabriquaient : deux aretes de cuivre presque confondues (l'arrondi d'un
+# bout de piste, un ruban de 1,00 mm contre un de 1,02 sur le meme axe), et
+# surtout une ligne de remplissage tombee a quelques dizaines de microns d'une
+# ligne de la regle du tiers. Mesure sur le F inverse du gabarit : 0,043 mm de
+# plus petite cellule pour un pas vise de 0,25 -- trois heures et demie de
+# calcul la ou une demi-heure suffisait.
+for _axe, _li in (("x", m["maillage"]["x"]), ("y", m["maillage"]["y"])):
+    _pas = [_li[i + 1] - _li[i] for i in range(len(_li) - 1)]
+    verifie("aucune cellule-copeau en %s : la plus fine vaut au moins le "
+            "tiers du pas vise" % _axe,
+            min(_pas) >= m["resolution"]["die"] / 3.0 - 1e-9,
+            "plus fine %.4f mm, pas vise %.4f mm"
+            % (min(_pas), m["resolution"]["die"]))
+
+# Deux aretes separees par moins que la tolerance ne donnent qu'un seul jeu de
+# lignes -- et LE CUIVRE, LUI, GARDE SES COTES : c'est la grille qu'on
+# simplifie, pas le dessin.
+d_eps = document()
+d_eps["cuivre"] = [dict(c) for c in d_eps["cuivre"]]
+d_eps["cuivre"][0] = {"couche": "TOP",
+                      "polys": [{"o": rect(10.0, 10.0, 20.0, 20.0)},
+                                {"o": rect(10.01, 31.0, 20.0, 5.0)}]}
+m_eps = openems_modele.normaliser(d_eps)
+verifie("deux aretes a 0,01 mm l'une de l'autre sont confondues pour le maillage",
+        (m_eps.get("maillage_detail") or {}).get("aretes_groupees", 0) >= 1,
+        str(m_eps.get("maillage_detail")))
+verifie("et l'assistant le dit",
+        any("confondues" in a["titre"] for a in m_eps["avis"]),
+        str([a["titre"] for a in m_eps["avis"]]))
+verifie("le cuivre envoye au solveur garde ses cotes exactes",
+        abs(m_eps["cuivre"][0]["polys"][1]["o"][0][0] - 10.01) < 1e-9,
+        str(m_eps["cuivre"][0]["polys"][1]["o"][0]))
+
+# -- LE COMPTEUR DE PAS SE CALCULE -------------------------------------------
+# Zero veut dire « calcule-le », comme un pas de maillage a zero. Le bon
+# nombre depend du pas de temps, donc du maillage : un nombre saisi une fois
+# ne vaut plus rien des qu'on retouche la grille.
+m_auto = openems_modele.normaliser(document(arret={"energie": -40, "nmax": 0}))
+_pas_exc = m_auto["bande"]["t_excitation"] / m_auto["estimation"]["dt_s"]
+verifie("un nmax a zero est calcule", m_auto["arret"].get("nmax_auto") is True)
+_periodes = (openems_modele.NMAX_PERIODES
+             / (m_auto["bande"]["fcible"] * m_auto["estimation"]["dt_s"]))
+verifie("il tient l'impulsion, la ou openEMS en exige trois",
+        m_auto["arret"]["nmax"] >= 3.0 * _pas_exc,
+        "%d pas pour une impulsion de %.0f" % (m_auto["arret"]["nmax"], _pas_exc))
+# LE PLUS GRAND DES DEUX CRITERES, ET PAS LA SOMME : l'impulsion et
+# l'extinction ne s'ajoutent pas, elles se recouvrent.
+verifie("et il tient aussi la decroissance a -40 dB",
+        abs(m_auto["arret"]["nmax"]
+            - max(4.0 * _pas_exc, _periodes)) < 2,
+        "%d pas : impulsion %.0f, decroissance %.0f"
+        % (m_auto["arret"]["nmax"], 4.0 * _pas_exc, _periodes))
+verifie("un calcul dont le compteur est calcule ne peut plus etre tronque",
+        not any("impulsion" in a["titre"] or "garde-fou" in a["titre"]
+                for a in m_auto["avis"]),
+        str([a["titre"] for a in m_auto["avis"]]))
+m_saisi = openems_modele.normaliser(document(arret={"energie": -40, "nmax": 12345}))
+verifie("un nmax saisi reste celui qu'on a saisi",
+        m_saisi["arret"]["nmax"] == 12345
+        and m_saisi["arret"].get("nmax_auto") is False)
+# LE NOMBRE CALCULE RESTE LISIBLE A COTE DU NOMBRE SAISI : c'est ce que la
+# page affiche pour que l'ecart se voie au lieu de se subir.
+verifie("et le nombre calcule reste lisible a cote",
+        m_saisi["arret"]["nmax_calcule"] == m_auto["arret"]["nmax"])
+m_court = openems_modele.normaliser(
+    document(arret={"energie": -40,
+                    "nmax": int(m_auto["arret"]["nmax"] * 0.6)}))
+verifie("un garde-fou saisi trop court est signale",
+        any("garde-fou" in a["titre"] for a in m_court["avis"]),
+        str([a["titre"] for a in m_court["avis"]]))
+# ... ET SEULEMENT S'IL EST TROP COURT. Un nombre saisi plus genereux que le
+# calcul n'a rien de suspect : il ne coute que si l'energie ne descend pas.
+m_large = openems_modele.normaliser(
+    document(arret={"energie": -40, "nmax": m_auto["arret"]["nmax"] * 3}))
+verifie("un garde-fou saisi plus large ne dit rien",
+        not any("garde-fou" in a["titre"] for a in m_large["avis"]),
+        str([a["titre"] for a in m_large["avis"]]))
+# -- LES PAS DE MAILLAGE CALCULES RESTENT LISIBLES ---------------------------
+m_pas = openems_modele.normaliser(document(maillage={"res_die": 0.9}))
+_d = m_pas["resolution"]["detail"]
+verifie("un pas de maillage saisi est signale comme tel",
+        _d["saisi"] is True and _d["saisi_air"] is False)
+verifie("et le pas calcule reste lisible a cote du pas saisi",
+        _d["die"] > 0 and abs(_d["die"] - 0.9) > 1e-9
+        and abs(_d["air"] - m_pas["resolution"]["air"]) < 1e-9,
+        "calcule %.4f, saisi %.4f" % (_d["die"], m_pas["resolution"]["die"]))
 
 print()
 print("2. Refus attendus")
@@ -825,9 +1135,19 @@ verifie("il emet l'ame, la gaine et le dielectrique",
 # de reference, soit une ligne court-circuitee a son bout.
 _deg = tc[:tc.index("degagement dans BOTTOM")]
 verifie("le degagement est un POLYGONE et non un cylindre plat",
-        "priority=11)" in _deg[-40:] and
         "AddPolygon" in _deg[_deg.rindex("sub_0."):] and
         "AddCylinder" not in _deg[_deg.rindex("sub_0."):])
+# ET IL PASSE AU-DESSUS DU CUIVRE, sans quoi il ne perce rien. Le degagement
+# etait emis a la priorite 11, celle des DECOUPES d'un versement -- mais un
+# plan de masse SANS decoupe n'est pas emis comme un versement : il part avec
+# les pistes, a la priorite 12. Douze bat onze, le degagement ne percait rien,
+# l'ame du coaxial touchait le plan, et le port etait un court-circuit franc.
+# La simulation le disait sans ambiguite -- Z = 0,0 + 1,5j ohms au plan de
+# reference et |S11| = 0 dB sur toute la bande --, mais seulement a qui la
+# lancait : c'est exactement le genre de faute qu'un banc doit attraper avant.
+_prio_deg = int(_deg[_deg.rindex("priority=") + 9:].split(")")[0])
+verifie("et il passe au-dessus du cuivre, sinon il ne perce rien",
+        _prio_deg > 12, "priorite %d, cuivre a 12" % _prio_deg)
 verifie("la sonde de courant encercle l'ame",
         "norm_dir=2" in tc and "p_type=1" in tc)
 verifie("le plan de reference est ramene a la surface de la carte",
@@ -970,6 +1290,10 @@ import tempfile                                        # noqa: E402
 
 import projet                                          # noqa: E402
 
+
+class _SansRun(Exception):
+    """Le module d'execution manque : la partie qui en depend est sautee."""
+
 _bac = tempfile.mkdtemp(prefix="banc-projets-")
 try:
     projet._RACINE = os.path.join(_bac, "travail")
@@ -1055,8 +1379,195 @@ try:
         verifie("ouvrir un dossier quelconque est refuse", False)
     except projet.ErreurProjet:
         verifie("ouvrir un dossier quelconque est refuse", True)
+
+    # ----------------------------------------------------------------------
+    # RANGER UN CALCUL DEJA FAIT DANS LE PROJET.
+    #
+    # CE QUE CETTE PARTIE PROTEGE. Le cas courant n'est pas « ouvrir un projet
+    # puis lancer » : c'est lancer, regarder la courbe deux heures plus tard,
+    # et nommer son travail seulement s'il a donne quelque chose. Les champs
+    # sont alors dans le dossier temporaire du systeme, et les y laisser
+    # revient a les perdre au premier nettoyage de disque. Ce qui doit tenir,
+    # c'est que le deplacement suive sa tache (sans quoi la visionneuse
+    # cherche a l'ancienne adresse), qu'il refuse un calcul en cours, et
+    # qu'il n'ecrase jamais rien.
+    # Comme la section 14 : le module se charge sans openEMS installe — il ne
+    # sonde le solveur qu'au lancement —, mais on ne suppose rien.
+    try:
+        import openems_run
+    except Exception:                                  # noqa: BLE001
+        openems_run = None
+    _tmp = tempfile.mkdtemp(prefix="banc-calculs-")
+    try:
+        if openems_run is None:
+            raise _SansRun()
+        openems_run.definir_racine_calculs(os.path.join(_tmp, "ailleurs"))
+        _id, _dos = openems_run._dossier_neuf()
+        with open(os.path.join(_dos, "J_xy_000.vtr"), "w") as _f:
+            _f.write("x" * 4096)
+
+        projet.enregistrer({"nom": "Patch 2,45 GHz"})
+        _cible = projet.dossier_calculs()
+        _out = openems_run.archiver(_id, _cible)
+        # `realpath` des deux cotes : sous Windows, TEMP porte souvent le nom
+        # court 8.3 du profil, et openems_run resout le sien — comparer les
+        # deux ecritures du meme dossier ferait echouer pour rien.
+        verifie("le dossier de calcul est deplace dans le projet",
+                _out["deplace"] and
+                os.path.realpath(_out["dossier"]) ==
+                os.path.realpath(os.path.join(_cible, _id)))
+        verifie("... et il ne reste rien a l'ancienne adresse",
+                not os.path.isdir(_dos))
+        verifie("... avec les champs dedans",
+                os.path.isfile(os.path.join(_out["dossier"], "J_xy_000.vtr")))
+        verifie("... et son poids est annonce", _out["octets"] == 4096)
+
+        # La tache n'existe qu'en memoire ici ; c'est la base des calculs qui
+        # doit permettre de retrouver le dossier, comme apres un redemarrage.
+        openems_run.definir_racine_calculs(_cible)
+        verifie("le calcul se retrouve a sa nouvelle adresse",
+                openems_run.dossier_de(_id) == _out["dossier"])
+
+        _deja = openems_run.archiver(_id, _cible)
+        verifie("archiver deux fois ne fait rien la seconde",
+                _deja["deja"] and not _deja["deplace"])
+
+        # Un calcul qui tourne ne se deplace pas : openEMS ecrit dedans.
+        openems_run.definir_racine_calculs(os.path.join(_tmp, "ailleurs"))
+        _id2, _dos2 = openems_run._dossier_neuf()
+        _t = openems_run.Tache(_id2, _dos2, {})
+        _t.etat = "calcule"
+        openems_run._TACHES[_id2] = _t
+        try:
+            openems_run.archiver(_id2, _cible)
+            verifie("un calcul en cours ne se deplace pas", False)
+        except openems_modele.ErreurModele:
+            verifie("un calcul en cours ne se deplace pas", True)
+        verifie("... et ses fichiers n'ont pas bouge", os.path.isdir(_dos2))
+
+        # Rien ne s'ecrase : un dossier deja range porte le meme identifiant.
+        _t.etat = "fini"
+        _jumeau = os.path.join(os.path.dirname(_dos2), _id)
+        os.rename(_dos2, _jumeau)
+        _t3 = openems_run.Tache(_id, _jumeau, {})
+        _t3.etat = "fini"
+        openems_run._TACHES[_id] = _t3
+        try:
+            openems_run.archiver(_id, _cible)
+            verifie("un dossier deja range n'est jamais ecrase", False)
+        except openems_modele.ErreurModele:
+            verifie("un dossier deja range n'est jamais ecrase", True)
+        verifie("... et les champs ranges sont toujours la",
+                os.path.isfile(os.path.join(_out["dossier"], "J_xy_000.vtr")))
+
+        # Un identifiant qui n'est pas un des notres n'ouvre aucun chemin.
+        for _faux in ("..", "../../windows", "n-importe-quoi", ""):
+            try:
+                openems_run.archiver(_faux, _cible)
+                verifie("un identifiant invente est refuse : %r" % _faux,
+                        False)
+            except openems_modele.ErreurModele:
+                verifie("un identifiant invente est refuse : %r" % _faux, True)
+
+        try:
+            openems_run.archiver(_id, "")
+            verifie("sans projet ouvert, archiver est refuse", False)
+        except openems_modele.ErreurModele:
+            verifie("sans projet ouvert, archiver est refuse", True)
+
+        # ------------------------------------------------------------------
+        # LISTER LES CALCULS, ET EN IMPORTER UN D'AILLEURS.
+        #
+        # CE QUE CETTE PARTIE PROTEGE. `resultats.json` ne retient qu'UN
+        # calcul ; un projet en accumule un par simulation. La liste est le
+        # seul moyen d'atteindre les autres, et l'import le seul moyen de
+        # faire entrer le calcul d'un collegue. Ce qui doit tenir, c'est que
+        # l'import COPIE — la source d'un tiers ne se deplace jamais —, qu'il
+        # ne prenne que ce qui appartient a un dossier de calcul, et qu'un
+        # dossier sans champ soit refuse plutot qu'accepte a vide.
+        # Les calculs suivent le projet ouvert : c'est ce que le serveur
+        # refait apres chaque ouverture et chaque enregistrement (_pr_suivre).
+        openems_run.definir_racine_calculs(_cible)
+
+        _liste = projet.calculs()
+        verifie("la liste rend le calcul archive",
+                [c["id"] for c in _liste] == [_id])
+        verifie("... avec son compte de champs et son poids",
+                _liste[0]["vtr"] == 1 and _liste[0]["octets"] == 4096)
+        verifie("... et il n'est pas marque comme importe",
+                _liste[0]["importe"] is None)
+
+        _dehors = os.path.join(_tmp, "cle-usb", "run-du-collegue")
+        os.makedirs(os.path.join(_dehors, "nf2ff"))
+        for _n in ("Jt_xy_000.vtr", "Jt_xy_001.vtr"):
+            with open(os.path.join(_dehors, _n), "w") as _f:
+                _f.write("y" * 512)
+        with open(os.path.join(_dehors, "simulation.py"), "w") as _f:
+            _f.write("# script\n")
+        with open(os.path.join(_dehors, "notes.docx"), "w") as _f:
+            _f.write("z" * 64)
+        with open(os.path.join(_dehors, "nf2ff", "nf2ff.h5"), "w") as _f:
+            _f.write("h" * 32)
+
+        _neuf = openems_run.identifiant_neuf()
+        verifie("un identifiant neuf a la forme que le module reconnait",
+                bool(openems_run._RE_IDENT.match(_neuf)))
+        _imp = projet.importer_calcul(_dehors, _neuf)
+        verifie("un dossier venu d'ailleurs entre dans le projet",
+                _imp["id"] == _neuf and _imp["vtr"] == 2)
+        verifie("... et le .docx n'est pas venu avec",
+                _imp["ignores"] == 1 and
+                not os.path.isfile(os.path.join(_imp["dossier"],
+                                                "notes.docx")))
+        verifie("... le sous-dossier, si",
+                os.path.isfile(os.path.join(_imp["dossier"], "nf2ff",
+                                            "nf2ff.h5")))
+        verifie("... LA SOURCE N'A PAS BOUGE",
+                os.path.isfile(os.path.join(_dehors, "Jt_xy_000.vtr")) and
+                os.path.isfile(os.path.join(_dehors, "notes.docx")))
+        verifie("... et il se retrouve comme n'importe quel calcul",
+                openems_run.dossier_de(_neuf) == _imp["dossier"])
+
+        _liste = projet.calculs()
+        verifie("la liste rend les deux calculs", len(_liste) == 2)
+        _fiche = [c for c in _liste if c["id"] == _neuf][0]["importe"]
+        verifie("... et dit d'ou vient celui qui a ete importe",
+                _fiche and _fiche.get("nom") == "run-du-collegue" and
+                os.path.realpath(_fiche.get("source", "")) ==
+                os.path.realpath(_dehors))
+
+        for _quoi, _ou in (
+                ("un dossier sans le moindre .vtr", _tmp),
+                ("un dossier qui n'existe pas",
+                 os.path.join(_tmp, "nulle-part")),
+                ("un fichier au lieu d'un dossier",
+                 os.path.join(_dehors, "notes.docx")),
+                ("rien du tout", "   ")):
+            try:
+                projet.importer_calcul(_ou, openems_run.identifiant_neuf())
+                verifie("importer est refuse : %s" % _quoi, False)
+            except projet.ErreurProjet:
+                verifie("importer est refuse : %s" % _quoi, True)
+        try:
+            projet.importer_calcul(_imp["dossier"],
+                                   openems_run.identifiant_neuf())
+            verifie("importer est refuse : un dossier deja dans le projet",
+                    False)
+        except projet.ErreurProjet:
+            verifie("importer est refuse : un dossier deja dans le projet",
+                    True)
+        verifie("aucun de ces refus n'a laisse de dossier a moitie copie",
+                len(projet.calculs()) == 2)
+    except _SansRun:
+        print("  --   archivage des calculs : openems_run indisponible")
+    finally:
+        if openems_run is not None:
+            openems_run._TACHES.clear()
+            openems_run.definir_racine_calculs("")
+        shutil.rmtree(_tmp, ignore_errors=True)
 finally:
     projet._RACINE = None
+    projet.fermer()
     shutil.rmtree(_bac, ignore_errors=True)
 
 # --------------------------------------------------------------------------
@@ -1412,7 +1923,36 @@ if _np_lg is not None:
 
 # --------------------------------------------------------------------------
 print()
-print("19. Les bancs JavaScript (decoupage de polygones, logique de la page)")
+print("19. Le lecteur de champs .vtr")
+# IL A SON PROPRE BANC, parce qu'il fabrique ses fichiers d'essai et qu'il
+# n'a besoin ni d'openEMS ni d'un dossier de calcul : le format .vtr se
+# verifie en ecrivant des fichiers dont on connait le contenu, ce qui est
+# plus sur qu'un calcul de dix minutes. On le lance d'ici pour qu'une seule
+# commande suffise a tout verifier ; pour l'eprouver en plus sur de VRAIS
+# fichiers, on lui passe a la main un dossier de calcul :
+#
+#     python python/test/banc-champs.py <dossier>
+#
+try:
+    _r = subprocess.run([sys.executable, os.path.join(ICI, "banc-champs.py")],
+                        capture_output=True, text=True, timeout=300)
+    _sortie = ((_r.stdout or "") + (_r.stderr or "")).strip()
+    if _r.returncode == 0:
+        for _l in _sortie.splitlines():
+            if _l.strip().startswith("ok "):
+                _ok[0] += 1
+        print("   banc-champs.py         %s" % _sortie.splitlines()[-1])
+    else:
+        for _l in _sortie.splitlines():
+            if _l.strip().startswith("RATE"):
+                _ko.append(_l.strip()[5:].strip())
+        print(_sortie)
+except Exception as _exc:                              # noqa: BLE001
+    print("   banc-champs.py non lance : %s" % _exc)
+
+# --------------------------------------------------------------------------
+print()
+print("20. Les bancs JavaScript (decoupage de polygones, logique de la page)")
 # IL EST EN JAVASCRIPT, ET IL EST QUAND MEME VERIFIE ICI. Le decoupage d'une
 # decoupe au bord d'un versement est le seul morceau de l'outil dont on ne
 # voit PAS le resultat : une fente mal coupee ne fait pas d'erreur, elle fait
@@ -1479,7 +2019,19 @@ if "--simuler" in sys.argv:
         print("   ECHEC : %s" % j["detail"])
         sys.exit(1)
 
-    r = j["resultat"]
+    # UN CALCUL QUI VA AU BOUT SANS RIEN RENDRE EST LE CAS LE PLUS INSTRUCTIF,
+    # et le banc y repondait par un TypeError nu : « must be real number, not
+    # NoneType ». C'est arrive pour de bon -- une boite d'excitation posee a
+    # quatre microns d'une ligne de maillage n'excite rien, et le solveur
+    # calcule vingt mille pas d'un champ nul (voir `_coller_ports`). Le dire
+    # est la moitie du travail d'un banc d'essai.
+    r = j["resultat"] or {}
+    if not r.get("f0"):
+        print("   ECHEC : la simulation a fini sans rien rendre.")
+        print("   %s" % (j.get("detail") or ""))
+        verifie("la simulation rend une resonance", False,
+                "aucune grandeur exploitable -- le port a-t-il excite ?")
+        sys.exit(1)
     fr = r["f0"] / 1e9
     print()
     print("   resonance a %.4f GHz, S11 = %.2f dB, Z = %.1f %+.1fj ohms"

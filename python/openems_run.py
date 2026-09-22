@@ -27,7 +27,9 @@
 #   une simulation qui dure des minutes.
 #
 # Fonctions : etat, lancer, lancer_balayage, lancer_tableau_s, journal,
-#            resultat, arreter, nettoyer, definir_racine_calculs
+#            resultat, arreter, nettoyer, definir_racine_calculs,
+#            identifiant_neuf, archiver,
+#            dossier_de
 # ==========================================================================
 """Execute une simulation openEMS en sous-processus et suit son avancement."""
 
@@ -1320,6 +1322,20 @@ def _base_calculs():
     return _base_temporaire()
 
 
+def identifiant_neuf():
+    """Un identifiant de calcul neuf.
+
+    LA FORME D'UN IDENTIFIANT APPARTIENT A CE MODULE, et a lui seul : c'est
+    lui qui la fabrique ici, et c'est lui qui la reconnait dans `_RE_IDENT`
+    pour retrouver un dossier apres un redemarrage. Un dossier de calcul
+    IMPORTE doit porter la meme forme que les autres, sans quoi il serait le
+    seul a ne pas se retrouver — d'ou cette fonction publique, que le serveur
+    appelle pour le compte de projet.py, lequel ne sait toujours pas
+    qu'openEMS existe.
+    """
+    return uuid.uuid4().hex[:12]
+
+
 def _dossier_neuf():
     """Un dossier de calcul vierge, et son identifiant.
 
@@ -1328,7 +1344,7 @@ def _dossier_neuf():
     Windows TEMP vaut souvent le nom court 8.3 du profil — les deux ne
     coincident alors pas, et le calcul s'arrete sur une AssertionError nue.
     """
-    ident = uuid.uuid4().hex[:12]
+    ident = identifiant_neuf()
     dossier = os.path.join(_base_calculs(), ident)
     os.makedirs(dossier, exist_ok=True)
     return ident, dossier
@@ -1514,6 +1530,109 @@ def _dossier_de(ident):
     raise openems_modele.ErreurModele(
         "Cette simulation n'existe plus (%s)." % ident,
         "Ses fichiers ont ete effaces, ou le dossier temporaire a ete vide.")
+
+
+def dossier_de(ident):
+    """Le dossier de calcul d'une tache, resolu et verifie.
+
+    LA VERSION PUBLIQUE DE `_dossier_de`, et la seule porte par laquelle un
+    identifiant venu d'une requete devient un chemin. Le lecteur de champs
+    (openems_champs) en a besoin comme ParaView en avait besoin, et pour la
+    meme raison : il ne doit jamais lire ailleurs que dans un dossier que
+    nous avons nous-memes cree.
+    """
+    return _dossier_de(ident)
+
+
+def _poids_dossier(dossier):
+    """Ce que pese un dossier de calcul, pour l'annoncer avant et apres."""
+    total = 0
+    for base, _sous, fichiers in os.walk(dossier):
+        for f in fichiers:
+            try:
+                total += os.path.getsize(os.path.join(base, f))
+            except OSError:
+                pass
+    return total
+
+
+def archiver(ident, base_destination):
+    """Range le dossier d'un calcul deja fait sous `base_destination`.
+
+    POURQUOI CETTE FONCTION EXISTE. `definir_racine_calculs` ne vaut que pour
+    les calculs A VENIR : elle est posee a l'ouverture d'un projet, et un
+    calcul lance AVANT — donc sans projet ouvert — a ecrit ses .vtr dans le
+    dossier temporaire du systeme. Enregistrer un projet apres coup n'y
+    changeait rien : projet.py n'ecrit que trois fichiers nommes, il ne
+    deplace aucun dossier. Les champs restaient donc dans TEMP, ou le
+    nettoyage de disque de Windows les efface un jour sans rien annoncer,
+    pendant que `resultats.json` continuait de pointer dessus.
+
+    POURQUOI C'EST ICI ET NON DANS projet.py. Deux raisons, et la seconde est
+    la plus forte. D'abord `_dossier_de` est la seule porte qui transforme un
+    identifiant venu d'une requete en un chemin, et elle ne rend que des
+    dossiers que nous avons nous-memes crees : deplacer ailleurs qu'a partir
+    d'elle reviendrait a deplacer un chemin dicte par la requete. Ensuite la
+    tache GARDE son dossier en memoire — le bouger sans le lui dire ferait
+    repondre « le dossier de calcul a disparu » a la visionneuse deux secondes
+    plus tard.
+
+    `base_destination` est POSEE PAR LE SERVEUR, comme la racine des calculs :
+    ce module ne sait toujours pas ce qu'est un projet.
+    """
+    if not base_destination:
+        raise openems_modele.ErreurModele(
+            "Aucun dossier ou ranger ce calcul.",
+            "Ouvrez ou enregistrez un projet : c'est lui qui donne le "
+            "dossier.")
+
+    source = _dossier_de(ident)
+
+    # UN CALCUL QUI TOURNE NE SE DEPLACE PAS. openEMS ecrit dans ce dossier
+    # et l'a ouvert en courant : le bouger sous ses pieds ferait echouer la
+    # simulation a la prochaine ecriture, et sur Windows le deplacement
+    # serait refuse net.
+    with _VERROU:
+        tache = _TACHES.get(ident)
+        etat_ = tache.etat if tache is not None else ""
+    if etat_ in ("prepare", "calcule"):
+        raise openems_modele.ErreurModele(
+            "Ce calcul tourne encore : ses fichiers ne peuvent pas etre "
+            "deplaces maintenant.",
+            "Attendez la fin, ou arretez-le.")
+
+    destination = os.path.join(os.path.realpath(base_destination),
+                               os.path.basename(source))
+    if os.path.realpath(source) == os.path.realpath(destination):
+        return {"deplace": False, "deja": True, "dossier": source,
+                "octets": _poids_dossier(source)}
+    # ON N'ECRASE RIEN. Un dossier deja en place porte le meme identifiant :
+    # c'est le meme calcul, archive une premiere fois, et le remplacer
+    # jetterait ce qu'on croit justement mettre a l'abri.
+    if os.path.exists(destination):
+        raise openems_modele.ErreurModele(
+            "Un dossier de calcul du meme nom est deja range la : %s"
+            % destination,
+            "Rien n'a ete touche.")
+
+    octets = _poids_dossier(source)
+    try:
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        shutil.move(source, destination)
+    except (OSError, shutil.Error) as exc:
+        raise openems_modele.ErreurModele(
+            "Le dossier de calcul n'a pas pu etre range : %s" % exc,
+            "Il est reste ou il etait : %s" % source)
+
+    # La tache suit ses fichiers, sans quoi la visionneuse et « ouvrir le
+    # dossier » chercheraient a l'ancienne adresse.
+    with _VERROU:
+        tache = _TACHES.get(ident)
+        if tache is not None:
+            tache.dossier = destination
+
+    return {"deplace": True, "deja": False, "dossier": destination,
+            "source": source, "octets": octets}
 
 
 def _ouvrir(commande):

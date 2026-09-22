@@ -69,6 +69,22 @@ const ANT={
      voir le commentaire de python/openems_modele.py. */
   modeleCuivre:"feuille",
 
+  /* Ce qu'on a décidé des REVÊTEMENTS EXTÉRIEURS de l'empilage — le vernis
+     épargne, un coverlay, un radôme collé : tout ce qui n'est pas du cuivre
+     et qui n'est pas ENTRE deux cuivres. Par nom de couche -> vrai/faux.
+
+     POURQUOI CETTE TABLE EST VIDE PAR DÉFAUT, ET NON REMPLIE DU DÉFAUT. Le
+     serveur écarte de lui-même un revêtement plus fin que 50 µm : ses deux
+     faces portent deux lignes de maillage obligatoires, et la cellule de
+     15 µm d'un vernis ordinaire commande alors le pas de temps de TOUTE la
+     simulation — 21 h au lieu de 2 h 30 sur une carte d'essai qui reprend
+     l'empilage d'antenna4c, pour une permittivité ajoutée sur un
+     vingt-cinquième de la hauteur du substrat. Recopier ce défaut
+     ici rendrait un choix de l'utilisateur indistinguable d'un silence, et la
+     page ne saurait plus quoi afficher à côté de la case. Une entrée ici
+     signifie donc « quelqu'un a tranché », rien de moins. */
+  revetements:{},
+
   /* Le modèle de pertes du diélectrique. « kappa » : une conductivité
      équivalente, juste à UNE seule fréquence. « debye » : un jeu de pôles de
      relaxation qui tient tanδ plat sur toute la bande — ce que fait un
@@ -119,7 +135,13 @@ const ANT={
   maillage:{res_air:0, res_die:0, tiers:true},
 
   /* -- 7. le calcul ------------------------------------------------------ */
-  arret:{energie:-40, nmax:30000},
+  /* ZÉRO VEUT DIRE « QUE LE MODÈLE LE CALCULE », comme pour le maillage juste
+     en dessous. Le bon nombre de pas ne se devine pas : l'impulsion dure un
+     temps FIXE, mais le nombre de pas qu'elle occupe dépend du pas de temps,
+     donc de la plus petite cellule, donc de la géométrie. Trente mille était
+     de trop pour un monopôle et trois fois trop peu pour un F inversé
+     finement maillé — et rien, dans le nombre, ne le disait. */
+  arret:{energie:-40, nmax:0},
   /* Le balayage parametrique : une cote, une plage, une simulation par
      valeur. `source` designe la cote dans la liste que 24-balayage.js dresse
      a partir de ce qui est a l'ecran. */
@@ -302,6 +324,10 @@ function antRaz(){
   ANT.couches=new Set();
   ANT.ports=[antPortNeuf()]; ANT.portActif=0;
   ANT.posePort=false; ANT.viasSupposes=0;
+  /* Les revêtements sont désignés par NOM de couche, et un nom ne veut rien
+     dire d'une carte à l'autre : « Resist-A » peut être un vernis de 15 µm
+     ici et un coverlay de 50 sur la suivante. */
+  ANT.revetements={};
   /* LES CHAMPS DU SECOND AXE SONT REMIS AUSSI, et les oublier ne se voyait
      pas : `croise` repartait à `undefined`, donc faux, donc le bloc croisé ne
      s'affichait pas — et le jour où l'on cochait « Croiser » après avoir
@@ -514,8 +540,81 @@ function antSigmaDe(nom){
   return 0;
 }
 
+/* Les revêtements EXTÉRIEURS de l'empilage, et ce qu'il advient de chacun.
+
+   CE QUI EST « EXTÉRIEUR » SE LIT SUR L'EMPILAGE ET NON SUR LE NOM : est
+   extérieur ce qui n'est pas du cuivre et qui n'est pas entre les deux cuivres
+   extrêmes. Un fichier qui nomme son masque « L9 » est traité comme celui qui
+   le nomme « Resist-A », et un diélectrique intérieur n'est jamais candidat —
+   c'est un substrat, il porte le champ.
+
+   LE SERVEUR EST L'AUTORITÉ, ET ON LE RELIT DÈS QU'IL A PARLÉ : `ANT.modele`
+   porte la liste qu'il a vraiment appliquée, épaisseurs comprises. Le calcul
+   local ci-dessous ne sert qu'avant la première normalisation — sinon la case
+   naîtrait vide sur une carte qui a pourtant un vernis. */
+const ANT_EP_REVETEMENT=0.05;        /* mm — miroir de EP_REVETEMENT_MM */
+/* UNE CARTE DESSINÉE N'A RIEN D'ACCIDENTEL DANS SON EMPILAGE, et c'est toute
+   la différence avec une carte importée. Le mode conception ne pose PAS de
+   masque d'usine : il le propose, écrit ce qu'il coûte (une fois et demie le
+   temps de calcul sur le patch de l'exemple, pour le dernier pour cent de
+   résonance) et laisse cocher. Un masque présent là est donc un masque
+   demandé, et l'écarter du maillage au motif qu'il est mince reviendrait à
+   défaire le choix qu'on vient de faire deux panneaux plus loin. La borne des
+   50 µm ne vaut que pour ce qui ARRIVE dans le fichier sans qu'on l'ait
+   demandé. */
+function antRevetementVoulu(){
+  return !!(typeof CON!=="undefined"&&CON.actif);
+}
+function antRevetementsLocaux(){
+  const rangs=[];
+  LT.pile.forEach(function(e,i){ if(e.cuivre)rangs.push(i); });
+  if(!rangs.length)return [];
+  const voulu=antRevetementVoulu();
+  const out=[];
+  LT.pile.forEach(function(e,i){
+    if(e.cuivre||(i>rangs[0]&&i<rangs[rangs.length-1]))return;
+    out.push({nom:e.nom, ep:e.ep, er:e.er||0, df:e.df||0,
+              garde:voulu||e.ep>ANT_EP_REVETEMENT, choisi:false});
+  });
+  return out;
+}
+/* Ce que la page doit DIRE au serveur d'un revêtement : rien quand sa borne
+   tombe juste — elle est l'autorité —, un booléen quand la page en sait plus
+   qu'elle : une case cochée ici, ou un masque posé exprès en conception. */
+function antRevetementGarder(nom,ep){
+  if(Object.prototype.hasOwnProperty.call(ANT.revetements,nom))
+    return !!ANT.revetements[nom];
+  if(antRevetementVoulu()&&!(ep>ANT_EP_REVETEMENT))return true;
+  return null;
+}
+function antRevetements(){
+  const m=ANT.modele;
+  const par={};
+  ((m&&m.revetements)||[]).forEach(function(r){ par[r.nom]=r; });
+  /* L'ORDRE VIENT DE `LT.pile` ET NON DU MODÈLE, et ce n'est pas un détail
+     d'affichage : le serveur range son empilage du BAS vers le HAUT — il en a
+     besoin pour poser ses cotes en z — tandis que le tableau se lit du haut
+     vers le bas, comme la feuille du fabricant. Prendre l'ordre du serveur
+     ferait sauter les deux lignes de place dès la première réponse. */
+  const loc=antRevetementsLocaux();
+  const src=loc.length?loc:((m&&m.revetements)||[]);
+  /* LA DÉCISION LOCALE PASSE DEVANT CELLE DU MODÈLE : entre le clic sur la
+     case et la réponse du serveur il y a un aller-retour, et une case qui se
+     décoche toute seule le temps d'une requête est une case qu'on ne croit
+     plus. Sur tout le reste — épaisseur retenue, défaut appliqué — c'est le
+     serveur qui fait foi dès qu'il a parlé. */
+  return src.map(function(r){
+    const v=par[r.nom]||r;
+    const choisi=Object.prototype.hasOwnProperty.call(ANT.revetements,r.nom);
+    return {nom:r.nom, ep:v.ep, er:v.er, df:v.df, choisi:choisi,
+            garde:choisi?!!ANT.revetements[r.nom]:!!v.garde};
+  });
+}
+
 function antEmpilage(){
   const k=(V.unite==="in")?(1/25.4):1;       // LT est en mm, le doc en unité fichier
+  const horsCuivre={};
+  antRevetementsLocaux().forEach(function(r){ horsCuivre[r.nom]=true; });
   const out=[];
   LT.pile.forEach(function(e,rang){
     if(e.cuivre){
@@ -526,8 +625,19 @@ function antEmpilage(){
                 role:cu?cu.role:"signal",
                 ...(sigma?{sigma:sigma}:{})});
     }else{
-      out.push({nom:e.nom, cuivre:false, seq:rang, ep:e.ep*k,
-                er:e.er||0, df:e.df||0});
+      const d={nom:e.nom, cuivre:false, seq:rang, ep:e.ep*k,
+               er:e.er||0, df:e.df||0};
+      /* `garder` ne part QUE si la page en sait plus que la borne du serveur :
+         une case cochée, ou un masque posé exprès en conception. Envoyer le
+         défaut calculé ici ferait deux autorités pour une seule règle, et le
+         jour où l'une des deux bouge, la page et le solveur ne modélisent plus
+         la même carte. Le serveur ignore la clef sur une couche INTÉRIEURE :
+         un substrat ne s'écarte pas, si mince soit-il. */
+      if(horsCuivre[e.nom]){
+        const g=antRevetementGarder(e.nom,e.ep);
+        if(g!==null)d.garder=g;
+      }
+      out.push(d);
     }
   });
   /* Les intervalles saisis à la main ne sont pas dans `LT.pile` : ils vivent

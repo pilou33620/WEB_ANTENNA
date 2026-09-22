@@ -629,13 +629,6 @@ function conFicheMotif(g){
       'le dessin n\'est pas touché">✕</button></div>'+
     '<p class="note">'+aEsc(g.aide)+'</p>'+manque+
     '<div class="apercu" id="conApercu">'+conApercuBloc(g)+'</div>'+
-    (g.id==="ifa"
-      ? '<div class="pnl-bar" style="margin:6px 0 10px">'+
-        '<span class="note-inline">Préréglages Silicon Labs AN1088 :</span>'+
-        '<button class="tb mini" data-con-ifa-preset="16" title="FR-4 1,6 mm (0.062\") : La=19,86 mm, ha=8,31 mm, d=2,77 mm">AN1088 (1,6 mm)</button>'+
-        '<button class="tb mini" data-con-ifa-preset="08" title="FR-4 0,8 mm : La=21,84 mm, ha=7,90 mm, d=2,92 mm">AN1088 (0,8 mm)</button>'+
-        '</div>'
-      : "")+
     '<p class="note">Toutes les longueurs du motif sont réglables : chaque '+
     'lettre du dessin a son champ ci-dessous, et chaque champ allume sa cote '+
     'sur le dessin. Cliquez une cote pour ouvrir son champ. Le dessin se '+
@@ -1119,25 +1112,6 @@ function conPanneauLier(box){
     b.onclick=function(){
       const g=conGabarit(CON.gabarit);
       if(g)conGabaritPoser(g,CON.gabaritP);
-    };
-  });
-  box.querySelectorAll("[data-con-ifa-preset]").forEach(function(b){
-    b.onclick=function(){
-      const kf=2.45e9/Math.max(CON.fcible||2.45e9,1e6);
-      const is08=(b.dataset.conIfaPreset==="08");
-      const p={
-        La:+( (is08?21.84:19.86)*kf ).toFixed(2),
-        ha:+( (is08?7.90:8.31)*kf ).toFixed(2),
-        wb:+( 1.00*kf ).toFixed(2),
-        d:+( (is08?2.92:2.77)*kf ).toFixed(2),
-        wf:+( 1.02*kf ).toFixed(2),
-        marge:+( 1.02*kf ).toFixed(2),
-        masseTop:1,
-        viasCouture:1
-      };
-      Object.assign(CON.gabaritP, p);
-      for(const k in p) CON.gabaritTouche[k]=true;
-      conPanneauRendre();
     };
   });
   box.querySelectorAll("[data-con-cote]").forEach(function(el){

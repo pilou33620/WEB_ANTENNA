@@ -94,6 +94,43 @@ CELLULES_PAR_PISTE = 4.0      # en travers du cuivre le plus etroit
 # cuivre ; c'est donc lui qu'on plafonne. Deux cents lignes par axe, et le
 # plancher du pas s'en deduit tout seul, a la taille de la carte.
 LIGNES_MAX_EMPRISE = 200.0
+# ... MAIS UN PAS UNIQUE SUR TOUTE L'EMPRISE ETAIT LE VRAI COUPABLE. La borne
+# ci-dessus ne dit pas « ce cuivre est trop fin pour etre resolu », elle dit
+# « raffiner TOUTE la carte a ce pas-la couterait plus de deux cents lignes par
+# axe ». Or une piste large de 0,5 mm et longue de 20 ne demande le pas fin
+# qu'en TRAVERS d'elle-meme, sur un demi-millimetre : le champ tourne sur la
+# largeur du ruban, pas sur sa longueur. D'ou les bandes fines de `_maillage`,
+# et les trois constantes qui les bornent.
+#
+# MARGE_BANDE : de combien de cellules fines la bande depasse le cuivre, de
+# chaque cote. Zero marcherait — le lissage rattraperait le fond des la cellule
+# suivante —, mais le champ de bord d'un ruban s'etend sur a peu pres
+# l'epaisseur du substrat, et deux cellules fines de plus le decrivent pour
+# deux lignes par bande.
+MARGE_BANDE = 2
+# DE COMBIEN ON RECULE quand le budget refuse, et combien d'essais. Reculer
+# plus vite ferait manquer le pas juste en dessous du budget ; plus lentement
+# construirait des maillages pour rien.
+AFFINAGE_RECUL = 1.3
+AFFINAGE_ESSAIS = 24
+# LE BUDGET DE L'AFFINAGE, EN CELLULES-PAS DE TEMPS (voir `_cout`) : un plafond
+# absolu, et un plafond relatif au maillage de fond. Les deux sont
+# necessaires. Sans l'absolu, une grande carte s'affinerait jusqu'a la nuit de
+# calcul ; sans le relatif, une petite carte dont le fond coute trois minutes
+# s'affinerait cent fois — et « affiner le maillage » ne doit pas vouloir dire
+# « multiplier la duree par cent » sans que personne l'ait demande.
+#
+# 5e11 cellules-pas, c'est environ six heures au debit suppose de 25 Mcps, et
+# quatre fois le fond. MESURE sur la carte d'essai qui reprend l'empilage
+# d'antenna4c (quatre couches, 120 x 55 mm, 868 MHz) : le fond seul coute
+# 2,3e11 ; le budget laisse donc l'affinage doubler le prix, pas davantage.
+CELLULES_PAS_MAX = 5.0e11
+AFFINAGE_COUT_MAX = 4.0
+# COMBIEN DE CELLULES EN Z DANS UN DIELECTRIQUE. Une seule ne represente pas le
+# champ qui se courbe sous une piste — et c'est ce champ-la qui fait
+# l'impedance de la ligne. Trois le font. C'est le nombre que ce module visait
+# depuis toujours sans jamais l'atteindre : voir `_maillage`, section z.
+CELLULES_PAR_SUBSTRAT = 3
 # Le rapport maximal entre deux cellules voisines. Une grille qui passe de
 # 0,5 a 2 mm d'un coup reflechit numeriquement sur la marche ; openEMS lisse
 # par SmoothMeshLines, et 1,4 est la valeur de ses exemples.
@@ -124,6 +161,77 @@ TIERS_DEFAUT = True
 # une antenne ; -50 dB pour un resonateur a fort Q, au prix du temps.
 ENERGIE_DEFAUT = -40.0
 NMAX_DEFAUT = 30000
+# LE NOMBRE DE PAS SE CALCULE, IL NE SE DEVINE PAS. openEMS refuse de tourner
+# si le garde-fou est plus court que TROIS fois l'impulsion d'excitation ; on
+# en prend quatre, ce qui laisse a la structure le temps de se vider apres que
+# la source s'est tue. Le reste -- s'arreter des que l'energie est tombee --
+# est le travail du seuil en decibels, pas celui du compteur.
+NMAX_IMPULSIONS = 4.0
+# ... MAIS QUATRE IMPULSIONS NE SUFFISENT PAS A UNE ANTENNE QUI RESONNE, et
+# c'est une mesure qui l'a dit, pas une crainte. L'impulsion partie, il reste
+# l'extinction : une structure resonante rend son energie en exp(-w.t/Q), et
+# descendre a -40 dB demande environ 1,5 x Q periodes. Sur le F inverse de
+# 2,45 GHz, l'energie n'est tombee sous -40 dB qu'au 39 165e pas, alors que le
+# critere d'impulsion seul en proposait 31 125 : le garde-fou aurait coupe le
+# calcul AVANT la mesure, et la troncature se serait lue comme une resonance
+# floue. On prend donc le plus grand des deux criteres.
+#
+# QUARANTE PERIODES, ET POURQUOI CE NOMBRE. C'est 1,5 x Q pour un Q charge de
+# 27 -- l'ordre de grandeur d'une antenne imprimee adaptee sur FR-4, pertes
+# comprises. Le run ci-dessus a demande 35 periodes ; le patch de l'exemple,
+# 21. Quarante les couvre tous les deux avec une marge, et ne coute RIEN quand
+# le calcul converge : c'est un plafond, pas une consigne -- l'energie arrete
+# la simulation bien avant. Il ne coute que dans le seul cas ou l'on veut
+# justement qu'il coute : une antenne qui ne s'eteint pas.
+NMAX_PERIODES = 40.0
+NMAX_PLANCHER = 5000
+# CE QUI SEPARE DEUX ARETES DE CUIVRE SANS RIEN SEPARER DU TOUT. Deux bords a
+# quelques dizaines de microns l'un de l'autre ne sont pas deux bords : c'est
+# le meme, rendu deux fois -- l'arrondi d'un bout de piste, un ruban de 1,00 mm
+# qui croise un ruban de 1,02 mm sur le meme axe, deux sommets d'un fichier de
+# CAO. Aucun fabricant ne tient cette difference-la, et aucune onde ne la voit.
+# Le maillage, lui, la paie plein tarif : chaque bord pose ses lignes au tiers,
+# et deux bords presque confondus en posent quatre au lieu de deux, dont deux
+# se touchent. La cellule minuscule qui en resulte commande le pas de temps de
+# TOUT le domaine -- mesure faite sur l'IFA du gabarit : 3,26 millions de
+# cellules et 3 h 25 au lieu de 820 000 et vingt minutes, pour la meme antenne.
+# CES RELEVES DATENT DE L'IFA D'AVANT : le gabarit tirait alors ses cotes d'une
+# note d'application, il les calcule desormais des proportions classiques du
+# motif. Les nombres ne se reproduisent donc plus tels quels ; ce qu'ils
+# montrent -- deux aretes presque confondues paient plein tarif -- ne depend
+# d'aucune cote.
+EPS_ARETES_MM = 0.05
+# CE QU'UN VERNIS COUTE, ET CE QU'IL APPORTE. Un fichier IPC-2581 declare son
+# masque de soudure dans l'empilage comme n'importe quelle autre couche : sur
+# antenna4c.xml, « Resist-A » et « Resist-B », 15 microns de resine de part et
+# d'autre de la carte. Ces deux couches-la ne sont pas ENTRE les conducteurs,
+# elles sont DEHORS, posees sur le cuivre exterieur. Ce qu'elles ajoutent est
+# du SECOND ORDRE : une permittivite posee sur un vingt-cinquieme de la hauteur
+# du substrat, la ou le champ d'un microruban est deja sorti du dielectrique --
+# de quoi abaisser la resonance de l'ordre du pour-cent, pas de quoi la
+# deplacer. (Cet ordre de grandeur-la n'est PAS mesure ici ; ce qui suit l'est.)
+#
+# LE MAILLAGE, LUI, LES PAIE AU PRIX DU PAS DE TEMPS. Les deux faces d'une
+# couche de l'empilage portent chacune une ligne OBLIGATOIRE -- sans quoi le
+# substrat glisse, et un substrat qui glisse n'est plus le meme substrat --,
+# donc 15 microns entre deux lignes font une cellule QUARANTE fois plus fine
+# que le pas vise sur la carte ci-dessous (0,599 mm). Comme le pas de temps FDTD est commande par la
+# plus petite cellule de TOUT le domaine, ces 30 microns de resine coutent un
+# facteur HUIT sur la duree du calcul. MESURE FAITE sur une carte d'essai qui
+# reprend l'empilage d'antenna4c.xml -- quatre couches, 120 x 55 mm, bande
+# centree sur 868 MHz, quatre millions de cellules : pas de temps 0,0497 ps
+# avec les deux vernis, 0,404 ps sans eux, duree annoncee 21 h contre 2 h 30.
+# Le maillage, lui, ne perd que cent mille cellules sur quatre millions --
+# ce n'est pas une economie de memoire, c'est le pas de temps et rien d'autre.
+#
+# UN REVETEMENT EXTERIEUR PLUS FIN QUE CETTE BORNE N'ENTRE DONC PAS DANS LA
+# GEOMETRIE. Il n'est pas efface en silence : le modele le nomme dans
+# `revetements`, un avis le dit, et la page laisse le remettre d'une case a
+# cocher -- un radome mince ou un coverlay de flex peuvent compter, et c'est
+# a l'utilisateur d'en decider. CE QUI EST ENTRE DEUX CONDUCTEURS N'EST JAMAIS
+# ECARTE, si mince soit-il : c'est un substrat, il porte le champ, et le
+# supprimer collerait deux couches de cuivre l'une sur l'autre.
+EP_REVETEMENT_MM = 0.05
 
 # -- pertes dielectriques ---------------------------------------------------
 # DEUX FACONS DE DECRIRE UN DIELECTRIQUE A PERTES, ET ELLES NE SE VALENT PAS.
@@ -393,15 +501,54 @@ def _empilage(doc, k_mm, modele_cu):
             # dix fois plus resistive que du cuivre, et cela se lit sur le
             # rendement -- pas sur le S11, qui reste beau.
             "sigma": _nb_pos(e.get("sigma"), 0.0),
+            # Ce que la page a decide d'un revetement exterieur : None quand
+            # elle n'a rien dit, et c'est alors la borne qui tranche. Un
+            # booleen plutot qu'un defaut recopie ici : recopier le defaut
+            # rendrait un choix indistinguable d'un silence.
+            "garder": (None if e.get("garder") is None
+                       else bool(e.get("garder"))),
+            "ecarte": False,
         })
     entrees.sort(key=lambda e: e["seq"])
     entrees.reverse()                        # du bas vers le haut
+
+    # -- les revetements exterieurs, ecartes par defaut ---------------------
+    # Voir EP_REVETEMENT_MM : un vernis de 15 microns pose SUR le cuivre
+    # exterieur ne porte pas de champ de ligne, mais ses deux faces portent
+    # deux lignes de maillage obligatoires, et la cellule qui en resulte
+    # commande le pas de temps de toute la simulation. « Exterieur » se lit
+    # sur l'empilage et non sur le nom de la couche : est exterieur ce qui
+    # n'est pas entre les deux cuivres extremes. Un fichier qui nomme son
+    # masque « L9 » est traite comme celui qui le nomme « Resist-A ».
+    rangs_cu = [i for i, e in enumerate(entrees) if e["cuivre"]]
+    revetements = []
+    if rangs_cu:
+        for i, e in enumerate(entrees):
+            if e["cuivre"] or rangs_cu[0] < i < rangs_cu[-1]:
+                continue
+            # La page a tranche, ou elle n'a rien dit et la borne tranche.
+            garder = e["garder"]
+            if garder is None:
+                garder = e["ep"] > EP_REVETEMENT_MM
+            e["ecarte"] = not garder
+            revetements.append({
+                "nom": e["nom"], "ep": e["ep"],
+                "er": e["er"], "df": e["df"],
+                "garde": bool(garder),
+                # « choisi » dit si le OUI ou le NON vient de l'utilisateur ou
+                # de la borne : la page n'affiche pas les deux pareil, et un
+                # defaut qu'on prend pour un choix est un defaut qu'on ne
+                # rediscute jamais.
+                "choisi": e["garder"] is not None,
+            })
 
     conducteurs, dielectriques = [], []
     z = 0.0
     supposes = []
     volume = (modele_cu == "volume")
     for e in entrees:
+        if e.get("ecarte"):
+            continue
         if e["cuivre"]:
             ep = e["ep"] or EP_CU_DEFAUT
             if not e["ep"]:
@@ -444,7 +591,7 @@ def _empilage(doc, k_mm, modele_cu):
             "Aucune couche de cuivre dans l'empilage.",
             "Une antenne est faite de cuivre : cochez au moins une couche.")
 
-    return conducteurs, dielectriques, z, supposes
+    return conducteurs, dielectriques, z, supposes, revetements
 
 
 def _conducteur(conducteurs, nom):
@@ -1307,8 +1454,12 @@ def _resolution(bande, er_max, cuivre=(), boite_cu=None):
     plancher = min(plancher, res_lam)
     bornee = res_die < plancher
     res_die = max(res_die, plancher)
+    # `air` et `die` sont les pas CALCULES. Ils restent lisibles meme quand le
+    # document en impose d'autres : la page affiche alors les deux, et l'ecart
+    # se voit au lieu de se subir.
     return res_air, res_die, {"lambda": res_lam, "largeur_cuivre": largeur,
-                              "plancher": plancher, "bornee": bornee}
+                              "plancher": plancher, "bornee": bornee,
+                              "air": res_air, "die": res_die}
 
 
 def _lignes(debut, fin, pas):
@@ -1320,7 +1471,39 @@ def _lignes(debut, fin, pas):
     return [debut + i * h for i in range(n + 1)]
 
 
-def _fusionner(lignes, mini, obligatoires=()):
+def _grouper(valeurs, eps):
+    """Rassemble en UNE coordonnee celles qui ne different que de `eps`.
+
+    LA GEOMETRIE N'EST PAS TOUCHEE, LA GRILLE SEULE L'EST. Ce qui part au
+    solveur reste le polygone exact ; ce qui est regroupe ici, ce sont les
+    lignes de maillage qu'on en deduit. Un bord a 32,810 et un bord a 32,800
+    donnent donc un seul jeu de lignes au lieu de deux jeux qui se touchent,
+    et le cuivre, lui, garde ses cotes au micron.
+
+    Une grappe est bornee a `eps` DEPUIS SON PREMIER ELEMENT et non de proche
+    en proche : sans cela une file de bords espaces d'un demi-eps se
+    ramasserait en un seul point, et le dernier aurait glisse de bien plus que
+    la tolerance qu'on s'est donnee.
+
+    Rend les coordonnees regroupees et le nombre de bords absorbes -- c'est ce
+    second nombre que l'assistant rapporte, parce qu'un regroupement silencieux
+    serait exactement le genre de correction qu'on decouvre trop tard.
+    """
+    tri = sorted(set(round(v, 9) for v in valeurs))
+    if eps <= 0 or not tri:
+        return tri, 0
+    grappes, courante = [], [tri[0]]
+    for v in tri[1:]:
+        if v - courante[0] > eps:
+            grappes.append(courante)
+            courante = []
+        courante.append(v)
+    grappes.append(courante)
+    absorbes = sum(len(g) - 1 for g in grappes)
+    return [sum(g) / len(g) for g in grappes], absorbes
+
+
+def _fusionner(lignes, mini, obligatoires=(), affinage=(), mini_affinage=None):
     """Trie, dedoublonne, et supprime les lignes trop proches.
 
     DEUX LIGNES DE MAILLAGE A UN MICRON L'UNE DE L'AUTRE NE RAFFINENT RIEN :
@@ -1337,9 +1520,47 @@ def _fusionner(lignes, mini, obligatoires=()):
     face superieure a glisse de 0,3 mm n'est plus le meme substrat. Les
     lignes OBLIGATOIRES sont donc posees d'abord et ne cedent jamais : ce sont
     les lignes ordinaires qui s'ecartent pour elles.
+
+    LES SEUILS PEUVENT ETRE DES FONCTIONS DE L'ENDROIT, et non des nombres :
+    depuis qu'il y a deux pas dans le plan — le fond, et le pas fin d'une bande
+    en travers d'une piste —, un seuil unique calcule sur le fond effacerait
+    une par une les lignes de la bande. Voir `_pas_local`.
+
+    CHAQUE LIGNE EST JUGEE A SON SEUIL, CELUI DE L'ENDROIT OU ON LA POSE, et
+    non au plus serre des deux voisinages. La difference se paie comptant au
+    bord d'une bande : une ligne du FOND qui tombe a 0,05 mm d'une ligne de
+    bande doit ceder -- elle n'a rien a decrire la, et sa cellule de 0,05 mm
+    commanderait le pas de temps de tout le domaine --, tandis que la ligne de
+    BANDE, elle, reste a son propre seuil, trois fois plus serre. Juger les
+    deux au seuil le plus serre laissait passer la premiere : mesure sur vingt
+    pistes de 0,5 mm, la plus petite cellule tombait a 0,05 mm pour un pas fin
+    de 0,125, soit deux fois et demie le pas de temps qu'il fallait.
+
+    TROIS RANGS, ET LE TROISIEME EST CELUI QUI COUTAIT CHER. Entre la ligne
+    qu'on ne peut pas bouger et celle qui remplit, il y a celle de l'AFFINAGE
+    -- les deux lignes que la regle du tiers pose de part et d'autre d'une
+    arete de cuivre. Elle tombe ou l'arete tombe, c'est-a-dire n'importe ou
+    par rapport a la grille reguliere : rien n'empeche une ligne de
+    remplissage de se poser a quarante microns d'elle, et cette cellule-la
+    commande alors le pas de temps de tout le domaine. C'est ce qui est arrive
+    sur l'IFA du gabarit -- 0,0433 mm entre la ligne d'affinage 4,7067 et la
+    ligne de remplissage 4,7500, pour un pas vise de 0,25 mm. (Cotes de l'IFA
+    d'avant, quand le gabarit les tirait d'une note d'application ; la
+    collision, elle, ne tient pas a la cote qui l'a revelee.)
+
+    Le remede n'est PAS d'elargir le seuil pour tout le monde : fusionner deux
+    lignes d'affinage entre elles efface le raffinement des bords rayonnants,
+    et cela s'est mesure -- au tiers du pas, le creux de S11 du patch tombait
+    de -6,6 a -2,1 dB. C'est le REMPLISSAGE qui doit s'ecarter : la ou
+    l'affinage decrit deja le voisinage d'une arete, une ligne reguliere de
+    plus n'ajoute rien qu'une cellule mince. L'affinage garde donc le seuil
+    serre, le remplissage en recoit un plus large (`mini_affinage`), et ce
+    qu'on perd est exactement ce qui ne servait a rien.
     """
     obl = sorted(set(round(v, 9) for v in obligatoires))
-    autres = sorted(set(round(v, 9) for v in lignes) - set(obl))
+    aff = sorted(set(round(v, 9) for v in affinage) - set(obl))
+    autres = sorted(set(round(v, 9) for v in lignes) - set(obl) - set(aff))
+    seuil_autres = mini if mini_affinage is None else mini_affinage
 
     out = []
     for v in obl:
@@ -1349,13 +1570,23 @@ def _fusionner(lignes, mini, obligatoires=()):
         if not out or v - out[-1] > 1e-9:
             out.append(v)
 
+    for v in aff:
+        i = _place(out, v)
+        gauche = out[i - 1] if i > 0 else None
+        droite = out[i] if i < len(out) else None
+        if gauche is not None and v - gauche < _val(mini, v):
+            continue
+        if droite is not None and droite - v < _val(mini, v):
+            continue
+        out.insert(i, v)
+
     for v in autres:
         i = _place(out, v)
         gauche = out[i - 1] if i > 0 else None
         droite = out[i] if i < len(out) else None
-        if gauche is not None and v - gauche < mini:
+        if gauche is not None and v - gauche < _val(seuil_autres, v):
             continue
-        if droite is not None and droite - v < mini:
+        if droite is not None and droite - v < _val(seuil_autres, v):
             continue
         out.insert(i, v)
     return out
@@ -1389,7 +1620,9 @@ def _lisser(lignes, plancher, ratio=None):
     `plancher` empeche une cellule mince isolee -- deux aretes de cuivre
     presque confondues, l'epaisseur d'un conducteur -- d'imposer sa finesse a
     tout le domaine de proche en proche. Elle reste mince ; elle ne contamine
-    pas.
+    pas. Il peut etre une FONCTION DE L'ENDROIT : dans une bande fine, le
+    plancher est le pas fin, sinon le lissage subdiviserait la bande jusqu'a
+    rattraper le fond de proche en proche.
     """
     ratio = GRADIENT_MAX if ratio is None else ratio
     out = sorted(lignes)
@@ -1397,7 +1630,8 @@ def _lisser(lignes, plancher, ratio=None):
     if n < 2 or ratio <= 1.0:
         return out
     pas = [out[i + 1] - out[i] for i in range(n)]
-    lim = [max(v, plancher) for v in pas]
+    lim = [max(pas[i], _seuil(plancher, out[i], out[i + 1]))
+           for i in range(n)]
     for i in range(1, n):
         lim[i] = min(lim[i], lim[i - 1] * ratio)
     for i in range(n - 2, -1, -1):
@@ -1425,20 +1659,183 @@ def _place(triee, v):
     return lo
 
 
-def _maillage(modele, bande, res_air, res_die):
+def _pas_local(bandes, res_die, res_fin):
+    """Le pas VISE en un point de l'axe : le fond, ou le pas fin d'une bande.
+
+    TOUS LES SEUILS DE `_fusionner` ET DE `_lisser` EN DECOULENT, et c'est la
+    seule facon de faire tenir deux pas sur un meme axe. Les seuils sont des
+    fractions du pas vise -- le quart pour l'affinage, le tiers pour le
+    remplissage --, et calcules sur le pas de FOND ils effacent toute ligne
+    posee a moins de 0,2 mm d'une autre : les lignes d'une bande a 0,13 mm y
+    passeraient une par une, et le raffinement n'aurait jamais lieu.
+
+    REND UN NOMBRE QUAND IL N'Y A PAS DE BANDE. Le chemin sans affinage local
+    reste alors exactement celui d'avant, aux memes valeurs mesurees -- il n'y
+    a pas deux codes a eprouver.
+    """
+    if not bandes or res_fin <= 0 or res_fin >= res_die:
+        return res_die
+
+    def pas(v):
+        for a, b in bandes:
+            if a <= v <= b:
+                return res_fin
+        return res_die
+    return pas
+
+
+def _divise(pas, k):
+    """`pas / k`, que `pas` soit un nombre ou une fonction de la position."""
+    if callable(pas):
+        return lambda v: pas(v) / k
+    return pas / k
+
+
+def _val(x, v):
+    """La valeur d'un seuil a un endroit donne, qu'il soit nombre ou fonction."""
+    return x(v) if callable(x) else x
+
+
+def _seuil(x, v, w):
+    """Le seuil d'une CELLULE, entre deux lignes : le plus serre des deux bouts.
+
+    Sert au lissage, ou le seuil qualifie une cellule et non une ligne : une
+    cellule a cheval sur le bord d'une bande a le droit d'etre fine comme la
+    bande, sinon le lissage la redecouperait pour rattraper le fond.
+    """
+    return min(_val(x, v), _val(x, w))
+
+
+def _dans(bandes, v):
+    """Ce point tombe-t-il dans une bande fine ?"""
+    for a, b in bandes:
+        if a <= v <= b:
+            return True
+    return False
+
+
+def _souder(bandes):
+    """Bandes triees, celles qui se chevauchent reunies en une seule."""
+    out = []
+    for a, b in sorted(bandes):
+        if out and a <= out[-1][1]:
+            out[-1] = (out[-1][0], max(out[-1][1], b))
+        else:
+            out.append((a, b))
+    return out
+
+
+def _bandes_fines(cuivre, seuil):
+    """Les intervalles, axe par axe, ou le cuivre est trop etroit pour le pas
+    de fond -- et SEULEMENT sur l'axe ou il est etroit.
+
+    C'EST TOUT CE QUI REND LE RAFFINEMENT PAYABLE. Une piste longue de 20 mm
+    et large de 0,5 ne demande le pas fin que sur un demi-millimetre : le champ
+    tourne EN TRAVERS du ruban, pas le long. C'est la largeur qui fixe
+    l'impedance ; la longueur se contente du pas de fond. Raffiner les deux
+    axes couterait quarante fois plus de lignes pour la meme physique, et
+    raffiner toute l'emprise -- ce que faisait le pas unique -- en couterait
+    mille : c'est la, et pas ailleurs, que le budget de LIGNES_MAX_EMPRISE
+    mordait et que l'outil renoncait.
+
+    UN POLYGONE ETROIT DANS LES DEUX AXES -- une pastille, un bout de piste --
+    donne deux bandes. C'est correct et c'est rarement ce qu'on veut payer : le
+    budget s'en charge, et une bande plus mince que le pas fin retenu est
+    abandonnee (voir `_maillage`).
+    """
+    bx, by = [], []
+    for bloc in cuivre:
+        for poly in bloc.get("polys", ()):
+            pts = poly.get("o") or ()
+            if len(pts) < 3:
+                continue
+            xs = [q[0] for q in pts]
+            ys = [q[1] for q in pts]
+            x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+            if 1e-9 < x1 - x0 < seuil:
+                bx.append((x0, x1))
+            if 1e-9 < y1 - y0 < seuil:
+                by.append((y0, y1))
+    return {"x": _souder(bx), "y": _souder(by)}
+
+
+def _bande_lignes(a, b, pas):
+    """Les lignes d'une bande fine : le cuivre en parts egales, et MARGE_BANDE
+    cellules de plus de chaque cote.
+
+    LES LIGNES TOMBENT SUR LES DEUX BORDS DU RUBAN, et c'est voulu. Le ruban a
+    donc un nombre ENTIER de cellules en travers, ses bords sur la grille, et
+    sa largeur est exactement celle qu'on a dessinee. Un bord de conducteur
+    parfait pose SUR une ligne est le cas normal des qu'il est resolu ; la
+    regle du tiers ne sert qu'a corriger la densite de courant d'un bord que la
+    grille ne resout PAS -- c'est exactement la condition qu'openEMS se donne
+    lui aussi dans `mesh_hint_from_box` : au-dela de `metal_edge_res` il
+    decale, en deca il pose les lignes sur les aretes.
+    """
+    out = _lignes(a, b, pas)
+    h = (b - a) / max(1, len(out) - 1)
+    for i in range(1, MARGE_BANDE + 1):
+        out.append(a - i * h)
+        out.append(b + i * h)
+    return out
+
+
+def _maillage(modele, bande, res_air, res_die, res_fin=0.0, bandes=None):
     """Les trois listes de lignes de maillage.
 
     Le principe : un fond regulier a la resolution de l'air sur toute la
     boite, remplace par la resolution du dielectrique dans l'emprise de la
     carte, plus une ligne posee sur chaque cote de cuivre en z, plus -- si la
-    regle du tiers est demandee -- un raffinement aux aretes du cuivre dans
-    le plan. openEMS ajoute lui-meme les aretes par AddEdges2Grid ; ce qui
-    suit sert a l'estimation et au script autonome, pour qu'ils annoncent le
-    meme nombre de cellules que ce qui sera calcule.
+    regle du tiers est demandee -- un raffinement aux aretes du cuivre dans le
+    plan, plus des BANDES FINES en travers du cuivre trop etroit pour le fond.
+
+    CE QUI PART AU SOLVEUR, C'EST CETTE GRILLE-LA, ET RIEN D'AUTRE. Le
+    commentaire d'avant disait « openEMS ajoute lui-meme les aretes par
+    AddEdges2Grid » ; c'etait faux, et c'etait l'idee fausse la plus couteuse
+    de ce module. `AddEdges2Grid` demande a chaque primitive un « hint », et
+    `mesh_hint_from_primitive` (openEMS/automesh.py) n'en rend QUE pour un
+    point ou une boite : pour un polygone elle rend None, sans un mot. Or tout
+    le cuivre part en AddPolygon et en AddLinPoly. L'appel etait donc SANS
+    EFFET -- verifie sur CSXCAD 0.6.3 et openEMS 0.0.36, grille identique avant
+    et apres --, et le script ne l'emet plus. La bonne nouvelle est que le
+    nombre de cellules et le pas de temps annonces ici sont ceux que le solveur
+    calculera vraiment ; la mauvaise, qu'aucune arete n'etait raffinee par
+    personne d'autre que ce module.
+
+    DEUX PAS DANS LE PLAN, ET NON UN SEUL. `res_die` est le FOND : lambda/20
+    dans le dielectrique, borne par le budget de lignes de l'emprise (voir
+    LIGNES_MAX_EMPRISE). Sur une carte de 120 mm ce fond tombe a 0,6 mm, et une
+    piste de 0,5 mm n'a plus une cellule en travers : son impedance n'est plus
+    la sienne, sa resonance sort trop haut, et l'outil n'avait rien d'autre a
+    proposer que « retirez ce cuivre de la selection ». `res_fin` est le pas
+    des BANDES : il ne s'applique qu'en travers du cuivre etroit, sur le seul
+    axe ou ce cuivre est etroit. Voir `_bandes_fines` pour l'axe, et `_mailler`
+    pour le budget qui borne le tout.
     """
     boite = modele["boite"]
     em = modele["emprise"]
     z_haut = modele["z_haut"]
+
+    # UNE BANDE PLUS MINCE QUE LE PAS FIN N'EST PAS UNE BANDE : elle poserait
+    # une cellule de sa largeur, laquelle commanderait le pas de temps de tout
+    # le domaine pour un cuivre qu'elle ne resout meme pas. Ces polygones-la
+    # restent a la regle du tiers, et l'avis dit qu'ils ne sont pas resolus.
+    bandes = bandes or {"x": [], "y": []}
+    fin = res_fin if 0 < res_fin < res_die else 0.0
+    bx = [(a, b) for a, b in bandes.get("x", ()) if b - a >= fin] if fin else []
+    by = [(a, b) for a, b in bandes.get("y", ()) if b - a >= fin] if fin else []
+    if not (bx or by):
+        fin = 0.0
+    # LA ZONE FINE COMPREND LES MARGES, et l'oublier coutait les marges
+    # elles-memes : posees HORS de [a, b], elles etaient jugees au seuil du
+    # fond -- le tiers de 0,35 mm contre un pas fin de 0,125 -- et sautaient
+    # une fois sur deux, selon la carte. Ce sont des lignes de la bande ; elles
+    # sont jugees comme telles.
+    marge = MARGE_BANDE * fin
+    large_x = _souder([(a - marge, b + marge) for a, b in bx])
+    large_y = _souder([(a - marge, b + marge) for a, b in by])
+    pas_x = _pas_local(large_x, res_die, fin)
+    pas_y = _pas_local(large_y, res_die, fin)
 
     # -- x et y : fond d'air, structure plus fine ----------------------------
     # « Structure » et non « carte » : un boitier ou un fil ajoute a la main
@@ -1452,6 +1849,35 @@ def _maillage(modele, bande, res_air, res_die):
     y += _lignes(em[1], em[4], res_die)
     y += _lignes(em[4], boite["y2"], res_air)
 
+    # -- les bandes fines, en travers du cuivre etroit -----------------------
+    # LE FOND NE PASSE PAS SOUS UNE BANDE : elle l'y remplace, plus fin. Une
+    # ligne du fond tombee dans une bande n'y decrit rien de plus -- la bande
+    # a deja quatre lignes la ou le fond en avait une -- et elle y laisse une
+    # cellule de quelques centiemes de millimetre, laquelle commande le pas de
+    # temps de TOUT le domaine. Mesure sur vingt pistes de 0,5 mm : une ligne
+    # du fond a 0,05 mm d'une ligne de marge, et le pas de temps divise par
+    # deux et demi pour rien. Aucun filtrage ne saurait les distinguer apres
+    # coup -- une ligne ne dit pas d'ou elle vient --, on ne les pose donc pas.
+    if large_x:
+        x = [v for v in x if not _dans(large_x, v)]
+    if large_y:
+        y = [v for v in y if not _dans(large_y, v)]
+    # ET ELLES SONT DE L'AFFINAGE, PAS DU REMPLISSAGE, ce qui decide de l'ORDRE
+    # dans lequel `_fusionner` les pose -- et l'ordre decide de qui cede a qui.
+    # Rangees dans le remplissage, elles arrivaient dans la meme file que les
+    # lignes du fond, triees par position : une ligne du fond posee juste avant
+    # une ligne de marge etait jugee la premiere, donc gardee, et la marge
+    # ensuite -- au seuil FIN, trois fois plus tolerant -- s'installait a 0,05
+    # mm d'elle. Mesure sur vingt pistes de 0,5 mm : cellule de 0,05 mm pour un
+    # pas fin de 0,125, et le pas de temps de tout le domaine avec elle. Posees
+    # d'abord, ce sont les lignes du fond qui s'ecartent -- ce qu'elles doivent
+    # faire, puisqu'il n'y a rien a decrire la ou la bande decrit deja.
+    x_aff, y_aff = [], []
+    for a, b in bx:
+        x_aff += _bande_lignes(a, b, fin)
+    for a, b in by:
+        y_aff += _bande_lignes(a, b, fin)
+
     # -- z : chaque interface de l'empilage porte une ligne ------------------
     # Elles sont OBLIGATOIRES : une interface de substrat qui glisse parce
     # qu'une ligne d'air passait a cote, c'est un autre substrat.
@@ -1463,12 +1889,6 @@ def _maillage(modele, bande, res_air, res_die):
     for d in modele["dielectriques"]:
         z_obl.append(d["z0"])
         z_obl.append(d["z1"])
-        # Au moins trois cellules dans un substrat : une seule ne represente
-        # pas le champ qui s'y courbe sous une piste. Celles-la sont du
-        # remplissage — elles peuvent ceder.
-        n = max(3, int(math.ceil(d["ep"] / res_die)))
-        for i in range(1, n):
-            z.append(d["z0"] + d["ep"] * i / n)
     z += _lignes(boite["z1"], em[2], res_air)
     z += _lignes(em[2], 0.0, res_die)
     z += _lignes(z_haut, em[5], res_die)
@@ -1522,17 +1942,52 @@ def _maillage(modele, bande, res_air, res_die):
     # -- la regle du tiers aux aretes de cuivre ------------------------------
     # On ne la pose que sur les aretes qui bornent l'emprise du cuivre : poser
     # trois lignes sur chacun des sommets d'un plan de masse decoupe ferait
-    # exploser le maillage, et openEMS s'en charge mieux par AddEdges2Grid.
+    # exploser le maillage.
+    aretes_groupees = 0
+    eps_aretes = 0.0
+    # Les lignes de l'affinage tiennent leur propre liste : ce ne sont ni des
+    # lignes qu'on ne peut pas bouger, ni du remplissage. Voir `_fusionner`.
+    # Les bandes fines y sont deja.
     if modele["maillage_tiers"]:
         d = res_die / 3.0
+        # LA TOLERANCE EST LA PLUS SERREE DES TROIS, ET CHACUNE DIT NON A UNE
+        # FAUTE DIFFERENTE : le vingtieme du cuivre le plus etroit interdit de
+        # confondre deux rubans voisins, le huitieme du pas vise interdit
+        # d'effacer un raffinement que le maillage aurait vraiment demande, et
+        # les cinquante microns interdisent de depasser ce qu'un fabricant
+        # tient. Sur un dessin en ondes millimetriques, c'est la premiere qui
+        # gagne et la tolerance descend avec le cuivre.
+        largeur = (modele["resolution"].get("detail") or {}).get("largeur_cuivre") or 0.0
+        eps_aretes = min(res_die / 8.0, EPS_ARETES_MM)
+        if largeur > 0:
+            eps_aretes = min(eps_aretes, largeur / 20.0)
+        ax, ay = [], []
         for bloc in modele["cuivre"]:
             for poly in bloc["polys"]:
                 xs = [q[0] for q in poly["o"]]
                 ys = [q[1] for q in poly["o"]]
-                for v in (min(xs), max(xs)):
-                    x += [v - d, v + 2 * d]
-                for v in (min(ys), max(ys)):
-                    y += [v - d, v + 2 * d]
+                ax += [min(xs), max(xs)]
+                ay += [min(ys), max(ys)]
+        ax, n_ax = _grouper(ax, eps_aretes)
+        ay, n_ay = _grouper(ay, eps_aretes)
+        aretes_groupees = n_ax + n_ay
+        # PAS DE REGLE DU TIERS DANS UNE BANDE FINE, et ce n'est pas une
+        # economie de lignes : la bande resout deja le ruban en plusieurs
+        # cellules et son arete tombe sur une ligne. La paire du tiers n'y
+        # decrirait rien de plus et poserait une cellule au tiers du pas FIN --
+        # laquelle commanderait le pas de temps de tout le domaine. Ce serait
+        # payer le raffinement une deuxieme fois, et sur tout le calcul.
+        for v in ax:
+            if _dans(bx, v):
+                continue
+            x_aff += [v - d, v + 2 * d]
+        for v in ay:
+            if _dans(by, v):
+                continue
+            y_aff += [v - d, v + 2 * d]
+    modele["maillage_detail"] = {"eps_aretes": eps_aretes,
+                                 "aretes_groupees": aretes_groupees,
+                                 "bandes_x": len(bx), "bandes_y": len(by)}
 
     # Deux lignes plus proches que cela ne raffinent rien : elles coutent un
     # pas de temps, et LE PAS DE TEMPS EST COMMANDE PAR LA PLUS PETITE CELLULE
@@ -1552,7 +2007,46 @@ def _maillage(modele, bande, res_air, res_die):
     # laisse de la place a la regle du tiers sans laisser passer les
     # coordonnees presque confondues d'un fichier de CAO ; c'est tout ce qu'on
     # lui demande.
-    mini = res_die / 8.0
+    # LE SEUIL DE L'AFFINAGE CONTRE LUI-MEME. Deux aretes de cuivre plus
+    # proches que le pas vise demandent chacune leurs deux lignes, et ces
+    # lignes-la se croisent : sur l'IFA, le bord du plan de masse (25,000) et
+    # le bout du patin de court-circuit (24,700) — 0,3 mm d'ecart, deux aretes
+    # bien reelles — posent 24,9167 et 24,8667, soit une cellule de 50 microns.
+    # (Cotes de l'IFA d'avant : le gabarit pose aujourd'hui sa masse ailleurs,
+    # mais la paire d'aretes rapprochees, elle, revient a chaque motif.)
+    # La grille ne PEUT PAS mettre les deux aretes au tiers de leur cellule
+    # sans descendre sous le pas vise ; insister rend une cellule mince qui
+    # commande le pas de temps de toute la simulation. Le quart du pas est la
+    # borne : la paire voulue autour d'UNE arete est espacee de 3d, c'est-a-
+    # dire du pas vise entier, soit quatre fois ce seuil — elle ne peut donc
+    # jamais se refermer sur elle-meme.
+    #
+    # ET DESORMAIS CES SEUILS SONT LOCAUX : dans une bande fine, c'est le pas
+    # FIN qu'il faut diviser par quatre et par trois, sans quoi le seuil du
+    # fond effacerait les lignes de la bande une par une. Voir `_pas_local`.
+    mini_x, mini_y = _divise(pas_x, 4.0), _divise(pas_y, 4.0)
+    # CE QU'UNE LIGNE DE REMPLISSAGE DOIT LAISSER A UNE LIGNE D'AFFINAGE :
+    # exactement le decalage de la regle du tiers, `d = res_die / 3`. En deca,
+    # la ligne reguliere tombe DANS le motif que la regle vient de dessiner
+    # autour d'une arete : elle n'y decrit rien de plus et n'y laisse qu'une
+    # cellule mince, qui commande alors le pas de temps de tout le domaine.
+    #
+    # LES QUATRE VALEURS ONT ETE MESUREES, sur l'IFA du gabarit (le maillage a
+    # eprouver, dans les cotes qu'il avait alors) et sur le patch sonde du banc
+    # (l'ajustement de Debye, qui se degrade des que le pas de temps grandit --
+    # openEMS refuse tout pole plus rapide que trois pas de temps) :
+    #
+    #   seuil      IFA : cellules / dt        patch du banc : poles, ecart tan(d)
+    #   res_die/2  2 784 804 / 0,235 ps       7 poles, 1,42 %
+    #   res_die/3  2 921 314 / 0,235 ps       8 poles, 0,64 %      <- retenu
+    #   res_die/4  3 090 528 / 0,163 ps       8 poles, 0,53 %
+    #   res_die/6  3 247 405 / 0,108 ps       8 poles, 0,29 %
+    #
+    # Le tiers prend tout le gain de pas de temps (0,108 -> 0,235 ps, deux fois
+    # moins de pas a calculer) pour cinq pour cent de cellules de plus que le
+    # demi, et il laisse au modele de pertes ses huit poles. Descendre plus bas
+    # ne rend rien : a res_die/6 on est revenu au point de depart.
+    remp_x, remp_y = _divise(pas_x, 3.0), _divise(pas_y, 3.0)
     # LE LISSAGE EN DERNIER, ET APRES LA FUSION : il raisonne sur les cellules
     # telles qu'elles seront, et une ligne supprimee apres coup rouvrirait la
     # marche qu'il vient de combler.
@@ -1564,10 +2058,256 @@ def _maillage(modele, bande, res_air, res_die):
     # Mesure faite sur l'exemple : plancher au quart du pas, le lissage coute
     # 2,7 fois le maillage ; plancher au pas, il en coute 1,45 — et il comble
     # les memes marches, celles qui separent la carte de l'air.
-    plancher = res_die
-    return (_lisser(_fusionner(x, mini, x_obl), plancher),
-            _lisser(_fusionner(y, mini, y_obl), plancher),
-            _lisser(_fusionner(z, mini, z_obl), plancher))
+    mx = _lisser(_fusionner(x, mini_x, x_obl, x_aff, remp_x), pas_x)
+    my = _lisser(_fusionner(y, mini_y, y_obl, y_aff, remp_y), pas_y)
+
+    # -- z : les cellules du substrat, apres le plan et a cause de lui -------
+    # AU MOINS TROIS CELLULES DANS UN SUBSTRAT, ET CETTE FOIS ELLES SURVIVENT.
+    # Une seule ne represente pas le champ qui se courbe sous une piste -- or
+    # c'est ce champ-la qui fait l'impedance de la ligne. L'intention etait
+    # ecrite ici depuis toujours et n'avait jamais eu lieu : ces lignes etaient
+    # rangees dans le REMPLISSAGE, et sur une grande carte le pas de fond
+    # (0,6 mm) est plus epais que le substrat lui-meme (0,37 mm), si bien que
+    # le seuil du tiers les effacait toutes les trois. Elles sont donc de
+    # l'AFFINAGE -- une finesse demandee, pas un remplissage.
+    #
+    # LE PLANCHER EN Z EST LA MOITIE DE LA PLUS PETITE CELLULE DU PLAN, et ce
+    # n'est pas un chiffre en l'air : le pas de temps suit
+    # 1/racine(1/dx^2 + 1/dy^2 + 1/dz^2), donc une cellule en z deux fois plus
+    # fine que la plus fine du plan pese quatre contre deux -- un facteur 1,4
+    # au plus sur le pas de temps, pour les trois cellules qui decrivent le
+    # champ sous le ruban. En dessous de ce plancher, c'est le z qui
+    # commanderait le pas de temps de tout le domaine : c'est exactement ce que
+    # faisait le vernis de 15 microns.
+    plan = min(_plus_petit(mx), _plus_petit(my))
+    plancher_z = plan / 2.0 if plan > 0 else 0.0
+    z_aff = []
+    for d in modele["dielectriques"]:
+        n = max(1, int(math.ceil(d["ep"] / res_die)))
+        if plancher_z > 0:
+            n = max(n, min(CELLULES_PAR_SUBSTRAT,
+                           int(d["ep"] / plancher_z)))
+        for i in range(1, n):
+            z_aff.append(d["z0"] + d["ep"] * i / n)
+    mini_z = plancher_z if plancher_z > 0 else res_die / 4.0
+    mz = _lisser(_fusionner(z, mini_z, z_obl, z_aff, res_die / 3.0), res_die)
+    return mx, my, mz
+
+
+def _plus_petit(lignes):
+    """La plus petite cellule d'une liste de lignes."""
+    return min((lignes[i + 1] - lignes[i] for i in range(len(lignes) - 1)),
+               default=0.0)
+
+
+def _coller(lignes, v):
+    """La ligne de maillage la plus proche de `v`."""
+    i = _place(lignes, v)
+    cands = [lignes[j] for j in (i - 1, i) if 0 <= j < len(lignes)]
+    return min(cands, key=lambda w: abs(w - v)) if cands else v
+
+
+def _coller_ports(modele):
+    """Colle les cotes des ports SUR les lignes de maillage, exactement.
+
+    UNE BOITE D'EXCITATION EST PLATE DANS DEUX DIRECTIONS, et c'est ce qui
+    rend ce detail mortel. openEMS cherche dans cette boite une composante de
+    champ a exciter ; une boite d'epaisseur nulle posee a quatre MICRONS de la
+    ligne de maillage n'en contient aucune. Le solveur le dit une fois --
+    « Unused primitive (type: Box) detected in property: port_excite_1 » --,
+    au milieu de trois cents lignes de demarrage, puis il calcule jusqu'au
+    bout un champ rigoureusement nul : energie a 0,00e+00 d'un bout a l'autre,
+    aucune resonance, et tout le temps de calcul depense. C'est la panne la
+    plus chere que cet outil puisse produire, et la moins visible.
+
+    D'OU VENAIENT LES QUATRE MICRONS. De deux arrondis qui ne se parlaient
+    pas : `_fusionner` arrondit les lignes obligatoires au milliardieme de
+    millimetre, et le script ecrivait les lignes de maillage a cinq decimales
+    quand il ecrivait les cotes du port a six. Un port a y = 30,111544 tombait
+    sur une grille qui disait 30,11154, et personne ne pouvait le voir en
+    relisant l'un ou l'autre : il fallait comparer les deux. Le port d'une
+    antenne dessinee a la main tombe souvent sur un compte rond et ne montrait
+    rien ; celui du patch d'essai, dont la cote sort d'une formule, tombait a
+    cote a chaque fois.
+
+    DEUX VERROUS, ET IL EN FAUT DEUX. Ici, les cotes sont collees sur la
+    ligne -- elles y etaient posees en obligatoires, l'ecart n'est qu'un
+    arrondi. Dans le script, les lignes et les cotes s'ecrivent desormais a la
+    MEME precision : deux nombres egaux dans le modele doivent s'ecrire
+    pareil, sans quoi le collage d'ici ne survit pas a l'impression.
+
+    Rend le plus grand deplacement, pour que l'assistant puisse crier si ce
+    n'etait pas un arrondi.
+    """
+    mx = modele["maillage"]["x"]
+    my = modele["maillage"]["y"]
+    mz = modele["maillage"]["z"]
+    pire = 0.0
+    for p in modele["ports"]:
+        cotes = [("x1", mx), ("x2", mx), ("y1", my), ("y2", my),
+                 ("z1", mz), ("z2", mz)]
+        if "x" in p:
+            cotes += [("x", mx), ("y", my)]
+        for cle, lignes in cotes:
+            v = _coller(lignes, p[cle])
+            pire = max(pire, abs(v - p[cle]))
+            p[cle] = v
+        c = p.get("coax")
+        if not c:
+            continue
+        for cle in ("z_bas", "z_mes", "z_gaine", "z_ame"):
+            if cle not in c:
+                continue
+            v = _coller(mz, c[cle])
+            pire = max(pire, abs(v - c[cle]))
+            c[cle] = v
+    return pire
+
+
+def _cout(est, bande):
+    """Le prix d'un maillage, en cellules-pas de temps.
+
+    C'EST LA SEULE GRANDEUR QUI MESURE VRAIMENT CE QUE COUTE UN MAILLAGE. Le
+    nombre de cellules seul n'en dit que la moitie : l'autre moitie est dans le
+    NOMBRE DE PAS, c'est-a-dire dans la plus petite cellule du domaine. Un
+    maillage deux fois plus fin dans une seule bande coute peu de cellules et
+    peut couter le double de pas.
+
+    ET C'EST LA SEULE QUI NE DEPENDE PAS DE LA MACHINE. Une duree en heures
+    suppose un debit, et le debit de ce poste se mesure et remonte des qu'un
+    calcul y finit (voir `noter_debit`) : un maillage qui changerait parce
+    qu'une autre simulation a fini serait une surprise tres desagreable. Le
+    nombre de pas est celui de `duree_estimee`, pour que le budget et la duree
+    annoncee parlent de la meme chose.
+    """
+    dt = est.get("dt_s") or 0.0
+    f0 = bande.get("f0") or bande.get("fcible") or 0.0
+    if dt <= 0 or f0 <= 0 or not est.get("cellules"):
+        return 0.0
+    return est["cellules"] * max(2000.0, 20.0 / (f0 * dt))
+
+
+def _bilan_pistes(cuivre, res_die, fin, bx, by):
+    """Comment chaque polygone est resolu PAR LA GRILLE QUI LE CONCERNE.
+
+    PAS LE PLUS ETROIT : LE PLUS MAL RESOLU. Ce n'est plus la meme question
+    depuis qu'il y a deux pas dans le plan. Un ruban de 0,5 mm dans une bande a
+    0,13 mm en a quatre en travers ; un ruban de 1,2 mm laisse au pas de fond
+    de 0,6 n'en a que deux, et c'est celui-la qu'il faut nommer. Les deux avis
+    qui parlaient de largeur de cuivre comparaient tout au pas de fond : l'un
+    annoncait « resolu » ce qui ne l'etait pas, l'autre « ignore » ce qu'une
+    bande venait de sauver.
+
+    Rend le pire cas (largeur, cellules en travers) et le compte de ceux qu'
+    openEMS laissera tomber faute d'une cellule entiere.
+    """
+    pire = None
+    ignores, plus_petit = 0, None
+    for bloc in cuivre:
+        for poly in bloc.get("polys", ()):
+            pts = poly.get("o") or ()
+            if len(pts) < 3:
+                continue
+            xs = [q[0] for q in pts]
+            ys = [q[1] for q in pts]
+            x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+            cas = None
+            for larg, deb, bandes in ((x1 - x0, x0, bx), (y1 - y0, y0, by)):
+                if larg <= 1e-9:
+                    continue
+                pas = fin if (fin > 0 and _dans(bandes, deb)) else res_die
+                n = larg / pas
+                if cas is None or n < cas[1]:
+                    cas = (larg, n)
+            if cas is None:
+                continue
+            if pire is None or cas[1] < pire[1]:
+                pire = cas
+            if cas[1] < 1.0:
+                ignores += 1
+                plus_petit = (cas[0] if plus_petit is None
+                              else min(plus_petit, cas[0]))
+    return {"largeur": pire[0] if pire else 0.0,
+            "cellules": pire[1] if pire else 0.0,
+            "ignores": ignores, "ignore_mm": plus_petit or 0.0}
+
+
+def _mailler(modele, bande, res_air, res_die):
+    """Le maillage, et le budget qui borne son affinage local.
+
+    POURQUOI UNE BOUCLE, ET NON UNE FORMULE. Le prix d'un raffinement ne se
+    calcule pas d'avance : il depend du nombre de bandes, de leurs
+    chevauchements, des lignes que la fusion supprimera, de celles que le
+    lissage ajoutera, et surtout de la plus petite cellule qui en sortira --
+    laquelle commande le nombre de pas. On construit donc le maillage, on le
+    chiffre, et on RECULE d'un cran tant qu'il depasse le budget. Un maillage
+    coute quelques millisecondes a construire ; une vingtaine d'essais ne se
+    voit pas, et c'est le seul moyen de tenir une promesse chiffree.
+
+    LE BUDGET A DEUX BORNES, ET LA PLUS SERREE GAGNE : un plafond absolu
+    (CELLULES_PAS_MAX, de quoi ne pas lancer une nuit de calcul sans l'avoir
+    demande) et un plafond RELATIF au maillage de fond (AFFINAGE_COUT_MAX) --
+    sans lui, une petite carte dont le fond coute trois minutes se verrait
+    affinee cent fois, ce qui est exactement « exploser le temps de
+    simulation ». Et le maillage de fond passe toujours : on refuse d'affiner,
+    jamais de calculer.
+    """
+    det = modele["resolution"].setdefault("detail", {})
+    largeur = det.get("largeur_cuivre") or 0.0
+    voulu = (largeur / CELLULES_PAR_PISTE) if largeur > 0 else 0.0
+    det["fin_voulu"] = voulu
+    det["fin"] = 0.0
+    det["fin_borne"] = False
+    det["cout_fond"] = 0.0
+    det["cout"] = 0.0
+
+    fond = _maillage(modele, bande, res_air, res_die)
+    cout_fond = _cout(_estimation(fond[0], fond[1], fond[2], res_die), bande)
+    det["cout_fond"] = cout_fond
+    det["cout"] = cout_fond
+    if voulu <= 0 or voulu >= res_die:
+        # Le fond resout deja le cuivre le plus etroit : il n'y a rien a
+        # affiner, et le chemin reste celui d'avant, ligne pour ligne.
+        det["pistes"] = _bilan_pistes(modele["cuivre"], res_die, 0.0, [], [])
+        return fond
+
+    bandes = _bandes_fines(modele["cuivre"], CELLULES_PAR_PISTE * res_die)
+    if not (bandes["x"] or bandes["y"]):
+        det["pistes"] = _bilan_pistes(modele["cuivre"], res_die, 0.0, [], [])
+        return fond
+
+    budget = max(cout_fond, min(CELLULES_PAS_MAX,
+                                cout_fond * AFFINAGE_COUT_MAX))
+    fin = voulu
+    for _ in range(AFFINAGE_ESSAIS):
+        if fin >= res_die:
+            break
+        # LES BANDES QUI SURVIVENT A CE PAS-LA, ET ELLES SEULES. Une bande plus
+        # mince que le pas fin est abandonnee (voir `_maillage`) : quand il n'en
+        # reste plus aucune, il n'y a plus d'affinage a chiffrer -- et
+        # continuer a reculer annoncerait un pas fin qui ne maille rien.
+        bx = [t for t in bandes["x"] if t[1] - t[0] >= fin]
+        by = [t for t in bandes["y"] if t[1] - t[0] >= fin]
+        if not (bx or by):
+            break
+        essai = _maillage(modele, bande, res_air, res_die, fin, bandes)
+        cout = _cout(_estimation(essai[0], essai[1], essai[2], res_die), bande)
+        if cout <= budget:
+            det["fin"] = fin
+            det["fin_borne"] = fin > voulu * 1.001
+            det["cout"] = cout
+            det["pistes"] = _bilan_pistes(modele["cuivre"], res_die,
+                                          fin, bx, by)
+            return essai
+        fin *= AFFINAGE_RECUL
+    # Aucun pas fin ne tient dans le budget : le fond, et l'avis le dira.
+    # ON LE RECONSTRUIT, et ce n'est pas du gaspillage : `_maillage` ecrit dans
+    # `modele["maillage_detail"]` a chaque appel, et le dernier essai y a laisse
+    # SES bandes. Rendre le fond en laissant parler d'un affinage qui n'a pas
+    # eu lieu, c'est le genre de chiffre qu'on croit et qu'on ne verifie pas.
+    det["fin_borne"] = True
+    det["pistes"] = _bilan_pistes(modele["cuivre"], res_die, 0.0, [], [])
+    return _maillage(modele, bande, res_air, res_die)
 
 
 # ==========================================================================
@@ -1729,7 +2469,7 @@ DUMP_REGIONS = ("structure", "plan_z", "coupe_x", "coupe_y", "boite")
 OCTETS_PAR_CELLULE_DUMP = 12.0
 
 
-def _dumps(doc, emprise, boite, bande, mx, my, mz):
+def _dumps(doc, emprise, boite, bande, mx, my, mz, nmax=0):
     """Ce qu'on enregistre du champ, et ce que cela coutera en disque."""
     d = _dict(_dict(doc).get("dumps"))
     if not d.get("actif"):
@@ -1775,8 +2515,12 @@ def _dumps(doc, emprise, boite, bande, mx, my, mz):
     if mode == "frequentiel":
         octets = nc * OCTETS_PAR_CELLULE_DUMP * len(freqs) * 2 * len(types)
     else:
-        octets = nc * OCTETS_PAR_CELLULE_DUMP * _nb_pos(
-            _dict(doc.get("arret")).get("nmax"), NMAX_DEFAUT) * len(types)
+        # LE NOMBRE DE PAS RESOLU, et non celui du document : a zero, le
+        # document dit « calcule-le », et chiffrer le disque sur un defaut
+        # annoncerait des gigaoctets qui ne correspondent a aucun calcul.
+        octets = nc * OCTETS_PAR_CELLULE_DUMP * (
+            nmax or _nb_pos(_dict(doc.get("arret")).get("nmax"),
+                            NMAX_DEFAUT)) * len(types)
 
     return {
         "actif": True, "types": types, "mode": mode, "region": region,
@@ -1838,7 +2582,8 @@ def normaliser(doc):
     if modele_cu not in ("feuille", "pec", "volume"):
         modele_cu = "feuille"
 
-    conducteurs, dielectriques, z_haut, supposes = _empilage(doc, k_mm, modele_cu)
+    (conducteurs, dielectriques, z_haut,
+     supposes, revetements) = _empilage(doc, k_mm, modele_cu)
     cuivre, boite_cu, n_polys = _cuivre(doc, conducteurs, k_mm)
     vias = _vias(doc, conducteurs, k_mm)
     bande = _bande(doc)
@@ -1867,7 +2612,9 @@ def normaliser(doc):
     er_max = max([d["er"] for d in dielectriques] or [1.0])
     res_air, res_die, res_detail = _resolution(bande, er_max, cuivre, boite_cu)
     m = _dict(doc.get("maillage"))
-    res_air = _nb_pos(m.get("res_air"), 0.0) * k_mm or res_air
+    res_air_saisi = _nb_pos(m.get("res_air"), 0.0) * k_mm
+    res_air = res_air_saisi or res_air
+    res_detail["saisi_air"] = bool(res_air_saisi)
     # UNE VALEUR SAISIE RESTE UNE VALEUR SAISIE. Les bornes ci-dessus sont des
     # defauts calcules : si l'utilisateur a ecrit un pas, c'est le sien qui
     # part au solveur, meme plus grossier -- il sait ce qu'il eprouve.
@@ -1922,7 +2669,15 @@ def normaliser(doc):
             # valeur saisie, comme pour le pas de maillage plus haut.
             "energie_dB": -abs(_nb(arret.get("energie"), ENERGIE_DEFAUT)
                                or ENERGIE_DEFAUT),
-            "nmax": int(_nb_pos(arret.get("nmax"), NMAX_DEFAUT)),
+            # ZERO VEUT DIRE « CALCULE-LE », comme partout ailleurs dans ce
+            # document -- un pas de maillage a zero veut deja dire « au
+            # mailleur de decider ». Le compteur est le seul reglage dont la
+            # bonne valeur ne se devine pas : elle depend du pas de temps,
+            # donc du maillage, donc de la geometrie. Trente mille pas etaient
+            # de trop pour un monopole et trois fois trop peu pour un IFA
+            # finement maille, et rien dans le nombre ne le disait. Il est
+            # resolu plus bas, une fois le pas de temps connu.
+            "nmax": int(_nb_pos(arret.get("nmax"), 0)),
         },
         "nf2ff": {
             "actif": bool(nf2ff.get("actif")),
@@ -1936,16 +2691,63 @@ def normaliser(doc):
                  or [bande["fcible"]],
         },
         "supposes": supposes,
+        # Les revetements exterieurs de l'empilage, gardes ou non, avec ce qui
+        # l'a decide. La page en fait une ligne par couche et une case a
+        # cocher ; l'avis, plus bas, nomme ceux qui sont sortis.
+        "revetements": revetements,
         "stats": {"polygones": n_polys, "vias": len(vias),
                   "couches_cuivre": len(cuivre),
                   "primitives": len(primitives)},
     }
 
-    mx, my, mz = _maillage(modele, bande, res_air, res_die)
+    mx, my, mz = _mailler(modele, bande, res_air, res_die)
     modele["maillage"] = {"x": mx, "y": my, "z": mz}
+    # LES COTES DES PORTS, COLLEES SUR LES LIGNES DE MAILLAGE. Un ecart de
+    # quatre microns suffit a ce qu'une boite d'excitation plate n'excite plus
+    # rien du tout, sans autre signe qu'un avertissement noye au demarrage et
+    # une energie nulle. Voir `_coller_ports`.
+    modele["ports_colles_mm"] = _coller_ports(modele)
     modele["estimation"] = _estimation(mx, my, mz, res_die)
+    # QUI FABRIQUE LA PLUS PETITE CELLULE -- la question que l'avis et le
+    # rapport posaient chacun de son cote, et a laquelle le modele repond
+    # desormais une fois pour toutes. Voir `_coupable_cellule`.
+    modele["estimation"]["cellule"] = _coupable_cellule(modele)
 
-    modele["dumps"] = _dumps(doc, emprise, boite, bande, mx, my, mz)
+    # -- le compteur de pas, calcule si on ne l'a pas impose -----------------
+    # APRES L'ESTIMATION, PARCE QU'IL FAUT LE PAS DE TEMPS. L'impulsion dure un
+    # temps physique fixe -- il ne depend que de la largeur de bande -- mais le
+    # nombre de PAS qu'elle occupe depend de dt, c'est-a-dire de la plus petite
+    # cellule. C'est toute la raison pour laquelle un nombre saisi une fois ne
+    # vaut plus rien des qu'on retouche le maillage.
+    dt_s = modele["estimation"]["dt_s"]
+    t_exc = bande.get("t_excitation") or 0.0
+    f_res = bande.get("fcible") or bande.get("f0") or 0.0
+    # DEUX CRITERES, ET C'EST LE PLUS GRAND QUI GAGNE : le temps d'emettre
+    # l'impulsion, et le temps de l'oublier. Voir NMAX_PERIODES.
+    n_imp = (NMAX_IMPULSIONS * t_exc / dt_s) if (dt_s > 0 and t_exc > 0) else 0.0
+    n_dec = (NMAX_PERIODES / (f_res * dt_s)) if (dt_s > 0 and f_res > 0) else 0.0
+    if n_imp > 0 or n_dec > 0:
+        nmax_calcule = max(NMAX_PLANCHER, int(math.ceil(max(n_imp, n_dec))))
+    else:
+        nmax_calcule = NMAX_DEFAUT
+    # IL EST CALCULE MEME QUAND IL EST IMPOSE, et la page s'en sert pour dire
+    # a cote d'un nombre saisi celui que le modele proposait. Un reglage qu'on
+    # impose sans voir ce qu'on refuse n'est pas un reglage, c'est un pari.
+    modele["arret"]["nmax_calcule"] = nmax_calcule
+    modele["arret"]["nmax_detail"] = {
+        "impulsion": int(math.ceil(n_imp)),
+        "decroissance": int(math.ceil(n_dec)),
+        "periodes": NMAX_PERIODES,
+        "f_res": f_res,
+    }
+    if modele["arret"]["nmax"] <= 0:
+        modele["arret"]["nmax"] = nmax_calcule
+        modele["arret"]["nmax_auto"] = True
+    else:
+        modele["arret"]["nmax_auto"] = False
+
+    modele["dumps"] = _dumps(doc, emprise, boite, bande, mx, my, mz,
+                             modele["arret"]["nmax"])
 
     # LES PERTES APRES LE MAILLAGE, ET NON L'INVERSE : la borne qui decide
     # quels poles de Debye le solveur acceptera est « trois pas de temps », et
@@ -1957,6 +2759,81 @@ def normaliser(doc):
     # le modele et la page les affiche tels quels.
     modele["avis"] = _avis(modele)
     return modele
+
+
+def _coupable_cellule(m):
+    """La plus petite cellule du domaine, son axe, et la couche qui la fait.
+
+    UNE SEULE AUTORITE POUR UNE SEULE QUESTION. Deux surfaces posent celle-ci
+    -- l'avis de l'assistant et le rapport d'ingenierie --, et elles y
+    repondaient chacune de son cote, toutes deux a cote de la plaque : « deux
+    aretes de cuivre presque confondues » pour l'un, « un sommet decale d'une
+    fraction de micron » pour l'autre, quand la cause etait le vernis epargne
+    de l'empilage. Le modele repond ici, une fois ; la page et le rapport
+    lisent.
+    """
+    cotes = m["estimation"]["plus_petite_cellule_mm"]
+    mm = min(cotes)
+    out = {"mm": mm, "axe": "xyz"[cotes.index(mm)],
+           "quoi": "", "couche": "", "ep": 0.0, "revetement": False}
+    if out["axe"] != "z":
+        # Une cellule mince dans le plan ne vient pas d'une couche : elle
+        # vient de deux aretes de cuivre que la grille n'a pas confondues.
+        return out
+    noms_rev = set(r["nom"] for r in m["revetements"])
+    for d in m["dielectriques"]:
+        if abs(d["ep"] - mm) < 1e-6:
+            out.update(quoi="dielectrique", couche=d["nom"], ep=d["ep"],
+                       revetement=d["nom"] in noms_rev)
+            return out
+    if m["modele_cuivre"] == "volume":
+        for c in m["conducteurs"]:
+            if c["ep_geo"] > 0 and abs(c["ep_geo"] - mm) < 1e-6:
+                out.update(quoi="cuivre", couche=c["nom"], ep=c["ep_geo"])
+                return out
+    return out
+
+
+def _cause_cellule(m):
+    """La meme chose en une phrase, pour l'avis.
+
+    L'AVIS PROPOSAIT DEUX CAUSES PROBABLES, ET LA VRAIE ETAIT UNE TROISIEME.
+    Sur antenna4c.xml, la cellule de 15 microns n'etait ni du cuivre presque
+    confondu ni un substrat mince : c'etait le VERNIS EPARGNE, declare dans
+    l'empilage comme une couche a part entiere et invisible dans le panneau
+    qui montre l'empilage, lequel n'affiche que les conducteurs et ce qui les
+    separe. Lire « deux aretes presque confondues, ou un substrat tres mince »
+    envoyait donc chercher dans le DESSIN ce qui etait dans l'EMPILAGE, et
+    aucune retouche du dessin n'y aurait rien change. Le modele connait
+    l'epaisseur et le NOM de chaque couche : il n'a aucune raison de faire
+    deviner.
+
+    L'AXE DECIDE OU CHERCHER, et il coute un mot : une cellule mince en z
+    vient d'une couche, une cellule mince en x ou en y vient de deux aretes de
+    cuivre que la grille n'a pas su confondre. Les melanger, c'est renvoyer la
+    moitie des lecteurs au mauvais endroit.
+    """
+    c = m["estimation"]["cellule"]
+    if c["quoi"] == "dielectrique":
+        suite = (" C'est un revetement EXTERIEUR : l'etape « L'empilage » le "
+                 "sort du maillage d'une case a decocher." if c["revetement"]
+                 else " C'est un substrat -- il est entre deux conducteurs, "
+                      "il porte le champ, et il doit rester.")
+        return ("Cause : le dielectrique « %s » ne fait que %.4f mm, et ses "
+                "deux faces portent chacune une ligne de maillage qu'on ne "
+                "peut pas deplacer sans deplacer la couche elle-meme.%s"
+                % (c["couche"], c["ep"], suite))
+    if c["quoi"] == "cuivre":
+        return ("Cause : l'epaisseur de « %s » (%.4f mm), que le mode "
+                "« volume » fait entrer dans le maillage. Le mode "
+                "« feuille » donne le meme resultat en une fraction du temps."
+                % (c["couche"], c["ep"]))
+    if c["axe"] == "z":
+        return ("Cause : deux lignes obligatoires voisines en z -- une "
+                "interface de l'empilage, une face de port, un objet ajoute "
+                "a la main -- posees a cette distance l'une de l'autre.")
+    return ("Cause probable : deux aretes de cuivre presque confondues dans "
+            "le plan, que la tolerance de regroupement n'a pas rapprochees.")
 
 
 def _avis(m):
@@ -2012,21 +2889,58 @@ def _avis(m):
                      % (est["cellules"] / 1e6, est["memoire_Mo"]),
         })
 
-    petite = min(est["plus_petite_cellule_mm"])
+    petite = est["cellule"]["mm"]
     if petite < m["resolution"]["die"] / 20.0:
-        cause = ("l'epaisseur du cuivre, que le mode « volume » fait entrer "
-                 "dans le maillage" if m["modele_cuivre"] == "volume"
-                 else "deux aretes de cuivre presque confondues, ou un "
-                      "substrat tres mince")
         out.append({
             "rang": "attention",
             "titre": "Une cellule minuscule ralentit tout",
-            "texte": "La plus petite cellule fait %.4f mm, soit %.0f fois "
-                     "moins que le pas vise. Le pas de temps FDTD est "
+            "texte": "La plus petite cellule fait %.4f mm en %s, soit %.0f "
+                     "fois moins que le pas vise. Le pas de temps FDTD est "
                      "commande par elle SEULE : cette cellule-la ralentit la "
-                     "simulation entiere. Cause probable : %s."
-                     % (petite, m["resolution"]["die"] / max(petite, 1e-9),
-                        cause),
+                     "simulation entiere. %s"
+                     % (petite, est["cellule"]["axe"],
+                        m["resolution"]["die"] / max(petite, 1e-9),
+                        _cause_cellule(m)),
+        })
+
+    ecartes = [r for r in m["revetements"] if not r["garde"]]
+    if ecartes:
+        # LE PLURIEL SE DECLINE, PARCE QU'UN AVIS SE LIT. Un masque de soudure
+        # arrive presque toujours par DEUX -- une face et l'autre --, et « la
+        # couche reste dans la fiche » sur deux couches est la petite negligence
+        # qui fait douter du reste du texte.
+        n = len(ecartes)
+        mince = min(r["ep"] for r in ecartes)
+        out.append({
+            "rang": "info",
+            "titre": ("Revetements exterieurs hors du maillage" if n > 1
+                      else "Revetement exterieur hors du maillage"),
+            "texte": "%s pose%s sur le cuivre exterieur, ecarte%s du "
+                     "modele : %s dans la fiche mais pas dans la geometrie. "
+                     "%s deux faces porteraient deux lignes de maillage a "
+                     "%.4f mm l'une de l'autre, soit %.0f fois moins que le "
+                     "pas vise, et cette cellule-la commanderait le pas de "
+                     "temps de TOUTE la simulation -- un facteur huit sur la "
+                     "duree, mesure sur une carte de quatre millions de "
+                     "cellules. Ce qu'%s apporterai%s en echange est du "
+                     "second "
+                     "ordre : une permittivite posee au-dessus du ruban, sur "
+                     "un vingt-cinquieme de la hauteur du substrat. L'etape "
+                     "« L'empilage » laisse %s remettre si %s compte%s -- un "
+                     "coverlay de flex, un radome mince."
+                     % (", ".join("« %s » (%.4f mm)" % (r["nom"], r["ep"])
+                                  for r in ecartes),
+                        "s" if n > 1 else "",
+                        "s" if n > 1 else "",
+                        "les couches restent" if n > 1
+                        else "la couche reste",
+                        "Leurs" if n > 1 else "Ses",
+                        mince, m["resolution"]["die"] / max(mince, 1e-9),
+                        "elles" if n > 1 else "elle",
+                        "ent" if n > 1 else "t",
+                        "les" if n > 1 else "la",
+                        "elles" if n > 1 else "elle",
+                        "nt" if n > 1 else ""),
         })
 
     if m["modele_cuivre"] == "volume":
@@ -2050,6 +2964,26 @@ def _avis(m):
                      "la resonance plus pointue qu'en realite. C'est le bon "
                      "mode pour degrossir une geometrie, pas pour annoncer un "
                      "gain.",
+        })
+
+    # -- une cote de port qui n'etait pas sur une ligne --------------------
+    # ELLE DEVRAIT TOUJOURS L'ETRE : les faces des ports sont posees en lignes
+    # OBLIGATOIRES, et une obligatoire ne cede jamais. Un deplacement plus
+    # grand qu'un arrondi veut donc dire qu'une de ces lignes a disparu en
+    # route -- et une boite d'excitation plate qui n'est pas sur une ligne
+    # n'excite RIEN, pour un calcul qui va au bout et rend une energie nulle.
+    colle = m.get("ports_colles_mm") or 0.0
+    if colle > 1e-6:
+        out.append({
+            "rang": "grave",
+            "titre": "Une cote de port n'etait pas sur une ligne de maillage",
+            "texte": "Elle a ete deplacee de %.4g mm pour y tomber. Les faces "
+                     "d'un port sont pourtant posees en lignes obligatoires : "
+                     "un tel ecart signale que l'une d'elles a ete perdue. "
+                     "Verifiez la position du port -- une boite d'excitation "
+                     "qui n'est pas sur une ligne n'excite rien du tout, et "
+                     "le calcul va au bout en rendant une energie nulle."
+                     % colle,
         })
 
     # -- les ports ---------------------------------------------------------
@@ -2199,27 +3133,24 @@ def _avis(m):
     # primitive » noye au milieu de trois cents lignes de demarrage, et le
     # calcul continue sans lui. Une pastille d'alimentation evaporee, et le
     # port n'est plus relie a rien — pour un S11 qui a toujours l'air d'un S11.
-    fin = 0
-    petit = None
-    for bloc in m["cuivre"]:
-        for poly in bloc["polys"]:
-            xs = [q[0] for q in poly["o"]]
-            ys = [q[1] for q in poly["o"]]
-            d = min(max(xs) - min(xs), max(ys) - min(ys))
-            if d < m["resolution"]["die"]:
-                fin += 1
-                petit = d if petit is None else min(petit, d)
-    if fin:
+    # LE COMPTE VIENT DU BILAN PAR POLYGONE, chacun mesure contre LA GRILLE
+    # QUI LE CONCERNE : une piste prise dans une bande fine n'est pas plus fine
+    # que sa maille, et la compter ici envoyait chercher un probleme resolu.
+    pistes = (m["resolution"].get("detail") or {}).get("pistes") or {}
+    if pistes.get("ignores"):
+        pas_fin = (m["resolution"].get("detail") or {}).get("fin") or 0.0
         out.append({
             "rang": "attention",
-            "titre": "%d polygone(s) plus fins que la maille" % fin,
-            "texte": "Le plus petit fait %.3f mm de large, pour un pas de "
-                     "maillage de %.3f mm. openEMS les ignorera en silence — "
-                     "il l'ecrit une fois dans son journal, au milieu du "
-                     "demarrage. Si l'un d'eux est la pastille du port, le "
-                     "port n'excitera plus rien. Affinez le maillage, ou "
-                     "verifiez que ces polygones-la ne portent rien "
-                     "d'essentiel." % (petit, m["resolution"]["die"]),
+            "titre": "%d polygone(s) plus fins que la maille"
+                     % pistes["ignores"],
+            "texte": "Le plus petit fait %.3f mm de large, pour une maille de "
+                     "%.3f mm a cet endroit-la. openEMS les ignorera en "
+                     "silence — il l'ecrit une fois dans son journal, au "
+                     "milieu du demarrage. Si l'un d'eux est la pastille du "
+                     "port, le port n'excitera plus rien. Affinez le "
+                     "maillage, ou verifiez que ces polygones-la ne portent "
+                     "rien d'essentiel."
+                     % (pistes["ignore_mm"], pas_fin or m["resolution"]["die"]),
         })
 
     if m["supposes"]:
@@ -2258,7 +3189,7 @@ def _avis(m):
     # simulation lancee et le temps deja engage. On la pose ici, avant.
     dt = est.get("dt_s") or 0.0
     t_exc = m["bande"].get("t_excitation") or 0.0
-    if dt > 0 and t_exc > 0:
+    if dt > 0 and t_exc > 0 and not m["arret"].get("nmax_auto"):
         pas_exc = t_exc / dt
         mini = int(math.ceil(3.0 * pas_exc))
         if m["arret"]["nmax"] < mini:
@@ -2275,24 +3206,132 @@ def _avis(m):
                             m["arret"]["nmax"] / pas_exc, mini),
             })
 
+    # -- un garde-fou impose plus court que la decroissance attendue --------
+    # CE N'EST PAS UN REFUS, C'EST UN CHIFFRE A COTE D'UN AUTRE. Le nombre
+    # saisi peut etre le bon -- une antenne large bande s'eteint vite. Mais
+    # quand il est plus court que ce que le modele calcule, le calcul a des
+    # chances de finir sur le compteur au lieu de finir sur l'energie, et
+    # cela ne se voit qu'apres coup, dans le rapport.
+    calc = m["arret"].get("nmax_calcule") or 0
+    if (not m["arret"].get("nmax_auto") and calc
+            and m["arret"]["nmax"] < calc * 0.95):
+        det = m["arret"].get("nmax_detail") or {}
+        out.append({
+            "rang": "attention",
+            "titre": "Le garde-fou est plus court que la decroissance attendue",
+            "texte": "Le compteur est a %d pas ; le modele en calcule %d pour "
+                     "ce maillage — %d pour emettre l'impulsion, %d pour "
+                     "laisser l'antenne s'eteindre (%.0f periodes a %.3f GHz, "
+                     "soit environ -40 dB pour un Q charge ordinaire). Si "
+                     "l'energie n'est pas descendue avant, la simulation "
+                     "s'arretera sur le compteur et la transformee lira une "
+                     "reponse coupee. Laissez le champ a zero pour que le "
+                     "nombre suive le maillage."
+                     % (m["arret"]["nmax"], calc,
+                        det.get("impulsion") or 0, det.get("decroissance") or 0,
+                        det.get("periodes") or NMAX_PERIODES,
+                        (det.get("f_res") or 0.0) / 1e9),
+        })
+
+    # -- des aretes ont-elles ete confondues pour le maillage ? --------------
+    # ON LE DIT PLUTOT QUE DE S'EN FELICITER EN SILENCE. Le regroupement fait
+    # gagner un facteur quatre sur un dessin ordinaire, mais il signale aussi
+    # un dessin qui porte des bords presque confondus — deux rubans de largeurs
+    # voisines sur le meme axe, un arrondi de bout de piste. Les voir est utile
+    # a qui dessine, et les taire reviendrait a corriger le dessin de quelqu'un
+    # sans le lui dire.
+    md = m.get("maillage_detail") or {}
+    if md.get("aretes_groupees"):
+        out.append({
+            "rang": "info",
+            "titre": "Des aretes de cuivre ont ete confondues pour le maillage",
+            "texte": "%d bord(s) se trouvaient a moins de %.3f mm d'un autre "
+                     "et ne recoivent qu'un seul jeu de lignes. LE CUIVRE, LUI, "
+                     "GARDE SES COTES : seule la grille est simplifiee. Sans "
+                     "cela, chacun poserait ses lignes au tiers et deux cellules "
+                     "minuscules en resulteraient — or la plus petite cellule du "
+                     "domaine commande le pas de temps de toute la simulation."
+                     % (md["aretes_groupees"], md.get("eps_aretes") or 0.0),
+        })
+
     # -- le cuivre le plus fin est-il resolu ? -------------------------------
+    # CET AVIS NE REGARDE PLUS QUI A CHOISI LE PAS, ET C'EST UNE CORRECTION.
+    # Il ne sortait qu'en mode automatique : un pas saisi a la main etait
+    # repute assume, donc tu. C'etait exactement le cas a ne pas taire — un
+    # pas de 0,80 mm entre a la main pour des brins de 1,00 mm ne fait qu'UNE
+    # cellule en travers du cuivre, la resonance part plusieurs pour cent trop
+    # haut, et rien ne le disait. Le pas saisi reste saisi : on ne le corrige
+    # pas, on le commente.
     det = m["resolution"].get("detail") or {}
-    if det.get("bornee") and not det.get("saisi"):
+    res_die = m["resolution"]["die"]
+    pas_fin = det.get("fin") or 0.0
+    pistes = det.get("pistes") or {}
+    largeur = pistes.get("largeur") or 0.0
+    cellules = pistes.get("cellules") or 0.0
+
+    # -- l'affinage local a eu lieu : on le dit ----------------------------
+    # UN MAILLAGE A DEUX PAS NE SE LIT PAS SUR LE SEUL « PAS DE MAILLAGE ». La
+    # page affiche le fond ; sans cet avis, personne ne saurait qu'une piste
+    # de 0,5 mm est maillee cinq fois plus fin que la carte qui la porte, ni ce
+    # que cela a coute.
+    if pas_fin > 0:
+        md = m.get("maillage_detail") or {}
+        cout, fond = det.get("cout") or 0.0, det.get("cout_fond") or 0.0
+        borne = ""
+        if det.get("fin_borne"):
+            borne = (" Le budget a arrete l'affinage la : pour %g cellules en "
+                     "travers du cuivre le plus etroit il faudrait descendre a "
+                     "%.3f mm, et le calcul coutait alors plus de %g fois le "
+                     "maillage de fond."
+                     % (CELLULES_PAR_PISTE, det.get("fin_voulu") or 0.0,
+                        AFFINAGE_COUT_MAX))
+        out.append({
+            "rang": "info",
+            "titre": "Maillage affine en travers du cuivre etroit",
+            "texte": "Le fond reste a %.3f mm — c'est ce que l'emprise du "
+                     "cuivre permet — mais %d bande(s) en x et %d en y "
+                     "descendent a %.3f mm. Elles sont posees EN TRAVERS des "
+                     "pistes trop fines pour le fond, et sur ce seul axe : le "
+                     "champ tourne sur la largeur d'un ruban, pas sur sa "
+                     "longueur, et raffiner les deux axes couterait quarante "
+                     "fois plus de lignes pour la meme physique. Le plus mal "
+                     "resolu des polygones a maintenant %.1f cellules en "
+                     "travers. Prix : %.1f fois le maillage de fond.%s"
+                     % (res_die, md.get("bandes_x") or 0,
+                        md.get("bandes_y") or 0, pas_fin, cellules,
+                        (cout / fond) if fond > 0 else 1.0, borne),
+        })
+
+    # -- ce qui reste mal resolu, et pourquoi ------------------------------
+    if largeur > 0 and cellules < CELLULES_PAR_PISTE * 0.999:
+        if det.get("saisi"):
+            cause = ("Le pas est celui que vous avez saisi : %.3f mm. "
+                     "Mettez-le a %.3f mm pour resoudre ce cuivre, ou "
+                     "rendez-le automatique en le remettant a zero."
+                     % (res_die, largeur / CELLULES_PAR_PISTE))
+        elif pas_fin > 0 or det.get("fin_borne"):
+            cause = ("Le maillage est deja affine en travers du cuivre "
+                     "etroit, et c'est le BUDGET qui arrete l'affinage : "
+                     "au-dela, le nombre de cellules et le nombre de pas de "
+                     "temps faisaient plus de %g fois le maillage de fond. "
+                     "Retirez de la selection le cuivre qui ne rayonne pas — "
+                     "c'est lui qui paie, chaque piste fine coutant sa propre "
+                     "bande." % AFFINAGE_COUT_MAX)
+        else:
+            cause = ("Le maillage s'arrete a %.3f mm — c'est le pas en "
+                     "dessous duquel l'emprise du cuivre demanderait plus de "
+                     "%d lignes par axe, et le calcul ne finirait pas. "
+                     "Retirez ce cuivre de la selection s'il ne rayonne pas."
+                     % (det.get("plancher") or 0.0, int(LIGNES_MAX_EMPRISE)))
         out.append({
             "rang": "attention",
             "titre": "Le cuivre le plus fin n'est pas resolu",
-            "texte": "Le plus etroit des polygones retenus fait %.3f mm ; il "
-                     "en faudrait %g cellules en travers, soit un pas de "
-                     "%.3f mm. Le maillage s'arrete a %.3f mm — c'est le pas "
-                     "en dessous duquel l'emprise du cuivre demanderait plus "
-                     "de %d lignes par axe, et le calcul ne finirait pas. "
-                     "Ce qui est plus fin que cela est "
-                     "rendu par la cellule qui l'approche : son impedance "
-                     "n'est pas la bonne. Retirez ce cuivre de la selection "
-                     "s'il ne rayonne pas, ou imposez le pas a la main."
-                     % (det.get("largeur_cuivre") or 0.0, CELLULES_PAR_PISTE,
-                        (det.get("largeur_cuivre") or 0.0) / CELLULES_PAR_PISTE,
-                        det.get("plancher") or 0.0, int(LIGNES_MAX_EMPRISE)),
+            "texte": "Le plus mal resolu des polygones retenus fait %.3f mm "
+                     "de large ; il en faudrait %g cellules en travers, et il "
+                     "n'en a que %.1f. Un ruban rendu par une cellule ou deux "
+                     "n'a pas la largeur qu'on a dessinee : son impedance "
+                     "n'est pas la bonne, et sa resonance sort trop haut. %s"
+                     % (largeur, CELLULES_PAR_PISTE, cellules, cause),
         })
 
     return out

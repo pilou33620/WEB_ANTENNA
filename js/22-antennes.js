@@ -415,10 +415,55 @@ const CON_MOTIF_MONOPOLE={
    toucher à la résonance — c'est tout son intérêt, et c'est aussi ce qui la
    rend délicate : deux réglages qui interagissent.
 
+   LES COTES SORTENT D'UN CALCUL, ET NON D'UNE ANTENNE RECOPIÉE. Ce gabarit
+   posait auparavant les cotes relevées sur une antenne publiée, remises à
+   l'échelle de la fréquence visée par une simple règle de trois. Cela faisait
+   deux défauts en un : les valeurs ne valaient que pour les deux épaisseurs de
+   substrat tabulées, et rien ne bougeait quand on changeait de permittivité.
+   Les règles classiques du F inversé imprimé sont posées ici à la place, et
+   chacune est écrite en face de sa cote :
+
+       développé (sc + ha + bras)   =  λ₀ / (4·√εeff)   avec εeff ≈ 1,20
+       hauteur au-dessus de la masse  ha  =  λ₀ / 20    (plage λ₀/40 … λ₀/20)
+       écartement court-circuit → alim  d  =  λ₀ / 40   (réglage d'impédance)
+       largeur des brins                   =  λ₀ / 100
+       plan de masse                   Lg  ≥  λ₀ / 4
+       couture de masse : un via tous les λ₀ / 20 au plus
+
+   Aucun de ces nombres n'est un relevé : ce sont les proportions d'usage du
+   motif, recalculées à chaque frappe. À 2,45 GHz elles rendent un bras de
+   21,6 mm à 6,1 mm de la masse pour un développé de 27,93 mm — la taille des
+   antennes des modules du commerce, ce qui est le seul contrôle qu'une règle
+   de proportion accepte de passer.
+
+   ELLES SUIVENT LA FRÉQUENCE, ET PRESQUE PAS LE SUBSTRAT — il faut le dire
+   plutôt que de le laisser croire. Toutes sont écrites en λ₀, et le εeff
+   retenu est une constante : changer la permittivité de l'empilage ne bouge
+   donc ni le bras, ni la hauteur, ni l'écartement. Le substrat n'entre que
+   par ce qui ne rayonne pas — la marge de carte et la profondeur du décroché.
+   Ce n'est pas un oubli : un brin imprimé fin voit un εeff qui va d'environ
+   1,05 sur un substrat mince à 1,20 sur un 1,6 mm, soit 7 % sur la longueur
+   — l'ordre de l'écart que ce genre de modèle annonce déjà. Prendre le haut
+   de la plage raccourcit donc légèrement le développé sur substrat mince, et
+   c'est le solveur qui tranche, comme pour toute cote de départ.
+
+   POURQUOI εeff ≈ 1,20 ET NON (εr+1)/2. Le monopôle et le MIFA de ce fichier
+   prennent (εr+1)/2 — l'hypothèse du champ partagé moitié dans l'air, moitié
+   dans le substrat, qui vaut pour un ruban large sur un substrat épais. Un
+   brin d'un millimètre posé sur 1,6 mm de FR-4 n'est pas dans ce cas : il
+   garde presque tout son champ dans l'air, et le raccourcissement dû au
+   diélectrique se compte en pour-cent, pas en moitiés. 1,20 est la valeur
+   d'usage pour un brin imprimé fin au bord d'une carte ; prendre 2,7 ici
+   rendrait un développé de 18,6 mm à 2,45 GHz, soit une antenne qui
+   résonnerait un bon tiers trop haut.
+
    LE COURT-CIRCUIT EST UN VIA, ET IL EST RÉEL. Il relie le bras à la masse de
    la face opposée, et il entre dans le modèle comme un cylindre métallisé —
    pas comme une hypothèse. Un IFA dont le court-circuit serait oublié ne
-   résonne pas du tout ; le S11 le dirait, mais trop tard.
+   résonne pas du tout ; le S11 le dirait, mais trop tard. Il y en a DEUX
+   plutôt qu'un : le modèle classique court-circuite par un ruban de la
+   largeur du brin, et deux vias côte à côte en approchent l'inductance mieux
+   qu'un seul au milieu.
 
    LA LONGUEUR QUI RÉSONNE EST LE DÉVELOPPÉ : le chemin que le courant
    parcourt du court-circuit au bout ouvert. Trois morceaux, et non deux —
@@ -428,80 +473,131 @@ const CON_MOTIF_MONOPOLE={
    hors du cuivre, qu'il faut donc bien l'enfoncer, et que 0,8 mm à 2,45 GHz
    font 4 % du quart d'onde — davantage que l'écart qu'on annonce.
 
+   IL SE COMPTE SUR L'AXE DU CUIVRE, pas sur son contour. `La` est la longueur
+   HORS-TOUT du bras, bord gauche du court-circuit compris ; le courant, lui,
+   suit l'axe, et il part donc une demi-largeur de brin plus loin. Le
+   développé vaut `sc + ha + La − wb/2` : c'est la polyligne réellement
+   dessinée, c'est cette expression que l'estimation de résonance emploie, et
+   c'est elle que `La` est choisie pour satisfaire.
+
    CE QUE LE COMPTER SUPPOSE. Entre le via et le bord de la masse, le brin
    court AU-DESSUS du plan : c'est une ligne, pas un rayonneur, et sa longueur
    électrique n'est pas tout à fait celle d'un brin en l'air. Le compter en
    entier surestime donc un peu ; l'ignorer sous-estime de tout. On le compte,
    et c'est écrit.
    ========================================================================== */
+
+/* Le εeff d'un brin imprimé fin au bord d'une carte — voir l'en-tête. Il est
+   sorti des deux fonctions ci-dessous parce que TOUTES LES DEUX en ont besoin
+   et doivent s'accorder : `conIfaClassique` s'en sert pour choisir la
+   longueur du bras, `tracer` pour annoncer la résonance de ce bras-là. Deux
+   copies du nombre, et l'aperçu annoncerait autre chose qu'il ne dessine. */
+const CON_IFA_EEFF=1.20;
+
+/* Les proportions classiques du F inversé imprimé, pour une fréquence et un
+   substrat donnés. UNE SEULE FONCTION POUR LES DEUX USAGES — ce que la fiche
+   propose, et ce sur quoi le tracé se rabat quand une cote manque — parce
+   qu'un jeu de valeurs de repli qui différerait du jeu proposé ferait
+   dessiner une antenne que personne n'a demandée. */
+function conIfaClassique(c){
+  const lam=CON_C0/Math.max(c.f,1e6);
+  const dVia=Math.min(CON.diametreVia||0.6,0.6);
+  /* Brins à λ₀/100 : assez larges pour être gravés et maillés sans excès,
+     assez fins pour que le développé reste celui d'un fil. */
+  const wb=+Math.max(lam/100,0.6).toFixed(2);
+  /* L'enfoncement du patin de court-circuit n'a pas de règle en λ : c'est le
+     via qui le commande, et il lui faut du cuivre autour. */
+  const sc=+Math.max(0.8,dVia*1.2).toFixed(2);
+  /* λ₀/20 est le haut de la plage d'usage (λ₀/40 … λ₀/20) : c'est la hauteur
+     qui donne la bande la plus large, et la largeur de bande est la raison
+     pour laquelle on choisit un IFA. */
+  const ha=+(lam/20).toFixed(2);
+  /* Le développé visé, puis le bras qui reste à loger pour y arriver —
+     compté sur l'axe du cuivre, d'où le demi-brin rendu. */
+  const dev=lam/(4*Math.sqrt(CON_IFA_EEFF));
+  return {
+    lam:lam, dev:dev,
+    La:+(dev-sc-ha+wb/2).toFixed(2),
+    ha:ha, wb:wb,
+    /* Une seule largeur pour tout le F : c'est le motif classique, et le brin
+       d'alimentation n'est de toute façon pas un microruban — il n'a de masse
+       ni dessous ni dessus, seulement de part et d'autre. */
+    wf:wb,
+    d:+(lam/40).toFixed(2),
+    sc:sc, dVia:dVia,
+    /* Le décroché : quelques épaisseurs de substrat suffisent à isoler le
+       brin d'alimentation de la masse, et cette profondeur sert aussi de
+       ligne à dé-embarquer au port. */
+    ed:Math.max(3.0,+(4*c.h).toFixed(2)),
+    gd:0.6,
+    Lg:+Math.max(lam/4,25).toFixed(2),
+    Lb:30.0,
+    /* La marge de carte est tenue COURTE, et c'est propre à ce motif : le
+       substrat qui dépasse du brin le charge, et tout ce qui est dessiné se
+       maille. Une épaisseur de substrat, et au moins le millimètre que la
+       gravure réclame. */
+    marge:+Math.max(c.h,1.0).toFixed(2),
+    /* Couture de masse : la règle classique est un via tous les λ₀/20 au
+       plus, pour que le bord de masse reste un conducteur unique à cette
+       fréquence. Plus serré ne change rien à l'antenne et coûte des cellules
+       de maillage — c'est ce motif qui paie le plus cher le maillage fin. */
+    pasCouture:Math.max(lam/20,2)
+  };
+}
+
 const CON_MOTIF_IFA={
   id:"ifa", nom:"F inversé (IFA)", role:"gnd",
-  aide:"quart d'onde replié Silicon Labs AN1088 : compact, large bande, plan TOP et couture de masse",
+  aide:"quart d'onde replié aux proportions classiques : compact, large bande, plan TOP et couture de masse",
   besoin:"Il faut au moins deux couches de cuivre : un F inversé se "+
          "court-circuite à la masse.",
   champs:[
     {id:"La", nom:"longueur du bras",
-     aide:"longueur hors-tout du bras horizontal (AN1088 : 19,86 mm en 1,6 mm / 21,84 mm en 0,8 mm)"},
+     aide:"longueur hors-tout du bras horizontal : c'est elle qui boucle le développé au quart d'onde"},
     {id:"ha", nom:"hauteur au-dessus de la masse",
-     aide:"hauteur au-dessus du bord de masse (AN1088 : 8,31 mm en 1,6 mm / 7,90 mm en 0,8 mm)"},
-    {id:"wb", nom:"largeur du bras", aide:"largeur du bras horizontal (1,0 mm)"},
+     aide:"hauteur au-dessus du bord de masse (classique : λ₀/40 à λ₀/20 — plus haut, plus large de bande)"},
+    {id:"wb", nom:"largeur du bras", aide:"largeur du bras horizontal (classique : λ₀/100)"},
     {id:"d",  nom:"écartement court-circuit → alim",
-     aide:"espace libre entre brins verticaux (AN1088 : 2,77 mm en 1,6 mm / 2,92 mm en 0,8 mm)"},
+     aide:"espace libre entre brins verticaux (classique : λ₀/40) — c'est le réglage d'impédance"},
     {id:"sc", nom:"enfoncement / patin court-circuit",
-     aide:"portée du patin de raccordement des 2 vias de court-circuit sur la masse"},
+     aide:"portée du patin de raccordement des 2 vias de court-circuit sur la masse : elle compte dans le développé"},
     {id:"ed", nom:"profondeur du décroché",
      aide:"pénétration de la ligne d'alimentation dans la masse : isole l'alimentation"},
     {id:"gd", nom:"dégagement du décroché",
      aide:"largeur du vide de part et d'autre du brin d'alimentation"},
     {id:"Lg", nom:"plan de masse",
      aide:"longueur du plan de masse : un quart d'onde au moins"},
+    {id:"Lb", nom:"largeur de la carte",
+     aide:"largeur totale de la carte et du plan de masse (au moins 30 mm)"},
     {id:"wf", nom:"largeur brins verticaux",
-     aide:"largeur du brin de court-circuit et d'alimentation (1,02 mm / 0,040\")"},
+     aide:"largeur du brin de court-circuit et d'alimentation (classique : la même que le bras)"},
     {id:"dVia", nom:"diamètre des vias", aide:"vias traversants de court-circuit et de couture"},
     {id:"marge", nom:"marge de carte", aide:"substrat qui dépasse du bras à gauche"},
     {id:"masseTop", nom:"plan de masse dessus (TOP)", booleen:true, sym:"GND₂",
      aide:"plan de masse sur la face supérieure (recommandé et actif par défaut)"},
     {id:"viasCouture", nom:"vias de couture de masse", booleen:true, sym:"Vias",
-     aide:"rangée de vias de couture espacés de 50 mil (1,27 mm) le long du bord de masse"}
+     aide:"rangée de vias de couture le long du bord de masse, espacés d'au plus λ₀/20"}
   ],
   defauts:function(c){
-    const quart=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
-    const kf=2.45e9/Math.max(c.f,1e6);
-    /* Préréglages Silicon Labs AN1088 adaptés à l'épaisseur du substrat */
-    const mince=(c.h<=1.1);
-    const La=+( (mince ? 21.84 : 19.86) * kf ).toFixed(2);
-    const ha=+( (mince ? 7.90  : 8.31 ) * kf ).toFixed(2);
-    const wb=+( 1.00 * kf ).toFixed(2);
-    const d =+( (mince ? 2.92  : 2.77 ) * kf ).toFixed(2);
-    const wf=+( 1.02 * kf ).toFixed(2);
-    const marge=+( 1.02 * kf ).toFixed(2);
-    const dVia=Math.min(CON.diametreVia||0.6, 0.6);
-    const sc=Math.max(0.8, dVia*1.2);
-    const ed=Math.max(3.0, +(4*c.h).toFixed(2));
-    const gd=0.6;
-    return {
-      La:La, ha:ha, wb:wb, d:d, wf:wf,
-      sc:sc, ed:ed, gd:gd,
-      Lg:Math.max(quart, 25),
-      dVia:dVia,
-      marge:marge,
-      masseTop:1,
-      viasCouture:1
-    };
+    /* Les proportions classiques, telles quelles : `conGabaritDefauts` ne
+       retient que les clés qui ont un champ, les trois autres (λ₀, développé
+       visé, pas de couture) ne servent qu'au tracé et à la fiche. */
+    const cl=conIfaClassique(c);
+    return Object.assign({}, cl, {masseTop:1, viasCouture:1});
   },
   tracer:function(c,p){
-    const wb=p.wb||1.0;
-    const wf=p.wf||1.02;
-    const marge=p.marge||1.02;
-    const d=p.d!=null?+p.d:2.77;
-    const ha=p.ha!=null?+p.ha:8.31;
-    const La=p.La!=null?+p.La:19.86;
-    const sc=Math.max(p.sc!=null?+p.sc:0.8, 0.4);
-    const ed=Math.max(p.ed!=null?+p.ed:3.0, 0.5);
-    const gd=Math.max(p.gd!=null?+p.gd:0.6, 0.2);
-    const dVia=Math.max(p.dVia!=null?+p.dVia:0.6, 0.2);
+    const cl=conIfaClassique(c);
+    const wb=p.wb||cl.wb;
+    const wf=p.wf||cl.wf;
+    const marge=p.marge||cl.marge;
+    const d=p.d!=null?+p.d:cl.d;
+    const ha=p.ha!=null?+p.ha:cl.ha;
+    const La=p.La!=null?+p.La:cl.La;
+    const sc=Math.max(p.sc!=null?+p.sc:cl.sc, 0.4);
+    const ed=Math.max(p.ed!=null?+p.ed:cl.ed, 0.5);
+    const gd=Math.max(p.gd!=null?+p.gd:cl.gd, 0.2);
+    const dVia=Math.max(p.dVia!=null?+p.dVia:cl.dVia, 0.2);
 
-    /* Coordonnées géométriques (AN1088) :
+    /* Coordonnées géométriques :
        - x0 : axe du court-circuit = marge + wb/2
        - xf : axe de l'alimentation = marge + wb + d + wf/2 (d = espace libre entre brins verticaux)
        - xEnd : bout du bras horizontal = marge + La
@@ -510,7 +606,8 @@ const CON_MOTIF_IFA={
     const x0=marge+wb/2;
     const xf=marge+wb+d+wf/2;
     const xEnd=marge+La;
-    const Lb=Math.max(xEnd+Math.max(marge,2.0), 30);
+    const LbMin=xEnd+Math.max(marge,2.0);
+    const Lb=Math.max(LbMin, p.Lb!=null?+p.Lb:30);
     const yg=p.Lg;
     const yb=yg+ha;
     const ys=yg-sc;
@@ -520,13 +617,16 @@ const CON_MOTIF_IFA={
     const xg1=xf-wf/2-gd;
     const xg2=xf+wf/2+gd;
 
-    const dev=La+ha;
-    const eeffIFA=1.18;
+    /* Le développé, sur l'axe du cuivre : l'enfoncement du court-circuit, la
+       montée jusqu'au bras, puis le bras à partir de son axe. C'est
+       exactement la polyligne posée quinze lignes plus bas, et c'est pourquoi
+       les deux ne divergent pas. */
+    const dev=sc+ha+La-wb/2;
     /* `CON_C0` est en mm/s et `dev` en millimètres, comme partout dans ce
        fichier : la division se fait TELLE QUELLE. Le facteur 1e-3 qui traînait
        ici prenait le développé pour des mètres et rendait une résonance mille
        fois trop haute — 2 320 GHz au lieu de 2,32. */
-    const festim=CON_C0/(4*dev*Math.sqrt(eeffIFA));
+    const festim=CON_C0/(4*dev*Math.sqrt(CON_IFA_EEFF));
 
     const formes=[
       /* Plan de masse inférieur (continu sous toute la zone de masse) */
@@ -538,7 +638,8 @@ const CON_MOTIF_IFA={
       /* Le brin d'alimentation descend dans le plan de masse jusqu'à yd */
       gPiste("haut","ANTENNE",[[xf,yb],[xf,yd]],wf),
 
-      /* 2 vias de court-circuit au raccordement du court-circuit à la masse (AN1088) */
+      /* 2 vias côte à côte : ils tiennent lieu du ruban de court-circuit du
+         modèle classique, dont ils approchent l'inductance. */
       gVia("ANTENNE", x0 - Math.min(wb*0.35, 0.35), (ys+yg)/2, dVia),
       gVia("ANTENNE", x0 + Math.min(wb*0.35, 0.35), (ys+yg)/2, dVia)
     ];
@@ -550,9 +651,9 @@ const CON_MOTIF_IFA={
     }
 
     if(p.viasCouture){
-      /* Vias de couture le long du bord de masse (Ground Stitching Vias, espacement 50 mil / 1,27 mm) */
+      /* Vias de couture le long du bord de masse, au pas classique de λ₀/20 */
       const yStitch=(ys+yg)/2;
-      const pas=1.27;
+      const pas=cl.pasCouture;
       for(let x=pas; x<=Lb-pas/2; x+=pas){
         if(Math.abs(x-x0)<wb+0.3)continue;
         if(x>=xg1-0.4 && x<=xg2+0.4)continue;
@@ -579,18 +680,26 @@ const CON_MOTIF_IFA={
         gRepere("dVia",x0+wb/2+0.5,ys,-4.5,yg-9,"⌀via")
       ],
       calcul:{
-        titre:"F inversé imprimé (Silicon Labs AN1088)",
+        titre:"F inversé imprimé (proportions classiques)",
         resume:"bras "+conLong(La,2)+" à "+conLong(ha,2)+
                " de la masse, écartement "+conLong(d,2)+
                (p.masseTop?" [masse TOP+BOT]":"")+
-               (p.viasCouture?" [vias de couture 50 mil]":""),
+               (p.viasCouture?" [couture λ₀/20]":""),
         festim:festim,
         lignes:[
-          ["Référence", "Silicon Labs AN1088 — Inverted-F Antenna"],
-          ["Longueur développée (La + ha)", conLong(dev,2)+" (≈ quart d'onde)"],
+          ["εr effectif retenu", CON_IFA_EEFF.toFixed(2)+
+             "  (brin imprimé fin : presque tout le champ dans l'air)"],
+          ["Quart d'onde visé", conLong(cl.dev,3)+
+             "   (λ₀ = "+conLong(cl.lam,2)+")"],
+          ["Développé dessiné (sc + ha + La − wb/2)", conLong(dev,3)],
+          ["Hauteur au-dessus de la masse (ha)", conLong(ha,2)+
+             " — λ₀/"+(cl.lam/Math.max(ha,1e-6)).toFixed(0)+
+             " (classique : λ₀/40 à λ₀/20)"],
           ["Écartement brins (d)", conLong(d,2)+" — règle l'impédance"],
           ["Vias de court-circuit", "2 vias ⌀ "+conLong(dVia,2)+" (réduit l'inductance)"],
-          ["Vias de couture", p.viasCouture ? "espacés de 50 mil (1,27 mm) le long de la masse" : "aucun"],
+          ["Vias de couture", p.viasCouture
+             ? ("au pas de "+conLong(cl.pasCouture,2)+" — λ₀/20 le long de la masse")
+             : "aucun"],
           ["Plan de masse", p.masseTop
              ? (conLong(yg,1)+" — dessus (TOP) et dessous (BOTTOM)")
              : (conLong(yg,1)+" — dessous uniquement")],
@@ -1196,6 +1305,40 @@ function conGabaritPoser(id,p){
      cotes qu'on n'a jamais vues. */
   if(CON.gabarit!==g.id){ CON.gabarit=g.id; CON.gabaritTouche={}; }
   CON.gabaritP=q;
+
+  /* UNE COTE IMPOSÉE EST UNE COTE REPRISE À LA MAIN, ET IL FAUT LE DIRE ICI.
+     `conGabaritRafraichir` ne garde que les cotes marquées comme reprises et
+     rend toutes les autres au calcul : sans ce marquage, les cotes passées en
+     argument étaient posées dans le DESSIN puis effacées de l'ÉTAT au premier
+     rafraîchissement du panneau. Le patch de l'exemple était dessiné à 27,5 mm
+     — c'est bien lui qui partait au solveur — pendant que la fiche affichait
+     les 29,16 mm du calcul, et trois choses en découlaient sans qu'on les
+     voie : la fiche mentait sur le dessin, « Dessiner ce motif » aurait
+     remplacé le patch recalé par celui du calcul, et surtout `conGabaritTrace`
+     ne retombait plus sur le dessin — donc `conGabaritConforme` rendait faux,
+     donc LE BALAYAGE DE COTE N'ÉTAIT PLUS PROPOSÉ après un exemple. C'est
+     l'outil qui sert à corriger une antenne qui disparaissait au moment
+     précis où l'on en avait besoin.
+
+     Seules les cotes qui S'ÉCARTENT du calcul sont marquées, au même seuil de
+     deux pour mille que `conGabaritEcarts` : reposer une cote sur la valeur
+     que le calcul propose de toute façon n'est pas une reprise, et la fiche
+     n'a pas à l'annoncer comme telle. */
+  if(p){
+    const dc=conGabaritDefauts(g,c);
+    g.champs.forEach(function(ch){
+      if(p[ch.id]==null)return;
+      const a=dc[ch.id], b=q[ch.id];
+      const ecart=ch.booleen ? (!a!==!b)
+                             : Math.abs(a-b)>Math.max(1e-4,Math.abs(a)*0.002);
+      /* On MARQUE ou on DÉMARQUE, jamais seulement l'un des deux : reposer le
+         même motif avec la cote du calcul est un retour au calcul, et laisser
+         la marque ferait annoncer par la fiche une reprise qui n'a plus
+         lieu. L'état dit ce qui a été posé, rien de plus. */
+      if(ecart)CON.gabaritTouche[ch.id]=true;
+      else delete CON.gabaritTouche[ch.id];
+    });
+  }
 
   conGabaritDebut(c.f,t.carte.L,t.carte.W);
   conRoleSeconde(g.role);

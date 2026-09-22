@@ -61,7 +61,15 @@ function antLierNombre(el, obj, cle, options){
   const apres=opts.apres;
 
   el.oninput=function(){
-    const s=String(el.value).trim().replace(",",".");
+    /* Les espaces sont retirés AVANT la lecture : le champ peut afficher un
+       nombre groupé par milliers — « 52 000 » —, et `parseInt` s'arrête au
+       premier espace. Il aurait lu 52. */
+    const s=String(el.value).trim().replace(/\s/g,"").replace(",",".");
+    /* Une valeur CALCULÉE est affichée telle quelle dans le champ (voir
+       `antAutoEcrire`). La retrouver à l'identique n'est donc pas une saisie :
+       c'est le nombre qu'on y a mis. L'écrire dans l'état figerait le réglage
+       sur le maillage du jour, et c'est précisément ce qu'on évite. */
+    if(el.dataset.auto&&s===String(el.dataset.auto).replace(/\s/g,"").replace(",","."))return;
     /* Si l'utilisateur est en train de taper (ex: "0," ou "-" ou vide), on le
        laisse taper : écraser à zéro ou recalculer à chaque virgule ferait perdre
        la saisie et le curseur. */
@@ -78,7 +86,8 @@ function antLierNombre(el, obj, cle, options){
   };
 
   el.onchange=function(){
-    const s=String(el.value).trim().replace(",",".");
+    const s=String(el.value).trim().replace(/\s/g,"").replace(",",".");
+    if(el.dataset.auto&&s===String(el.dataset.auto).replace(/\s/g,"").replace(",","."))return;
     const v=ent?parseInt(s,10):parseFloat(s);
     if(isFinite(v)){
       let val=v*facteur;
@@ -94,6 +103,101 @@ function antLierNombre(el, obj, cle, options){
     }
     antMaj(true);
   };
+}
+
+/* ==========================================================================
+   Les champs dont zéro veut dire « calculé »
+   --------------------------------------------------------------------------
+   ZÉRO EST UN BON ÉTAT INTERNE ET UN MAUVAIS AFFICHAGE. Sept réglages — les
+   quatre marges d'air, les deux pas de maillage, le compteur de pas — se
+   calculent quand on les laisse à zéro, et le calcul est le bon : il suit le
+   maillage, la bande et le cuivre réellement retenu. Mais un champ qui
+   affiche « 0 » ne dit pas ce qui part au solveur, et « 0 = calculé » en
+   petit sous le libellé demande de croire sur parole. On affiche donc LE
+   NOMBRE, en gris, avec une étiquette qui dit d'où il vient.
+
+   CE QU'ON N'ÉCRIT PAS DANS L'ÉTAT : ce nombre. Il y resterait figé au
+   maillage du jour, et l'on retomberait exactement sur le défaut que ces
+   champs corrigent — un pas saisi une fois ne vaut plus rien dès qu'on
+   retouche la grille. L'état garde zéro ; seul l'affichage est rempli, la
+   saisie reprend la main à la première frappe, et l'étiquette « imposé ↺ »
+   rend le champ au calcul.
+
+   VRAI PARTOUT, ET PAS SEULEMENT SUR L'EXEMPLE. Ces champs sont les mêmes
+   qu'on vienne d'un fichier IPC-2581, du mode conception ou d'un exemple :
+   `antRaz()` remet les sept à zéro à chaque ouverture de carte, et le modèle
+   les recalcule à chaque modification du dessin.
+   ========================================================================== */
+const ANT_AUTO=[
+  {id:"antMx",  o:function(){return ANT.boite;},    c:"mx",
+   v:function(m){return m.boite.marge_conseil;},    etq:"antMargeEtq"},
+  {id:"antMy",  o:function(){return ANT.boite;},    c:"my",
+   v:function(m){return m.boite.marge_conseil;},    etq:"antMargeEtq"},
+  {id:"antMzh", o:function(){return ANT.boite;},    c:"mz_haut",
+   v:function(m){return m.boite.marge_conseil;},    etq:"antMargeEtq"},
+  {id:"antMzb", o:function(){return ANT.boite;},    c:"mz_bas",
+   v:function(m){return m.boite.marge_conseil;},    etq:"antMargeEtq"},
+  {id:"antRa",  o:function(){return ANT.maillage;}, c:"res_air",
+   v:function(m){return (m.resolution.detail||{}).air;}, etq:"antRaEtq"},
+  {id:"antRd",  o:function(){return ANT.maillage;}, c:"res_die",
+   v:function(m){return (m.resolution.detail||{}).die;}, etq:"antRdEtq"},
+  {id:"antNmax",o:function(){return ANT.arret;},    c:"nmax",
+   v:function(m){return m.arret.nmax_calcule;},     etq:"antNmaxEtq", entier:true}
+];
+
+/* Le bouton-étiquette posé à côté du libellé. Vide au rendu : c'est
+   `antAutoEcrire` qui le remplit, parce que son texte dépend du modèle, qui
+   arrive après. */
+function antAutoEtq(id){
+  return ' <button type="button" class="etq" id="'+id+'"></button>';
+}
+
+/* Remplit les champs calculés et leurs étiquettes. Appelée après chaque
+   rendu ET à chaque retour du modèle : les valeurs changent quand le dessin
+   change, et un champ qui afficherait le pas d'avant mentirait plus qu'un
+   zéro. */
+function antAutoEcrire(corps){
+  if(!corps)return;
+  const m=ANT.modele;
+  const k=(V.unite==="in")?(1/25.4):1;
+  const focus=document.activeElement;
+  const etqs={};
+  ANT_AUTO.forEach(function(ch){
+    const el=corps.querySelector("#"+ch.id);
+    if(!el)return;
+    const auto=!(+ch.o()[ch.c]>0);
+    let v=null;
+    if(m){ try{ v=ch.v(m); }catch(e){ v=null; } }
+    if(auto&&v!=null&&isFinite(v)){
+      const t=ch.entier?mdlEntier(Math.round(v)):mdlNb(v*k);
+      /* JAMAIS SOUS LES DOIGTS : réécrire un champ pendant la frappe
+         déplacerait le curseur et mangerait la décimale en cours. */
+      if(el!==focus){ el.value=t; el.dataset.auto=t; }
+    }else{
+      el.dataset.auto="";
+    }
+    el.classList.toggle("auto",auto);
+    /* Une étiquette peut commander plusieurs champs — les quatre marges n'en
+       ont qu'une. Elle est « calculé » tant que TOUS le sont. */
+    const e=etqs[ch.etq]||(etqs[ch.etq]={auto:true, champs:[]});
+    e.auto=e.auto&&auto;
+    e.champs.push(ch);
+  });
+  Object.keys(etqs).forEach(function(id){
+    const b=corps.querySelector("#"+id);
+    if(!b)return;
+    const e=etqs[id];
+    b.textContent=e.auto?"calculé":"imposé ↺";
+    b.className="etq "+(e.auto?"est-auto":"est-impose");
+    b.disabled=e.auto;
+    b.title=e.auto
+      ? "Cette valeur est calculée par le modèle. Tapez-en une pour l'imposer."
+      : "Revenir à la valeur que le modèle calcule.";
+    b.onclick=e.auto?null:function(){
+      e.champs.forEach(function(ch){ ch.o()[ch.c]=0; });
+      antMaj(true);
+    };
+  });
 }
 
 /* ==========================================================================
@@ -163,18 +267,9 @@ function antEtapeActualiser(etapeId,corps){
     const cEl=corps.querySelector("#antBoiteConseil");
     if(cEl){
       cEl.innerHTML=antBoiteConseilHtml(m,k);
-      const auto=cEl.querySelector("#bMargeAuto");
-      if(auto)auto.onclick=function(){
-        const c=ANT.modele.boite.marge_conseil*k;
-        const v=+c.toFixed(3);
-        ANT.boite.mx=ANT.boite.my=ANT.boite.mz_haut=ANT.boite.mz_bas=v;
-        ["#antMx","#antMy","#antMzh","#antMzb"].forEach(id=>{
-          const el=corps.querySelector(id);
-          if(el)el.value=mdlNb(v);
-        });
-        antMaj(true);
-      };
     }
+    const mEl=corps.querySelector("#antMaillageNote");
+    if(mEl)mEl.innerHTML=antMaillageNoteHtml(m,k);
     const rEl=corps.querySelector("#antBoiteRecap");
     if(rEl)rEl.innerHTML=antBoiteRecapHtml(m,k);
   }else if(etapeId==="bande"){
@@ -186,7 +281,15 @@ function antEtapeActualiser(etapeId,corps){
   }else if(etapeId==="cuivre"){
     const rEl=corps.querySelector("#antCuivreRecap");
     if(rEl)rEl.innerHTML=antCuivreRecapHtml();
+  }else if(etapeId==="calcul"){
+    const nEl=corps.querySelector("#antNmaxNote");
+    if(nEl)nEl.innerHTML=antNmaxNoteHtml(m);
   }
+  /* LES CHAMPS CALCULÉS EN DERNIER, ET À CHAQUE PASSAGE : ce sont les seuls
+     dont la valeur affichée est produite par le modèle. Les laisser au rendu
+     initial voudrait dire afficher le pas de maillage d'avant la dernière
+     retouche du dessin. */
+  antAutoEcrire(corps);
 }
 
 function antEtapesRendre(){
@@ -493,6 +596,25 @@ ANT_CORPS.empilage=function(){
     </tr>`;
   }).join("");
 
+  /* LES REVÊTEMENTS EXTÉRIEURS, QUE CE PANNEAU NE MONTRAIT PAS. Le tableau
+     ci-dessus n'a que deux sortes de lignes : les conducteurs, et le
+     diélectrique ENTRE deux conducteurs. Un vernis épargne n'est ni l'un ni
+     l'autre — il est posé SUR le cuivre extérieur, hors de tout intervalle —,
+     si bien qu'il partait au solveur sans jamais s'afficher. Ses 15 µm font
+     une cellule quarante fois plus fine que le pas visé, donc un pas de temps
+     huit fois plus court : 21 h au lieu de 2 h 30 sur une carte d'essai qui
+     reprend l'empilage d'antenna4c. La couche la plus coûteuse du modèle était
+     la seule qu'on ne voyait pas. */
+  const rev=antRevetements().map(function(r){
+    return `<tr class="rev${r.garde?"":" hors"}">
+      <td class="nom">${aEsc(r.nom)}</td>
+      <td>revêtement${r.garde?"":" — hors modèle"}</td>
+      <td>${mdlNb(r.ep)} ${antUnite()}</td>
+      <td>${r.choisi?src("saisi"):src("fichier")}</td>
+      <td><label class="ck"><input type="checkbox" data-ant-rev="${aEsc(r.nom)}"${r.garde?" checked":""}>
+        dans le maillage</label></td></tr>`;
+  }).join("");
+
   return `
 <p class="intro">Ce que le fichier déclare est repris tel quel ; ce qu'il ne
    déclare pas se saisit ici. Une permittivité fausse de 10 % déplace la
@@ -502,9 +624,19 @@ ANT_CORPS.empilage=function(){
 <table class="empilage">
   <thead><tr><th>Couche</th><th>Nature</th><th>Épaisseur</th><th></th>
              <th>Rôle / εr</th></tr></thead>
-  <tbody>${cu}${gap}</tbody>
+  <tbody>${cu}${gap}${rev}</tbody>
 </table>
 <button class="tb mini" id="ltRaz">Oublier mes saisies</button>
+${rev?`<p class="note">Les <b>revêtements extérieurs</b> — vernis épargne,
+   coverlay, radôme collé — sont posés sur le cuivre extérieur, pas entre deux
+   cuivres : ils ne portent aucun champ de ligne. En dessous de 50 µm ils
+   restent <b>hors du maillage</b>, et ce n'est pas une économie de cellules :
+   les deux faces d'une couche portent chacune une ligne de maillage qu'on ne
+   peut pas déplacer, et 15 µm entre deux lignes font une cellule quarante fois
+   plus fine que le pas visé. C'est elle, et elle seule, qui commande le pas de
+   temps de <b>toute</b> la simulation. Cochez la case si la couche compte
+   vraiment — un coverlay de flex, un radôme mince — en sachant ce qu'elle
+   coûte.</p>`:""}
 
 <div class="champ">
   <label>Les pertes du diélectrique</label>
@@ -561,9 +693,27 @@ ANT_LIER.empilage=function(box){
       ltPreparer(); antMaj(true);
     };
   });
+  box.querySelectorAll("input[data-ant-rev]").forEach(function(c){
+    c.onchange=function(){
+      ANT.revetements[c.dataset.antRev]=c.checked;
+      /* LA LIGNE SE CORRIGE ICI, ET NON PAR UN RE-RENDU. `antAssistantRendre`
+         refuse de reconstruire l'étape tant que le focus est dans un champ —
+         et la case qu'on vient de cocher EST un champ. On retouche donc les
+         deux endroits qui parlent, et le reste attend la réponse du serveur
+         comme tout le bilan. */
+      const tr=c.closest("tr");
+      if(tr){
+        tr.classList.toggle("hors",!c.checked);
+        const td=tr.children[1];
+        if(td)td.textContent="revêtement"+(c.checked?"":" — hors modèle");
+      }
+      antMaj(true);
+    };
+  });
   const raz=box.querySelector("#ltRaz");
   if(raz)raz.onclick=function(){
     V.sur={cu:{},gap_t:{},gap_er:{},role:{}};
+    ANT.revetements={};
     ltPreparer(); antMaj(true);
   };
   box.querySelectorAll('input[name="antCu"]').forEach(function(r){
@@ -936,7 +1086,7 @@ ANT_CORPS.boite=function(){
    pose donc l'absorbeur sur l'antenne.</p>
 
 <div class="champ">
-  <label>Marge d'air <small>0 = laisser l'assistant décider</small></label>
+  <label>Marge d'air <small>0 = laisser l'assistant décider</small>${antAutoEtq("antMargeEtq")}</label>
   <div class="ligne">
     <span><label>X</label><input type="text" inputmode="decimal" spellcheck="false" id="antMx" value="${mdlNb(b.mx)}"></span>
     <span><label>Y</label><input type="text" inputmode="decimal" spellcheck="false" id="antMy" value="${mdlNb(b.my)}"></span>
@@ -958,14 +1108,15 @@ ANT_CORPS.boite=function(){
 </div>
 
 <div class="champ">
-  <label>Maillage <small>0 = vingt cellules par longueur d'onde</small></label>
+  <label>Maillage <small>0 = calculé</small></label>
   <div class="ligne">
-    <span><label>Pas dans l'air</label>
+    <span><label>Pas dans l'air${antAutoEtq("antRaEtq")}</label>
       <input type="text" inputmode="decimal" spellcheck="false" id="antRa" value="${mdlNb(ANT.maillage.res_air)}"></span>
-    <span><label>dans le diélectrique</label>
+    <span><label>dans le diélectrique${antAutoEtq("antRdEtq")}</label>
       <input type="text" inputmode="decimal" spellcheck="false" id="antRd" value="${mdlNb(ANT.maillage.res_die)}"></span>
     <span class="unite">${antUnite()}</span>
   </div>
+  <div id="antMaillageNote">${antMaillageNoteHtml(m,k)}</div>
   <label class="ck"><input type="checkbox" id="antTiers"${ANT.maillage.tiers?" checked":""}>
     Règle du tiers aux arêtes de cuivre
     <small>la ligne ne se pose pas SUR l'arête mais à un tiers dehors, deux
@@ -986,17 +1137,81 @@ function antBoiteConseilHtml(m,k){
      <b>${aNb(conseil*k,2)} ${antUnite()}</b> de tous les côtés —
      ${aNb(m.boite.air_utile*k,2)} d'air (λ/4 à ${aF(m.bande.f1)})
      + ${aNb(m.boite.ep_pml*k,2)} de PML (${m.boite.pml} cellules).
-     <button class="tb mini" id="bMargeAuto">Appliquer</button></p>
+     ${(ANT.boite.mx||ANT.boite.my||ANT.boite.mz_haut||ANT.boite.mz_bas)?
+       "":"<b>C'est ce que les champs ci-dessus appliquent.</b>"}</p>
    <p class="note ${m.boite.marge_suffisante?"":"alerte"}">Avec les marges
      actuelles, il reste <b>${aNb(m.boite.air_restant*k,2)} ${antUnite()}</b>
      d'air réel entre l'antenne et l'absorbeur.</p>`;
+}
+
+/* CE QUI A DÉCIDÉ DU PAS, ET NON SEULEMENT SA VALEUR. Trois règles se
+   disputent le pas dans le diélectrique — λ/20, la largeur du cuivre le plus
+   étroit, et le plafond de lignes qui empêche une pastille de 0,2 mm de
+   mailler la carte entière. Laquelle a gagné ne se devine pas dans le
+   nombre, et c'est pourtant elle qu'il faut connaître pour savoir si l'on
+   peut relâcher : un pas tenu par λ/20 se relâche en resserrant la bande, un
+   pas tenu par le cuivre ne se relâche qu'en acceptant de moins bien le
+   résoudre. */
+function antMaillageNoteHtml(m,k){
+  if(!m)return "";
+  const d=m.resolution.detail||{};
+  const u=antUnite();
+  const lam=d.lambda, w=d.largeur_cuivre, pl=d.plancher, die=d.die;
+  const L=[];
+  if(lam)L.push("λ/20 dans le substrat : "+aNb(lam*k,3)+" "+u);
+  if(w)L.push("cuivre le plus étroit : "+aNb(w*k,3)+" ÷ 4 = "+aNb(w*k/4,3));
+  if(pl)L.push("plafond de 200 lignes : "+aNb(pl*k,3));
+  let quoi="λ/20";
+  if(d.bornee)quoi="le plafond de lignes — le cuivre en demanderait plus";
+  else if(w&&die!=null&&Math.abs(die-w/4)<1e-9)quoi="la largeur du cuivre";
+  const impose=d.saisi||d.saisi_air;
+
+  /* LE FOND N'EST PLUS TOUT LE MAILLAGE, et l'afficher seul serait mentir par
+     omission. Quand le plafond de lignes empêche de mailler la carte entière
+     assez fin, le pas fin est posé EN TRAVERS du cuivre étroit, sur le seul
+     axe où il est étroit — quelques dizaines de lignes au lieu de mille. Ce
+     qu'il faut lire ici, c'est donc deux nombres et un prix. */
+  const md=m.maillage_detail||{};
+  const pistes=d.pistes||{};
+  let bandes="";
+  if(d.fin>0){
+    const prix=(d.cout&&d.cout_fond)?(d.cout/d.cout_fond):1;
+    const nb=[], tot=(md.bandes_x||0)+(md.bandes_y||0);
+    if(md.bandes_x)nb.push(md.bandes_x+" en x");
+    if(md.bandes_y)nb.push(md.bandes_y+" en y");
+    const axes=[];
+    if(md.bandes_x)axes.push("x");
+    if(md.bandes_y)axes.push("y");
+    const ou=(tot===1)?("<b>une bande</b>, en "+axes.join(""))
+                      :("<b>"+tot+" bandes</b> — "+nb.join(", "));
+    bandes=`<br>Et <b>${aNb(d.fin*k,3)} ${u}</b> dans ${ou} —
+      posée${tot>1?"s":""} en travers du cuivre trop fin
+      pour ce fond : le champ tourne sur la largeur d'un ruban, pas sur sa
+      longueur. Le plus mal résolu des polygones y a
+      <b>${aNb(pistes.cellules||0,1)} cellules</b> en travers, et cela coûte
+      <b>${aNb(prix,2)} fois</b> le maillage de fond.` +
+      (d.fin_borne?` Le budget a arrêté l'affinage là : il faudrait
+      ${aNb((d.fin_voulu||0)*k,3)} ${u} pour quatre cellules en travers du
+      cuivre le plus étroit.`:"");
+  }else if(d.fin_borne){
+    bandes=`<br>Aucune bande fine n'a tenu dans le budget : le cuivre le plus
+      étroit reste rendu par <b>${aNb(pistes.cellules||0,1)} cellule(s)</b> en
+      travers.`;
+  }
+
+  return `<p class="note">Le pas calculé dans le diélectrique est
+     <b>${aNb((die||0)*k,3)} ${u}</b>, tenu par ${quoi}.
+     <small>(${L.join(" · ")})</small>${impose?
+     " Vous en imposez un autre : le vôtre part au solveur.":""}${bandes}</p>`;
 }
 
 function antBoiteRecapHtml(m,k){
   if(!m)return "";
   return `<span>boîte : ${aNb((m.boite.x2-m.boite.x1)*k,1)} × ${aNb((m.boite.y2-m.boite.y1)*k,1)}
         × ${aNb((m.boite.z2-m.boite.z1)*k,1)} ${antUnite()}</span>
-  <span>pas visé : ${aNb(m.resolution.air*k,3)} / ${aNb(m.resolution.die*k,3)} ${antUnite()}</span>
+  <span>pas visé : ${aNb(m.resolution.air*k,3)} / ${aNb(m.resolution.die*k,3)}${
+        (m.resolution.detail&&m.resolution.detail.fin>0)
+          ? " / "+aNb(m.resolution.detail.fin*k,3):""} ${antUnite()}</span>
   <span>plus petite cellule : ${aNb(Math.min.apply(null,m.estimation.plus_petite_cellule_mm)*k,4)} ${antUnite()}</span>
   <span>pas de temps : ${(m.estimation.dt_s*1e12).toFixed(3).replace(".",",")} ps</span>`;
 }
@@ -1013,18 +1228,12 @@ ANT_LIER.boite=function(box){
   if(tiers)tiers.onchange=function(){
     ANT.maillage.tiers=this.checked; antMaj(true);
   };
-  const auto=box.querySelector("#bMargeAuto");
-  if(auto)auto.onclick=function(){
-    const k=(V.unite==="in")?(1/25.4):1;
-    const c=ANT.modele.boite.marge_conseil*k;
-    const v=+c.toFixed(3);
-    ANT.boite.mx=ANT.boite.my=ANT.boite.mz_haut=ANT.boite.mz_bas=v;
-    ["#antMx","#antMy","#antMzh","#antMzb"].forEach(id=>{
-      const el=box.querySelector(id);
-      if(el)el.value=mdlNb(v);
-    });
-    antMaj(true);
-  };
+  /* LE BOUTON « APPLIQUER » A DISPARU AVEC SA RAISON D'ÊTRE. Il recopiait le
+     conseil dans les quatre marges — or c'est exactement ce qu'une marge
+     laissée à zéro fait déjà, et le champ l'affiche maintenant. Le seul effet
+     qui restait était nuisible : il figeait la marge, qui ne suivait plus un
+     changement de bande ni de PML. */
+  antAutoEcrire(box);
 };
 
 /* ==========================================================================
@@ -1040,12 +1249,18 @@ ANT_CORPS.calcul=function(){
 <div class="champ ligne">
   <span><label>Arrêt à l'énergie résiduelle</label>
     <input type="text" inputmode="decimal" spellcheck="false" id="antEn" value="${ANT.arret.energie}"> dB</span>
-  <span><label>Pas de temps maximum</label>
+  <span><label>Pas de temps maximum <small>0 = calculé</small>${antAutoEtq("antNmaxEtq")}</label>
     <input type="text" inputmode="numeric" spellcheck="false" id="antNmax" value="${ANT.arret.nmax}"></span>
 </div>
 <p class="note">C'est l'énergie qui arrête en pratique ; le nombre de pas n'est
    qu'un garde-fou. −40 dB convient à une antenne ordinaire, −50 dB à un
-   résonateur à fort Q — au prix du temps.</p>
+   résonateur à fort Q — au prix du temps.<br>
+   Laissé à <b>zéro</b>, le garde-fou est calculé : quatre fois la durée de
+   l'impulsion d'excitation, openEMS en exigeant trois. C'est le seul réglage
+   dont la bonne valeur change avec le maillage — la même antenne demande
+   23 000 pas maillée large et 81 000 maillée fin, et un nombre saisi une fois
+   ne vaut plus rien dès qu'on retouche la grille.
+   <span id="antNmaxNote">${antNmaxNoteHtml(ANT.modele)}</span></p>
 
 <div class="champ">
   <label class="ck"><input type="checkbox" id="antNf"${ANT.nf2ff.actif?" checked":""}>
@@ -1067,6 +1282,7 @@ ${typeof antTableauSHtml==="function"?antTableauSHtml():""}
 <div class="sim-assist-box" id="assistSimBox" style="display:none"></div>
 
 ${typeof antVoirHtml==="function"?antVoirHtml():""}
+${typeof antCalcHtml==="function"?antCalcHtml():""}
 ${peut?"":`<p class="note alerte">openEMS n'est pas utilisable sur ce poste :
   ${aEsc((e&&(e.lancer_detail||e.detail))||"raison inconnue")}
   ${e&&e.lancer_conseil?"<br>"+aEsc(e.lancer_conseil):""}
@@ -1077,13 +1293,40 @@ ${peut?"":`<p class="note alerte">openEMS n'est pas utilisable sur ce poste :
    exécute — il n'y a pas deux chemins qui pourraient diverger.</p>`;
 };
 
+/* LES DEUX CRITÈRES, ET LEQUEL A GAGNÉ. Le compteur doit couvrir deux durées
+   qui n'ont rien à voir : le temps d'ÉMETTRE l'impulsion — openEMS refuse de
+   tourner en dessous de trois fois cette durée —, et le temps que met
+   l'antenne à OUBLIER ce qu'on lui a envoyé, qui ne dépend que de son facteur
+   de qualité. Le second est le plus long dès qu'une structure résonne, et
+   c'est lui qu'on oubliait : un F inversé dont l'impulsion tenait en 31 000
+   pas n'est descendu sous −40 dB qu'au 39 165e. */
+function antNmaxNoteHtml(m){
+  const a=m&&m.arret;
+  if(!a||!a.nmax_calcule)return "";
+  const d=a.nmax_detail||{};
+  const imp=d.impulsion||0, dec=d.decroissance||0;
+  const detail=(imp&&dec)
+    ? " — "+mdlEntier(imp)+" pour émettre l'impulsion, "+mdlEntier(dec)+
+      " pour laisser l'antenne s'éteindre ("+aNb(d.periodes||0,0)+
+      " périodes à "+aF(d.f_res||0)+")"
+    : "";
+  return a.nmax_auto
+    ? " Ici : <b>"+mdlEntier(a.nmax)+" pas</b>"+detail+"."
+    : " Ici, le modèle en calculerait <b>"+mdlEntier(a.nmax_calcule)+
+      "</b>"+detail+" ; vous en imposez "+mdlEntier(a.nmax)+".";
+}
+
 ANT_LIER.calcul=function(box){
   antLierNombre(box.querySelector("#antEn"), ANT.arret, "energie", {
     max: -1,
     defaut: -40,
     apres: v => { ANT.arret.energie = -Math.abs(v); }
   });
-  antLierNombre(box.querySelector("#antNmax"), ANT.arret, "nmax", {min: 1000, defaut: 100000, entier: true});
+  /* `min: 0` ET NON 1000 : zéro est une valeur, pas une saisie vide — c'est la
+     consigne « calcule-le ». La borne basse ne protège plus de rien depuis que
+     le modèle sait refuser un garde-fou plus court que l'impulsion, et elle
+     interdisait d'écrire la seule valeur qui ne se trompe jamais. */
+  antLierNombre(box.querySelector("#antNmax"), ANT.arret, "nmax", {min: 0, defaut: 0, entier: true});
   box.querySelector("#antNf").onchange=function(){
     ANT.nf2ff.actif=this.checked; antMaj(true);
   };
@@ -1096,6 +1339,13 @@ ANT_LIER.calcul=function(box){
   if(typeof antBalayageLier==="function")antBalayageLier(box);
   if(typeof antTableauSLier==="function")antTableauSLier(box);
   if(typeof antVoirLier==="function")antVoirLier(box);
+  /* LES DOSSIERS DE CALCUL SE BRANCHENT À PART, et c'est voulu : le bloc
+     « voir les champs » ne s'affiche qu'une fois un calcul terminé dans la
+     séance, alors que la liste des calculs du projet doit être là AVANT —
+     c'est justement par elle qu'on rouvre un calcul d'hier, ou qu'on importe
+     celui d'un collègue, sans rien avoir lancé aujourd'hui. */
+  if(typeof antCalcLier==="function")antCalcLier(box);
+  antAutoEcrire(box);
 };
 
 /* ==========================================================================

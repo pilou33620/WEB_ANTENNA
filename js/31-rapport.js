@@ -74,7 +74,8 @@ function rapCollecterDonnees(){
     ports: [],
     boite: {
       mx: 0, my: 0, mz_haut: 0, mz_bas: 0,
-      pml: 8, ep_pml_mm: 0, air_restant_mm: 0, marge_conseil_mm: 0
+      pml: 8, ep_pml_mm: 0, air_restant_mm: 0, marge_conseil_mm: 0,
+      air_utile_mm: 0
     },
     maillage: {
       lignes: null,
@@ -82,8 +83,21 @@ function rapCollecterDonnees(){
       memoire_Mo: 0,
       res_air_mm: 0,
       res_die_mm: 0,
+      /* Le pas des BANDES FINES, posées en travers du cuivre trop étroit pour
+         le fond, et 0 quand il n'y en a pas. Le fond seul ne décrit plus le
+         maillage depuis qu'il y a deux pas dans le plan. */
+      res_fin_mm: 0,
+      bandes_x: 0, bandes_y: 0,
+      cellules_piste: 0,
       dt_ps: 0,
       min_cell_mm: null,
+      /* QUI fabrique cette plus petite cellule : {mm, axe, quoi, couche, ep,
+         revetement}, tel que le modele l'a designe. Ce rapport le DEDUISAIT,
+         et il se trompait de la meme facon que l'assistant — il renvoyait
+         chercher un sommet decale d'un micron quand la cellule etait
+         l'epaisseur d'une couche de l'empilage. Voir `_coupable_cellule`
+         dans python/openems_modele.py. */
+      cellule: null,
       tiers: true,
       er_max: 1.0,
       lambda_min_mm: 0,
@@ -92,7 +106,8 @@ function rapCollecterDonnees(){
     solver: {
       f1: 0, f2: 0, fcible: 0, n: 0,
       energie_arret_dB: -40,
-      nmax: 30000,
+      nmax: 0,
+      nmax_auto: false,
       nf2ff_actif: true
     },
     resultat: null,
@@ -187,7 +202,15 @@ function rapCollecterDonnees(){
     }
     if(ANT.arret){
       d.solver.energie_arret_dB = ANT.arret.energie;
-      d.solver.nmax = ANT.arret.nmax;
+      /* LE COMPTEUR EFFECTIF, PAS CELUI DU FORMULAIRE. Zéro veut dire
+         « calculé par le modèle » : le recopier tel quel faisait écrire au
+         rapport « 39 165 pas / 0 », et le diagnostic d'arrêt forcé, qui
+         compare les pas exécutés au garde-fou, ne se déclenchait plus
+         jamais. */
+      d.solver.nmax = (ANT.modele && ANT.modele.arret && ANT.modele.arret.nmax)
+                      || ANT.arret.nmax;
+      d.solver.nmax_auto = !!(ANT.modele && ANT.modele.arret
+                              && ANT.modele.arret.nmax_auto);
     }
     if(ANT.nf2ff){
       d.solver.nf2ff_actif = !!ANT.nf2ff.actif;
@@ -235,11 +258,24 @@ function rapCollecterDonnees(){
     if(m.boite){
       d.boite.air_restant_mm = m.boite.air_restant || 0;
       d.boite.marge_conseil_mm = m.boite.marge_conseil || 0;
+      /* LES DEUX NOMBRES NE SE COMPARENT PAS, et les confondre faisait crier
+         au loup sur tout modèle à marges automatiques. `marge_conseil` est la
+         marge À SAISIR : l'air utile PLUS l'épaisseur de la PML, qui mange les
+         dernières cellules de la boîte. `air_restant` est ce qui reste d'air
+         une fois la PML retranchée. Le comparer au conseil complet revient à
+         reprocher à la boîte de ne pas contenir sa propre PML deux fois. */
+      d.boite.air_utile_mm = m.boite.air_utile || 0;
       d.boite.ep_pml_mm = m.boite.ep_pml || 0;
     }
     if(m.resolution){
       d.maillage.res_air_mm = m.resolution.air || 0;
       d.maillage.res_die_mm = m.resolution.die || 0;
+      const _det = m.resolution.detail || {};
+      d.maillage.res_fin_mm = _det.fin || 0;
+      d.maillage.cellules_piste = (_det.pistes && _det.pistes.cellules) || 0;
+      const _md = m.maillage_detail || {};
+      d.maillage.bandes_x = _md.bandes_x || 0;
+      d.maillage.bandes_y = _md.bandes_y || 0;
       d.maillage.er_max = m.resolution.er_max || 1.0;
       d.maillage.lambda_min_mm = m.resolution.lambda_min_mm || 0;
       d.maillage.lambda_max_mm = m.resolution.lambda_max_mm || 0;
@@ -250,6 +286,7 @@ function rapCollecterDonnees(){
       d.maillage.memoire_Mo = m.estimation.memoire_Mo || 0;
       d.maillage.dt_ps = (m.estimation.dt_s || 0) * 1e12;
       d.maillage.min_cell_mm = m.estimation.plus_petite_cellule_mm;
+      d.maillage.cellule = m.estimation.cellule || null;
     }
     if(m.avis) d.avisModele = m.avis;
   }
@@ -375,24 +412,43 @@ function rapDiagnostiquer(d){
     const minCell = Math.min.apply(null, d.maillage.min_cell_mm);
     const dt = d.maillage.dt_ps;
     if(minCell < 0.04 || (dt > 0 && dt < 0.08)){
+      /* LA CAUSE VIENT DU MODÈLE, ET NON D'UNE SUPPOSITION D'ICI. Le conseil
+         écrit en dur — « vérifiez qu'aucun sommet n'est décalé d'une fraction
+         de micron » — renvoyait au DESSIN, où il n'y a le plus souvent rien à
+         corriger : sur antenna4c, la cellule de 15 µm était le vernis épargne
+         de l'empilage, invisible dans le panneau qui montre l'empilage. */
+      const c = d.maillage.cellule;
+      let desc = "La présence d'une cellule très petite force un pas de temps CFL de seulement " + rapNb(dt, 3) + " ps. Cela multiplie par 5 à 50 le nombre de pas de temps nécessaires sans gain significatif en précision physique.";
+      let conseil = "Vérifiez qu'aucun sommet de piste ou via n'est décalé d'une fraction de micron d'un bord de carte ou d'un contour de masse.";
+      if(c && c.couche && c.quoi === "dielectrique"){
+        desc += " Elle vient de la couche « " + c.couche + " » de l'empilage, épaisse de " + rapNb(c.ep, 4) + " mm : ses deux faces portent chacune une ligne de maillage obligatoire.";
+        conseil = c.revetement
+          ? "C'est un revêtement EXTÉRIEUR — vernis épargne, coverlay — posé sur le cuivre extérieur, pas entre deux cuivres : il ne porte aucun champ de ligne. L'étape « L'empilage » le sort du maillage d'une case à décocher."
+          : "C'est un substrat : il est entre deux conducteurs, il porte le champ, et il doit rester. Le pas de temps est le prix de cet empilage-là.";
+      }else if(c && c.couche && c.quoi === "cuivre"){
+        desc += " Elle vient de l'épaisseur de « " + c.couche + " » (" + rapNb(c.ep, 4) + " mm), que le mode « volume » fait entrer dans le maillage.";
+        conseil = "Passez le cuivre en mode « feuille » (étape 2) : à ces fréquences l'épaisseur de peau fait un micron, le courant ne voit pas les 35 µm de la couche, et le résultat est le même en une fraction du temps.";
+      }else if(c && c.axe && c.axe !== "z"){
+        desc += " Elle est dans le plan (" + c.axe + ") : deux arêtes de cuivre presque confondues, que la tolérance de regroupement n'a pas rapprochées.";
+      }
       diags.push({
         id: "cellule_minuscule",
         titre: "Cellule Yee minuscule détectée (" + rapNb(minCell * 1000, 1) + " µm)",
         rang: "warn",
-        desc: "La présence d'une cellule très petite force un pas de temps CFL de seulement " + rapNb(dt, 3) + " ps. Cela multiplie par 5 à 50 le nombre de pas de temps nécessaires sans gain significatif en précision physique.",
-        conseil: "Vérifiez qu'aucun sommet de piste ou via n'est décalé d'une fraction de micron d'un bord de carte ou d'un contour de masse."
+        desc: desc,
+        conseil: conseil
       });
     }
   }
 
   // Diagnostic 4 : Marges d'air et couplage avec la PML
-  if(d.boite.air_restant_mm > 0 && d.boite.marge_conseil_mm > 0){
-    if(d.boite.air_restant_mm < d.boite.marge_conseil_mm * 0.75){
+  if(d.boite.air_restant_mm > 0 && d.boite.air_utile_mm > 0){
+    if(d.boite.air_restant_mm < d.boite.air_utile_mm * 0.75){
       diags.push({
         id: "pml_proche",
         titre: "Couche absorbante PML trop proche du rayonnement",
         rang: "warn",
-        desc: "L'air libre devant la PML (" + rapNb(d.boite.air_restant_mm, 1) + " mm) est inférieur au quart de longueur d'onde conseillé (" + rapNb(d.boite.marge_conseil_mm, 1) + " mm). Le champ réactif proche pénètre la PML, provoquant de fausses pertes d'énergie, une dégradation artificielle du facteur Q et faussant l'intégration en champ lointain.",
+        desc: "L'air libre devant la PML (" + rapNb(d.boite.air_restant_mm, 1) + " mm) est inférieur au quart de longueur d'onde conseillé (" + rapNb(d.boite.air_utile_mm, 1) + " mm, soit " + rapNb(d.boite.marge_conseil_mm, 1) + " mm de marge à saisir, PML comprise). Le champ réactif proche pénètre la PML, provoquant de fausses pertes d'énergie, une dégradation artificielle du facteur Q et faussant l'intégration en champ lointain.",
         conseil: "Augmentez les marges d'air dans la boîte de simulation (étape 6) pour éloigner la PML d'au moins λ/4 à la fréquence de travail."
       });
     }
@@ -696,7 +752,11 @@ function rapGenererHtml(d, diags){
   h += '        <tbody>';
   h += '          <tr><td>Dimensions de la grille FDTD</td><td class="highlight mono">' + (d.maillage.lignes ? d.maillage.lignes.join(" × ") + " lignes" : "—") + '</td></tr>';
   h += '          <tr><td>Nombre total de cellules Yee</td><td class="highlight mono">' + (d.maillage.cellules ? Math.round(d.maillage.cellules).toLocaleString() : "—") + ' cellules (' + Math.round(d.maillage.memoire_Mo) + ' Mo RAM)</td></tr>';
-  h += '          <tr><td>Pas spatial ciblé</td><td class="mono">Air : ' + rapNb(d.maillage.res_air_mm, 3) + ' mm · Substrat : ' + rapNb(d.maillage.res_die_mm, 3) + ' mm</td></tr>';
+  h += '          <tr><td>Pas spatial ciblé</td><td class="mono">Air : ' + rapNb(d.maillage.res_air_mm, 3) + ' mm · Substrat : ' + rapNb(d.maillage.res_die_mm, 3) + ' mm'
+       + (d.maillage.res_fin_mm ? ' · Bandes fines : ' + rapNb(d.maillage.res_fin_mm, 3) + ' mm ('
+          + (d.maillage.bandes_x + d.maillage.bandes_y) + ' bande(s), '
+          + rapNb(d.maillage.cellules_piste, 1) + ' cellules en travers du cuivre le plus mal résolu)' : '')
+       + '</td></tr>';
   h += '          <tr><td>Plus petite cellule / Pas CFL</td><td class="mono highlight">' + (d.maillage.min_cell_mm ? rapNb(Math.min.apply(null, d.maillage.min_cell_mm), 3) + " mm" : "—") + ' → Δt = ' + rapNb(d.maillage.dt_ps, 4) + ' ps</td></tr>';
   h += '        </tbody>';
   h += '      </table>';
@@ -758,7 +818,7 @@ function rapGenererHtml(d, diags){
     h += '  <div class="rap-table-wrap" style="margin-bottom:12px;">';
     h += '    <table class="rap-table">';
     h += '      <tbody>';
-    h += '        <tr><td>Statut du solveur</td><td class="highlight">' + rapEscHtml(d.tache.etat) + '</td><td>Pas calculés</td><td class="mono">' + (d.tache.avancement.pas || "—") + ' / ' + d.solver.nmax + '</td></tr>';
+    h += '        <tr><td>Statut du solveur</td><td class="highlight">' + rapEscHtml(d.tache.etat) + '</td><td>Pas calculés</td><td class="mono">' + (d.tache.avancement.pas || "—") + ' / ' + d.solver.nmax + (d.solver.nmax_auto ? ' (calculé)' : '') + '</td></tr>';
     h += '        <tr><td>Énergie finale</td><td class="mono">' + (d.tache.avancement.energie_dB != null ? rapNb(d.tache.avancement.energie_dB, 1) + " dB" : "—") + '</td><td>Vitesse moyenne</td><td class="mono">' + (d.tache.avancement.vitesse ? rapNb(d.tache.avancement.vitesse, 1) + " MC/s" : "—") + '</td></tr>';
     h += '        <tr><td>Dossier de calcul</td><td colspan="3" class="mono" style="font-size:10.5px;">' + rapEscHtml(d.tache.dossier || "Mémoire") + '</td></tr>';
     h += '      </tbody>';
@@ -853,7 +913,9 @@ function rapGenererMarkdown(d, diags){
   if(d.maillage.lignes){
     L.push("- Grille Yee : " + d.maillage.lignes.join(" × ") + " lignes (" + Math.round(d.maillage.cellules) + " cellules, " + Math.round(d.maillage.memoire_Mo) + " Mo RAM)");
   }
-  L.push("- Pas de discrétisation : Air = " + rapNb(d.maillage.res_air_mm, 3) + " mm, Diélectrique = " + rapNb(d.maillage.res_die_mm, 3) + " mm");
+  L.push("- Pas de discrétisation : Air = " + rapNb(d.maillage.res_air_mm, 3) + " mm, Diélectrique = " + rapNb(d.maillage.res_die_mm, 3) + " mm"
+         + (d.maillage.res_fin_mm ? ", bandes fines = " + rapNb(d.maillage.res_fin_mm, 3) + " mm sur "
+            + (d.maillage.bandes_x + d.maillage.bandes_y) + " bande(s)" : ""));
   L.push("- Pas de temps CFL : " + rapNb(d.maillage.dt_ps, 4) + " ps");
   L.push("");
 
@@ -861,7 +923,8 @@ function rapGenererMarkdown(d, diags){
   if(d.tache){
     L.push("## 7. Métriques Solveur");
     L.push("- Statut : " + d.tache.etat + " | Durée : " + rapNb(d.tache.duree_s, 1) + " s");
-    L.push("- Pas exécutés : " + (d.tache.avancement.pas || "—") + " / " + d.solver.nmax);
+    L.push("- Pas exécutés : " + (d.tache.avancement.pas || "—") + " / " +
+           d.solver.nmax + (d.solver.nmax_auto ? " (calculé)" : ""));
     L.push("- Énergie résiduelle finale : " + (d.tache.avancement.energie_dB != null ? rapNb(d.tache.avancement.energie_dB, 1) + " dB" : "—"));
     L.push("- Vitesse moyenne : " + (d.tache.avancement.vitesse ? rapNb(d.tache.avancement.vitesse, 1) + " MC/s" : "—"));
   }

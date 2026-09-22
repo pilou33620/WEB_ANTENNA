@@ -150,6 +150,29 @@
       const s = (typeof conSubstrat === "function") ? conSubstrat() : null;
       if(s) L.push("Substrat retenu par les gabarits : er = " + nbp(s.er, 3) +
                    ", h = " + nbp(s.h, 3) + " mm, tand = " + nbp(s.df, 4) + ".");
+
+      /* LES REPERES DU DESSIN, PARCE QU'UNE CARTE « formes » DESIGNE UNE
+         COUCHE ET DES COORDONNEES. Sans cette liste, le modele inventerait un
+         nom de couche, et la page le refuserait — ce qui ressemble beaucoup a
+         un modele qui se trompe, et n'en est pas un. C'est la meme raison qui
+         fait envoyer les identifiants des cotes balayables. */
+      L.push("Repere du dessin : origine au coin, x de 0 a " +
+             nbp(CON.carte.L, 3) + ", y de 0 a " + nbp(CON.carte.W, 3) +
+             ", tout en millimetres.");
+      try{
+        const cuivres = conCuivres();
+        L.push("Couches de cuivre ou poser des formes (« haut » = la "+
+               "premiere, « bas » = la seconde) :");
+        cuivres.forEach(function(c, i){
+          L.push("- " + (i === 0 ? "haut" : (i === 1 ? "bas" : "rang " + i)) +
+                 " : « " + c.e.nom + " », role " + (c.e.role || "signal"));
+        });
+        if(typeof conNets === "function")
+          L.push("Nets deja presents : " + conNets().join(", ") +
+                 " (un net nomme GND est reconnu comme la masse).");
+      }catch(e){}
+      L.push("Port : " + (ANT.port.pose ? "pose" : "NON POSE") +
+             " ; sans port, rien ne se simule.");
     }else if(typeof V !== "undefined" && V.modele){
       L.push("Fichier IPC-2581 importe : " + (V.fichier || "sans nom") +
              ", unite du document : " + u + ".");
@@ -224,17 +247,39 @@
     /* -- la boite, le maillage, l'arret ---------------------------------- */
     L.push("");
     L.push("=== BOITE, MAILLAGE, ARRET ===");
-    const z = function(v){
-      return v > 0 ? nbp(v, 3) + " " + u : "0 (au mailleur de decider)";
+    /* LA VALEUR EFFECTIVE, ET SEULEMENT ENSUITE D'OU ELLE VIENT. « 0 (au
+       mailleur de decider) » decrivait au modele une simulation sans marge
+       et sans maille : il repondait a cote, et conseillait de « remplir les
+       champs » qui etaient deja bons. On lui donne le nombre qui part au
+       solveur, en disant s'il a ete saisi ou calcule. */
+    const z = function(v, calc){
+      if (v > 0) return nbp(v, 3) + " " + u;
+      return (calc > 0) ? nbp(calc, 3) + " " + u + " (calcule)"
+                        : "0 (au mailleur de decider)";
     };
-    L.push("Marges d'air : X " + z(ANT.boite.mx) + ", Y " + z(ANT.boite.my) +
-           ", au-dessus " + z(ANT.boite.mz_haut) + ", en dessous " +
-           z(ANT.boite.mz_bas) + " ; PML " + ANT.boite.pml + " cellules.");
-    L.push("Pas de maillage : air " + z(ANT.maillage.res_air) +
-           ", dielectrique " + z(ANT.maillage.res_die) + " ; regle du tiers " +
+    const mdl = ANT.modele;
+    const cmarge = mdl ? mdl.boite.marge_conseil : 0;
+    const cres = (mdl && mdl.resolution.detail) || {};
+    L.push("Marges d'air : X " + z(ANT.boite.mx, cmarge) + ", Y " +
+           z(ANT.boite.my, cmarge) + ", au-dessus " +
+           z(ANT.boite.mz_haut, cmarge) + ", en dessous " +
+           z(ANT.boite.mz_bas, cmarge) + " ; PML " + ANT.boite.pml +
+           " cellules.");
+    L.push("Pas de maillage : air " + z(ANT.maillage.res_air, cres.air) +
+           ", dielectrique " + z(ANT.maillage.res_die, cres.die) +
+           (cres.bornee ? " (borne par le plafond de lignes : le cuivre le "
+                        + "plus etroit en demanderait moins)" : "") +
+           " ; regle du tiers " +
            (ANT.maillage.tiers ? "active" : "desactivee") + ".");
+    /* Le garde-fou EFFECTIF, pas celui du document : zero veut dire « calcule-
+       le », et annoncer « garde-fou 0 pas » au modele serait lui decrire une
+       simulation qui s'arrete avant de commencer. */
+    const nmaxEff = (ANT.modele && ANT.modele.arret && ANT.modele.arret.nmax)
+                    || ANT.arret.nmax;
     L.push("Arret : energie residuelle " + nbp(ANT.arret.energie, 1) +
-           " dB, garde-fou " + ANT.arret.nmax + " pas de temps.");
+           " dB, garde-fou " + nmaxEff + " pas de temps" +
+           ((ANT.modele && ANT.modele.arret && ANT.modele.arret.nmax_auto)
+              ? " (calcule)" : "") + ".");
     L.push("Cuivre modelise en « " + ANT.modeleCuivre + " » ; pertes du " +
            "dielectrique en « " + ANT.pertes.mode + " »" +
            (ANT.pertes.f_kappa > 0 ? (" a " + fHz(ANT.pertes.f_kappa))
@@ -565,11 +610,13 @@
   /* ==========================================================================
      Les propositions
      --------------------------------------------------------------------------
-     Trois genres, et ils ne touchent pas les mêmes choses :
+     Quatre genres, et ils ne touchent pas les mêmes choses :
 
        « reglages » — des champs de la liste blanche, chemin par chemin ;
        « cotes »    — les cotes d'un motif du mode conception ;
-       « balayage » — armer un balayage sur une cote existante.
+       « balayage » — armer un balayage sur une cote existante ;
+       « formes »   — poser de la géométrie libre dans le dessin, quand aucun
+                      motif ne trace l'antenne demandée.
 
      Une proposition est PRÉPARÉE avant d'être montrée : on relit l'état, on
      valide chaque valeur, et on garde côte à côte l'avant et l'après. Ce qui
@@ -582,6 +629,7 @@
     const type = String(brut.type || "reglages");
     if(type === "cotes") return propCotes(brut);
     if(type === "balayage") return propBalayage(brut);
+    if(type === "formes") return propFormes(brut);
     return propReglages(brut);
   }
 
@@ -687,12 +735,382 @@
   }
 
   /* ==========================================================================
+     LA GÉOMÉTRIE LIBRE
+     --------------------------------------------------------------------------
+     POURQUOI ELLE EXISTE, ET POURQUOI ELLE EST VENUE EN DERNIER. Les trois
+     autres cartes déplacent des NOMBRES : une borne de bande, une cote de
+     gabarit, une plage de balayage. Celle-ci pose du CUIVRE — c'est-à-dire
+     l'antenne elle-même. Elle n'existe que parce qu'il y a des antennes
+     qu'aucun des six motifs ne sait tracer : une fente, un anneau, un patch à
+     coins coupés, un motif qu'on a en tête et qu'on voudrait éprouver avant de
+     l'écrire soi-même. Sans elle, la réponse de l'assistant à « dessine-moi
+     ceci » était une liste de cotes à reporter à la main — c'est-à-dire
+     exactement le travail qu'on venait lui confier.
+
+     CE QU'ELLE N'EST PAS, ET LA CONSIGNE LE DIT DANS CES TERMES. Elle ne
+     remplace pas les motifs : eux calculent leurs cotes, tiennent une fiche,
+     savent se reposer et se balayer. Une géométrie libre ne sait rien
+     d'elle-même — c'est un tas de formes, et la page ne peut en dire que ce
+     qu'elle mesure. C'est donc le dernier recours, jamais le premier.
+
+     LA BARRIÈRE EST DE MÊME NATURE QUE LA LISTE BLANCHE, mais elle porte sur
+     des FORMES et non sur des chemins : un genre connu, une couche de cuivre
+     qui existe, des coordonnées finies et bornées, une étendue dessinable, un
+     nombre de formes et de sommets plafonné, et rien qui tombe hors de la
+     carte. Ce qui ne passe pas est refusé UNE FORME À LA FOIS et affiché comme
+     tel : une carte qui poserait neuf formes sur dix sans le dire ferait
+     croire au dessin qu'on vient de lire.
+     ========================================================================== */
+  const IA_FORMES_MAX  = 40;    // formes par carte
+  const IA_PTS_MAX     = 200;   // sommets d'un polygone ou points d'une piste
+  const IA_COORD_MAX   = 2000;  // mm ; la carte dessinée est bornée là aussi
+  const IA_MIN_ETENDUE = 0.02;  // mm ; en dessous, c'est un clic qui a bougé
+  const IA_GENRES = ["rect", "disque", "poly", "piste", "via"];
+
+  /* La couche de cuivre visée. LE NOM EXACT D'ABORD, LES RACCOURCIS ENSUITE :
+     « haut » et « bas » sont les mots des motifs (`js/22-antennes.js`) et
+     désignent le premier et le second cuivre de l'empilage — mais sur un
+     quatre couches, « Cuivre dessous » est le QUATRIÈME, et laisser le
+     raccourci l'emporter poserait le cuivre deux étages trop haut sans que
+     rien ne le signale. */
+  function iaCoucheCuivre(spec){
+    if(typeof conCuivres !== "function") return null;
+    const cu = conCuivres();
+    if(!cu.length) return null;
+    const rendre = c => ({uid:c.e.uid, nom:c.e.nom, role:c.e.role || "signal"});
+    if(spec == null || spec === "") return rendre(cu[0]);
+    const s = String(spec).trim().toLowerCase();
+    const exact = cu.find(c => String(c.e.nom).trim().toLowerCase() === s);
+    if(exact) return rendre(exact);
+    if(s === "haut" || s === "dessus" || s === "top") return rendre(cu[0]);
+    if(s === "bas" || s === "dessous" || s === "bottom")
+      return (cu.length > 1) ? rendre(cu[1]) : null;
+    return null;
+  }
+
+  function iaNombre(v){
+    if(v == null) return NaN;
+    if(typeof v === "number") return isFinite(v) ? v : NaN;
+    const n = +String(v).trim().replace(",", ".");
+    return isFinite(n) ? n : NaN;
+  }
+
+  /* Une coordonnée : finie, bornée, arrondie comme le dessin arrondit — au
+     dixième de micron. HORS BORNES ON REFUSE, ON N'ÉCRÊTE PAS : une forme
+     silencieusement ramenée dans la carte n'est plus celle que le texte à côté
+     décrit, et c'est la carte d'action qu'on croirait. */
+  function iaCoord(v){
+    const n = iaNombre(v);
+    if(!isFinite(n) || Math.abs(n) > IA_COORD_MAX) return NaN;
+    return +n.toFixed(4);
+  }
+
+  function iaPoints(src){
+    if(!Array.isArray(src)) return null;
+    const out = [];
+    for(const q of src){
+      let a, b;
+      if(Array.isArray(q)){ a = iaCoord(q[0]); b = iaCoord(q[1]); }
+      else if(q && typeof q === "object"){ a = iaCoord(q.x); b = iaCoord(q.y); }
+      else return null;
+      if(!isFinite(a) || !isFinite(b)) return null;
+      out.push([a, b]);
+    }
+    return out;
+  }
+
+  /* Le nom de net. Il sert de clé dans le document fabriqué, et
+     `conReprendreSelection()` retient pour le solveur TOUT net qui porte du
+     cuivre et ne s'appelle pas GND : un nom inventé n'est donc pas perdu, il
+     devient une antenne de plus. On le borne quand même — un nom de trois
+     cents caractères rendrait la liste des nets illisible —, et le rôle
+     d'usine de la couche donne le défaut qu'on attend. */
+  function iaNet(v, role){
+    let s = String(v == null ? "" : v).trim().toUpperCase()
+              .replace(/[^A-Z0-9_.+-]/g, "");
+    if(!s) s = (role === "gnd") ? "GND" : "ANTENNE";
+    return s.slice(0, 24);
+  }
+
+  /* Une forme du bloc d'action, ramenée à un élément de dessin — ou refusée en
+     disant laquelle des conditions elle manque. Rend {el, texte} ou {refus}. */
+  function iaForme(brut, rang){
+    const ref = "forme " + (rang + 1);
+    if(!brut || typeof brut !== "object")
+      return {refus:ref + " : ce n'est pas un objet."};
+
+    const genre = String(brut.type || brut.forme || "").trim().toLowerCase();
+    if(IA_GENRES.indexOf(genre) < 0)
+      return {refus:ref + " : genre « " + (genre || "absent") +
+                    " » inconnu ; les genres sont " + IA_GENRES.join(", ") + "."};
+
+    const c = iaCoucheCuivre(brut.couche != null ? brut.couche : brut.cu);
+    if(!c)
+      return {refus:ref + " : « " + (brut.couche || brut.cu || "") +
+                    " » ne désigne aucune couche de cuivre de l'empilage."};
+
+    const trou = !!(brut.trou || brut.decoupe);
+    if(trou && (genre === "via" || genre === "piste"))
+      return {refus:ref + " : une découpe retire du cuivre à une SURFACE ; "+
+                    "un via et une piste n'en sont pas une."};
+
+    const el = {type:genre, cu:c.uid, net:trou ? "" : iaNet(brut.net, c.role),
+                trou:trou};
+    let quoi = "";
+
+    if(genre === "rect"){
+      const x1 = iaCoord(brut.x1), y1 = iaCoord(brut.y1),
+            x2 = iaCoord(brut.x2), y2 = iaCoord(brut.y2);
+      if(!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2))
+        return {refus:ref + " : un rectangle demande x1, y1, x2 et y2, finis "+
+                      "et d'au plus " + IA_COORD_MAX + " mm."};
+      el.x1 = Math.min(x1, x2); el.x2 = Math.max(x1, x2);
+      el.y1 = Math.min(y1, y2); el.y2 = Math.max(y1, y2);
+      if(el.x2 - el.x1 < IA_MIN_ETENDUE || el.y2 - el.y1 < IA_MIN_ETENDUE)
+        return {refus:ref + " : rectangle de moins de " +
+                      nbp(IA_MIN_ETENDUE, 3) + " mm de côté — ce n'est pas "+
+                      "une forme."};
+      quoi = nbp(el.x2 - el.x1, 3) + " × " + nbp(el.y2 - el.y1, 3) +
+             " mm, coin en (" + nbp(el.x1, 3) + " ; " + nbp(el.y1, 3) + ")";
+    }
+    else if(genre === "disque"){
+      const cx = iaCoord(brut.cx != null ? brut.cx : brut.x),
+            cy = iaCoord(brut.cy != null ? brut.cy : brut.y),
+            r  = iaNombre(brut.r != null ? brut.r : brut.rayon);
+      if(!isFinite(cx) || !isFinite(cy))
+        return {refus:ref + " : un disque demande un centre cx, cy."};
+      if(!(r >= IA_MIN_ETENDUE / 2) || r > IA_COORD_MAX)
+        return {refus:ref + " : rayon « r » absent ou hors bornes."};
+      el.cx = cx; el.cy = cy; el.r = +r.toFixed(4);
+      quoi = "r = " + nbp(el.r, 3) + " mm, centre (" + nbp(cx, 3) + " ; " +
+             nbp(cy, 3) + ")";
+    }
+    else if(genre === "poly"){
+      const pts = iaPoints(brut.pts || brut.points);
+      if(!pts)
+        return {refus:ref + " : « pts » doit être une liste de paires [x, y] "+
+                      "finies et bornées."};
+      if(pts.length < 3)
+        return {refus:ref + " : un polygone demande au moins trois sommets ("+
+                      pts.length + " reçu" + (pts.length > 1 ? "s" : "") + ")."};
+      if(pts.length > IA_PTS_MAX)
+        return {refus:ref + " : " + pts.length + " sommets, le garde-fou est "+
+                      "à " + IA_PTS_MAX + "."};
+      el.pts = pts;
+      const b = conBoite(el);
+      if(b.x2 - b.x1 < IA_MIN_ETENDUE || b.y2 - b.y1 < IA_MIN_ETENDUE)
+        return {refus:ref + " : polygone sans étendue — des points alignés ne "+
+                      "font pas une surface."};
+      quoi = pts.length + " sommets, encombrement " + nbp(b.x2 - b.x1, 3) +
+             " × " + nbp(b.y2 - b.y1, 3) + " mm";
+    }
+    else if(genre === "piste"){
+      const pts = iaPoints(brut.pts || brut.points);
+      if(!pts)
+        return {refus:ref + " : « pts » doit être une liste de paires [x, y] "+
+                      "finies et bornées."};
+      if(pts.length < 2)
+        return {refus:ref + " : une piste demande au moins deux points."};
+      if(pts.length > IA_PTS_MAX)
+        return {refus:ref + " : " + pts.length + " points, le garde-fou est "+
+                      "à " + IA_PTS_MAX + "."};
+      const w = iaNombre(brut.w != null ? brut.w : brut.largeur);
+      if(!(w >= IA_MIN_ETENDUE) || w > IA_COORD_MAX)
+        return {refus:ref + " : une piste demande une largeur « w » d'au "+
+                      "moins " + nbp(IA_MIN_ETENDUE, 3) + " mm."};
+      el.pts = pts; el.w = +w.toFixed(4);
+      let lg = 0;
+      for(let i = 0; i + 1 < pts.length; i++)
+        lg += Math.hypot(pts[i+1][0] - pts[i][0], pts[i+1][1] - pts[i][1]);
+      quoi = "large de " + nbp(el.w, 3) + " mm, longue de " + nbp(lg, 3) +
+             " mm (" + pts.length + " points)";
+    }
+    else{                                                        /* un via */
+      const x = iaCoord(brut.x), y = iaCoord(brut.y),
+            d = iaNombre(brut.d != null ? brut.d : brut.diametre);
+      if(!isFinite(x) || !isFinite(y))
+        return {refus:ref + " : un via demande x et y."};
+      if(!(d >= 0.05) || d > 50)
+        return {refus:ref + " : diamètre de via hors bornes (0,05 à 50 mm)."};
+      el.x = x; el.y = y; el.d = +d.toFixed(4);
+      quoi = "Ø " + nbp(el.d, 3) + " mm en (" + nbp(x, 3) + " ; " +
+             nbp(y, 3) + ")";
+    }
+
+    const texte = (trou ? "découpe " : "") +
+                  ((typeof CON_GENRES !== "undefined" && CON_GENRES[genre])
+                     || genre) +
+                  " · " + c.nom + (el.net ? (" · " + el.net) : "") +
+                  " · " + quoi;
+    return {el:el, texte:texte};
+  }
+
+  /* La boîte contre laquelle on juge « dans la carte » ou non. ELLE N'EST PAS
+     CELLE DU DESSIN POUR UNE PISTE, et c'est mesuré : `conBoite` élargit une
+     piste d'une demi-largeur de chaque côté, si bien qu'une ligne
+     d'alimentation qui vient mourir au bord de la carte — ce que font les six
+     motifs de l'outil, `gPiste("haut","ANTENNE",[[0,yc],…])` — débordait
+     toujours de w/2, et l'avis se serait allumé sur presque chaque
+     proposition. Un avis qui se déclenche tout le temps ne se lit plus. On
+     juge donc une piste sur son AXE, qui est ce que l'on cote. */
+  function iaBoiteJugee(el){
+    if(el.type !== "piste") return conBoite(el);
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for(const q of el.pts){
+      x1 = Math.min(x1, q[0]); x2 = Math.max(x2, q[0]);
+      y1 = Math.min(y1, q[1]); y2 = Math.max(y2, q[1]);
+    }
+    return {x1:x1, y1:y1, x2:x2, y2:y2};
+  }
+
+  function propFormes(brut){
+    const p = {type:"formes", lignes:[], refus:[], avis:[], detail:[], els:[],
+               carte:null, port:null, remplacer:false,
+               titre:String(brut.titre || brut.label || "Géométrie proposée")};
+
+    if(typeof CON === "undefined" || !CON.actif){
+      p.refus.push("Le mode conception n'est pas actif : il n'y a pas de "+
+                   "dessin où poser du cuivre.");
+      return p;
+    }
+    const cu = (typeof conCuivres === "function") ? conCuivres() : [];
+    if(!cu.length){
+      p.refus.push("L'empilage ne porte aucune couche de cuivre : il n'y a "+
+                   "rien sur quoi dessiner.");
+      return p;
+    }
+
+    /* LA CARTE SE RÈGLE AVANT LES FORMES, et l'ordre compte. C'est elle qui
+       dit ce qui est « dans la carte » : une forme jugée hors carte contre
+       l'ANCIENNE taille serait refusée alors que la proposition l'agrandit
+       justement pour elle. */
+    let L = CON.carte.L, W = CON.carte.W;
+    let ligneCarte = null;
+    if(brut.carte && typeof brut.carte === "object"){
+      const nL = iaNombre(brut.carte.L), nW = iaNombre(brut.carte.W);
+      if(!(nL >= 1 && nL <= 2000) || !(nW >= 1 && nW <= 2000)){
+        p.refus.push("La carte proposée sort des bornes du mode conception "+
+                     "(1 à 2000 mm de côté) : elle n'est pas posée.");
+      }else{
+        const cL = +nL.toFixed(3), cW = +nW.toFixed(3);
+        if(Math.abs(cL - CON.carte.L) > 1e-6 || Math.abs(cW - CON.carte.W) > 1e-6){
+          p.carte = {L:cL, W:cW};
+          ligneCarte = {chemin:"carte", nom:"carte dessinée", texte:true,
+                        avant:nbp(CON.carte.L, 3) + " × " +
+                              nbp(CON.carte.W, 3) + " mm",
+                        apres:nbp(cL, 3) + " × " + nbp(cW, 3) + " mm"};
+        }
+        L = cL; W = cW;
+      }
+    }
+
+    p.remplacer = !!(brut.remplacer || brut.remplace);
+
+    const src = Array.isArray(brut.elements) ? brut.elements
+              : (Array.isArray(brut.formes) ? brut.formes : null);
+    if(!src){
+      p.refus.push("Aucune liste « elements » : une carte « formes » pose des "+
+                   "formes, et il n'y en a pas.");
+      return p;
+    }
+    if(src.length > IA_FORMES_MAX){
+      p.refus.push(src.length + " formes : le garde-fou est à " +
+                   IA_FORMES_MAX + ". Au-delà, ce n'est plus une proposition "+
+                   "qu'on relit avant de presser.");
+      return p;
+    }
+
+    let dehors = 0;
+    src.forEach(function(f, i){
+      const r = iaForme(f, i);
+      if(r.refus){ p.refus.push(r.refus); return; }
+      /* DU CUIVRE HORS DU SUBSTRAT N'EST PAS UNE ANTENNE : il flotte dans
+         l'air du volume de calcul, il rayonne, et rien sur la courbe ne dira
+         d'où vient ce qu'on lit. Entièrement dehors, on refuse ; à cheval sur
+         le bord, on pose et on le DIT — un brin qui dépasse du substrat est
+         parfois voulu, et c'est à qui lit la carte d'en décider. */
+      const b = iaBoiteJugee(r.el);
+      if(b.x2 < 0 || b.x1 > L || b.y2 < 0 || b.y1 > W){
+        p.refus.push("forme " + (i + 1) + " : entièrement hors de la carte "+
+                     "(x de 0 à " + nbp(L, 3) + ", y de 0 à " + nbp(W, 3) +
+                     " mm) — du cuivre hors substrat ne se simule pas.");
+        return;
+      }
+      if(b.x1 < -1e-6 || b.y1 < -1e-6 || b.x2 > L + 1e-6 || b.y2 > W + 1e-6)
+        dehors++;
+      p.els.push(r.el);
+      p.detail.push(r.texte);
+    });
+
+    /* LE PORT, PARCE QU'UN DESSIN SANS PORT NE SE SIMULE PAS. La liste blanche
+       sait DÉPLACER un port (« port.x »), elle ne sait pas en POSER un : poser
+       un port est une décision géométrique, et elle appartient à la géométrie
+       qui la justifie. Il s'applique et se défait avec la même carte. */
+    let lignePort = null;
+    if(brut.port && typeof brut.port === "object"){
+      const px = iaCoord(brut.port.x), py = iaCoord(brut.port.y),
+            pw = iaNombre(brut.port.w), pl = iaNombre(brut.port.l);
+      if(cu.length < 2)
+        p.refus.push("Un port vertical relie deux couches ; l'empilage n'en "+
+                     "porte qu'une.");
+      else if(!isFinite(px) || !isFinite(py) || !(pw > 0) || !(pl > 0))
+        p.refus.push("Le port demande x, y, et deux étendues strictement "+
+                     "positives — « w » en x, « l » en y.");
+      else if(px < -1e-6 || px > L + 1e-6 || py < -1e-6 || py > W + 1e-6)
+        p.refus.push("Le port proposé tombe hors de la carte.");
+      else{
+        p.port = {x:px, y:py, w:+Math.max(pw, 0.05).toFixed(4),
+                  l:+Math.max(pl, 0.05).toFixed(4),
+                  de:cu[0].e.nom, a:cu[1].e.nom};
+        lignePort = {chemin:"port", nom:"port d'excitation", texte:true,
+                     avant:(ANT.port.pose
+                              ? ("posé en " + nbp(ANT.port.x, 3) + " ; " +
+                                 nbp(ANT.port.y, 3))
+                              : "non posé"),
+                     apres:nbp(p.port.x, 3) + " ; " + nbp(p.port.y, 3) +
+                           ", empreinte " + nbp(p.port.w, 3) + " × " +
+                           nbp(p.port.l, 3) + " mm, de « " + p.port.de +
+                           " » à « " + p.port.a + " »"};
+      }
+    }
+
+    if(p.els.length || p.remplacer)
+      p.lignes.push({chemin:"formes", nom:"formes dessinées", texte:true,
+                     avant:String(CON.elements.length),
+                     apres:(p.remplacer ? p.els.length
+                                        : CON.elements.length + p.els.length) +
+                           (p.remplacer ? "  (le dessin en cours est effacé)"
+                                        : "")});
+    if(ligneCarte) p.lignes.push(ligneCarte);
+    if(lignePort)  p.lignes.push(lignePort);
+
+    if(dehors)
+      p.avis.push(dehors + " forme" + (dehors > 1 ? "s débordent" : " déborde") +
+                  " de la carte : le cuivre qui dépasse du substrat est "+
+                  "simulé dans l'air.");
+    if(p.remplacer && CON.gabarit)
+      p.avis.push("Le dessin effacé est un motif calculé : sa fiche et le "+
+                  "balayage de ses cotes s'en vont avec lui.");
+    else if(!p.remplacer && CON.gabarit && CON.elements.length)
+      p.avis.push("Ces formes s'AJOUTENT au motif dessiné : il cesse d'en "+
+                  "être la copie exacte, et le balayage de ses cotes ne sera "+
+                  "plus proposé.");
+    if(!p.port && !ANT.port.pose && (p.els.length || p.remplacer))
+      p.avis.push("Aucun port n'est posé et cette carte n'en pose pas : rien "+
+                  "ne se simulera tant qu'il n'y en aura pas un.");
+
+    if(!p.lignes.length && !p.refus.length) return null;
+    return p;
+  }
+
+  /* ==========================================================================
      Appliquer, et pouvoir revenir
      ========================================================================== */
   function appliquer(p){
     if(!p || !p.lignes.length) return "";
     if(p.type === "balayage") return appliquerBalayage(p);
     if(p.type === "cotes") return appliquerCotes(p);
+    if(p.type === "formes") return appliquerFormes(p);
 
     p.lignes.forEach(function(l){
       const r = resoudre(l.chemin);
@@ -740,10 +1158,65 @@
     return "balayage armé, " + p.points + " points";
   }
 
-  /* Revenir sur ce qui a été appliqué. Seuls les réglages et les cotes se
-     défont : un balayage armé se désarme d'une case dans l'étape « Le
-     calcul », et un motif redessiné se reprend par « Annuler » du mode
-     conception, qui tient déjà son historique. */
+  /* Poser la géométrie libre.
+
+     L'ÉTAT D'AVANT EST GARDÉ ICI, ET EN ENTIER. Le mode conception tient déjà
+     son historique — `conAppliquer()` y pousse un instantané à chaque
+     modification acceptée —, mais le bouton « Annuler » de la carte doit
+     défaire CETTE carte et elle seule, même si trois formes ont été dessinées
+     à la main entre-temps. Un Ctrl+Z ne saurait pas faire la différence.
+
+     LES PORTS EN FONT PARTIE. Une pose avec « remplacer » dépose tous les
+     ports, comme le fait « Tout effacer » du panneau de conception : ils
+     désignaient du cuivre qui vient de disparaître. Les rendre au retour en
+     arrière est la moitié du travail qu'on oublie, et un port dépose sans
+     raison fait refuser la simulation entière avec un message qui parle d'un
+     port auquel on n'a pas touché. */
+  function appliquerFormes(p){
+    p.avant = {
+      elements:JSON.parse(JSON.stringify(CON.elements)),
+      carte:{L:CON.carte.L, W:CON.carte.W},
+      gabarit:CON.gabarit, calcul:CON.calcul,
+      ports:ANT.ports.map(q => ({pose:q.pose, x:q.x, y:q.y, w:q.w, l:q.l,
+                                 dir:q.dir, de:q.de, a:q.a}))
+    };
+
+    if(p.remplacer){
+      CON.elements = [];
+      /* La fiche du motif décrirait une antenne qui n'est plus dessinée. */
+      CON.calcul = null;
+      CON.gabarit = null;
+      ANT.ports.forEach(function(q){ q.pose = false; });
+    }
+    if(p.carte){ CON.carte.L = p.carte.L; CON.carte.W = p.carte.W; }
+    /* UNE COPIE, ET NON L'OBJET PRÉPARÉ. La proposition est recalculée à
+       chaque réaffichage de la liste tant qu'elle n'est pas appliquée ;
+       pousser ses éléments tels quels mettrait le dessin et la carte en
+       partage de points, et déplacer une forme à la souris changerait ce que
+       la carte prétend avoir posé. */
+    p.els.forEach(function(el){ CON.elements.push(JSON.parse(JSON.stringify(el))); });
+    if(p.port){
+      ANT.port.pose = true;
+      ANT.port.dir  = "z";
+      ANT.port.x = p.port.x; ANT.port.y = p.port.y;
+      ANT.port.w = p.port.w; ANT.port.l = p.port.l;
+      ANT.port.de = p.port.de; ANT.port.a = p.port.a;
+    }
+    CON.sel = -1;
+    CON.courant = null;
+    if(typeof conAppliquer === "function") conAppliquer(false);
+    const bouts = [];
+    if(p.els.length) bouts.push(p.els.length + " forme(s) posée(s)");
+    if(p.remplacer && !p.els.length) bouts.push("dessin effacé");
+    if(p.carte) bouts.push("carte redimensionnée");
+    if(p.port) bouts.push("port posé");
+    return bouts.join(", ");
+  }
+
+  /* Revenir sur ce qui a été appliqué. Les réglages, les cotes et la
+     géométrie libre se défont ici ; un balayage armé, lui, se désarme d'une
+     case dans l'étape « Le calcul », et un motif redessiné se reprend par
+     « Annuler » du mode conception, qui tient déjà son historique. */
   function annuler(p){
     if(!p) return;
     if(p.type === "reglages"){
@@ -758,6 +1231,21 @@
         if(!l.toucheAvant) delete CON.gabaritTouche[l.chemin];
       });
       if(typeof conPanneauRendre === "function") conPanneauRendre();
+    }else if(p.type === "formes" && p.avant){
+      CON.elements = JSON.parse(JSON.stringify(p.avant.elements));
+      CON.carte.L = p.avant.carte.L;
+      CON.carte.W = p.avant.carte.W;
+      CON.gabarit = p.avant.gabarit;
+      CON.calcul  = p.avant.calcul;
+      CON.sel = -1;
+      CON.courant = null;
+      p.avant.ports.forEach(function(a, i){
+        const q = ANT.ports[i];
+        if(!q) return;
+        q.pose = a.pose; q.x = a.x; q.y = a.y; q.w = a.w; q.l = a.l;
+        q.dir = a.dir; q.de = a.de; q.a = a.a;
+      });
+      if(typeof conAppliquer === "function") conAppliquer(false);
     }
   }
 
@@ -887,12 +1375,22 @@
     if(ANT.modele && ANT.modele.estimation && ANT.modele.bande){
       const e = ANT.modele.estimation;
       const ideal = Math.max(2000, Math.round(20 / (ANT.modele.bande.f0 * e.dt_s)));
-      if(ANT.arret.nmax < ideal){
+      /* LE COMPTEUR EFFECTIF, celui que le modèle a retenu : à zéro dans le
+         document, il est calculé, et comparer zéro à quoi que ce soit ferait
+         crier au loup à chaque ouverture du panneau. Un compteur calculé peut
+         malgré tout être trop court — il couvre l'impulsion, pas la descente
+         d'un résonateur à fort Q —, donc l'avis reste, et ce qu'il propose
+         est alors de reprendre le réglage à la main. */
+      const nmaxEff = (ANT.modele.arret && ANT.modele.arret.nmax)
+                      || ANT.arret.nmax;
+      if(nmaxEff < ideal){
         const vise = Math.ceil(ideal * 1.5 / 1000) * 1000;
         dire("attention", "Le garde-fou coupera avant l'énergie",
              "Le calcul demanderait environ " + Math.round(ideal) + " pas de "+
              "temps pour se vider jusqu'à " + nb(ANT.arret.energie, 0) +
-             " dB, et le compteur est à " + ANT.arret.nmax + ". Ce qui doit "+
+             " dB, et le compteur est à " + nmaxEff +
+             ((ANT.modele.arret && ANT.modele.arret.nmax_auto)
+                ? " (calculé sur l'impulsion)" : "") + ". Ce qui doit "+
              "arrêter une simulation, c'est l'énergie résiduelle ; un "+
              "compteur qui tombe le premier rend une descente coupée, et une "+
              "transformée sur une descente coupée n'est pas une mesure.",
@@ -1106,6 +1604,7 @@
       "L'assistant ne se contente pas d'expliquer : quand il préconise des valeurs, il produit une **carte d'action cliquable** qui montre **l'avant en face de l'après** avant d'écrire quoi que ce soit.\n" +
       "- **Réglages de simulation** : bande, marges d'air, PML, pas de maillage, arrêt, modèle de pertes, cotes et impédance d'un port.\n" +
       "- **Cotes d'un motif** (mode conception) : longueur, largeur, encastrement, encoches… La carte peut se contenter de mettre la fiche à jour, ou redessiner le motif.\n" +
+      "- **Géométrie libre** (mode conception) : des rectangles, des disques, des polygones, des pistes, des vias et des découpes posés aux coordonnées données, avec la taille de carte et le port qui vont avec. C'est le recours quand aucun des six motifs ne trace l'antenne voulue — la carte liste **chaque forme** avant de rien poser, et un motif reste préférable dès qu'il en existe un, parce que lui seul tient une fiche et se balaye.\n" +
       "- **Balayage** : armer une cote, une plage et un pas — l'étape « Le calcul » en donne le devis avant de lancer.\n" +
       "- *Barrière* : tout passe par une **liste blanche** de chemins, bornée champ par champ. Un chemin hors liste ou une valeur hors bornes est **refusé et affiché comme tel**, jamais écrit en silence.\n" +
       "- *Annulation* : une carte appliquée reste **annulable** tant que la conversation est ouverte.\n\n" +
@@ -1214,7 +1713,7 @@
 "Quand tu preconises des valeurs concretes, termine par un bloc JSON balise",
 "```action. L'outil le transforme en une carte cliquable qui montre l'avant en",
 "face de l'apres ; l'utilisateur presse, ou ne presse pas. Tu peux en poser",
-"plusieurs, une par idee. Trois formes, et aucune autre :",
+"plusieurs, une par idee. Quatre formes, et aucune autre :",
 "",
 "1. Des reglages de simulation :",
 "```action",
@@ -1232,6 +1731,28 @@
 "```action",
 '{"type":"balayage","titre":"Balayer l encastrement","source":"m.y0","min":6,"max":12,"pas":1}',
 "```",
+"",
+"4. Poser de la GEOMETRIE LIBRE dans le dessin du mode conception. Les",
+"   coordonnees sont en millimetres, l'origine est au coin de la carte, x va",
+"   de 0 a L et y de 0 a W. « couche » vaut « haut », « bas » ou le nom exact",
+"   d'une couche listee dans le contexte ; « remplacer » a vrai EFFACE le",
+"   dessin en cours et depose les ports ; « carte » et « port » sont",
+"   facultatifs, mais sans port rien ne se simule :",
+"```action",
+'{"type":"formes","titre":"Patch a coins coupes","carte":{"L":40,"W":45},"remplacer":true,"elements":[{"type":"rect","couche":"bas","net":"GND","x1":0,"y1":0,"x2":40,"y2":45},{"type":"poly","couche":"haut","net":"ANTENNE","pts":[[8,12],[30,12],[32,14],[32,36],[10,36],[8,34]]},{"type":"piste","couche":"haut","net":"ANTENNE","pts":[[20,0],[20,12]],"w":3.06}],"port":{"x":20,"y":0.4,"w":3.06,"l":0.8}}',
+"```",
+"   Genres admis, et aucun autre : rect (x1,y1,x2,y2), disque (cx,cy,r),",
+"   poly (pts, au moins trois sommets), piste (pts et w), via (x,y,d).",
+"   « trou » a vrai fait une DECOUPE, qui retire du cuivre au lieu d'en poser,",
+"   et ne vaut que pour rect, disque et poly. Au plus " + IA_FORMES_MAX +
+" formes par carte et " + IA_PTS_MAX + " sommets par forme ; une forme",
+"   entierement hors de la carte est refusee.",
+"",
+"QUAND PREFERER UN MOTIF A DE LA GEOMETRIE LIBRE : toujours, des qu'il en",
+"existe un. Un motif calcule ses cotes, tient une fiche, se repose et se",
+"balaye ; une geometrie libre ne sait rien d'elle-meme, et l'outil ne peut en",
+"dire que ce qu'il mesure. Ne la propose que pour une antenne qu'aucun des six",
+"motifs ne trace — et dis-le en une phrase quand tu le fais.",
 "",
 "LES SEULS CHEMINS ACCEPTES pour « reglages ». Tout autre chemin est refuse par",
 "la page et ta carte devient morte :",
@@ -1312,11 +1833,24 @@ grammaire(),
              " <b>→ " + echapperHtml(ap) + "</b>";
     }).join("<br>");
     const refus = p.refus.map(r => "⚠ " + echapperHtml(r)).join("<br>");
+    /* CE QU'UNE CARTE « formes » VA POSER, FORME PAR FORME. Une carte qui
+       annoncerait « 12 formes » demanderait de presser pour savoir ce qu'on
+       pose — c'est-à-dire l'inverse de ce qu'une carte d'action est. */
+    const detail = (p.detail && p.detail.length)
+      ? p.detail.map(t => "· " + echapperHtml(t)).join("<br>") : "";
+    /* Ce qui n'est pas un refus, mais qu'on regretterait de ne pas avoir lu :
+       du cuivre qui déborde du substrat, un dessin effacé, un port absent. */
+    const avis = (p.avis && p.avis.length)
+      ? p.avis.map(t => "ⓘ " + echapperHtml(t)).join("<br>") : "";
 
     let pied;
     if(!p.lignes.length){
-      pied = '<span class="ia-action-vide">Rien à appliquer : ces valeurs ' +
-             'sont déjà celles des réglages.</span>';
+      pied = '<span class="ia-action-vide">' +
+             (p.type === "formes"
+                ? 'Rien à poser : aucune forme de cette proposition n’a passé ' +
+                  'les garde-fous.'
+                : 'Rien à appliquer : ces valeurs sont déjà celles des ' +
+                  'réglages.') + '</span>';
     }else if(e.faite){
       pied = '<button type="button" class="ia-btn-action done" disabled>✓ ' +
              echapperHtml(e.resume || "appliqué") + '</button>' +
@@ -1334,6 +1868,8 @@ grammaire(),
           '<span class="ia-action-title">' + echapperHtml(p.titre) + '</span>' +
         '</div>' +
         (desc ? ('<div class="ia-action-desc">' + desc + '</div>') : '') +
+        (detail ? ('<div class="ia-action-liste">' + detail + '</div>') : '') +
+        (avis ? ('<div class="ia-action-avis">' + avis + '</div>') : '') +
         (refus ? ('<div class="ia-action-refus">' + refus + '</div>') : '') +
         '<div class="ia-action-footer">' + pied + '</div>' +
       '</div>';
@@ -2353,6 +2889,11 @@ grammaire(),
   window.iaAnnuler = annuler;
   window.iaControles = controles;
   window.iaGrammaire = grammaire;
+  /* LA CONSIGNE ELLE-MÊME. Le banc vérifie qu'elle décrit bien les cartes que
+     le code sait appliquer : une quatrième carte ajoutée sans la décrire
+     serait une capacité que le modèle n'utiliserait jamais, et personne ne
+     s'en apercevrait — elle ne casse rien, elle ne sert simplement à rien. */
+  window.iaPromptSysteme = promptSysteme;
   window.iaFormaterMarkdown = formaterMarkdown;
   window.IA_CHAMPS = IA_CHAMPS;
 

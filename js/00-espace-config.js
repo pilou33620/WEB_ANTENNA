@@ -38,7 +38,13 @@ const WS_CONFIG={
        croire qu'il faut passer par lui, alors que l'outil marche entièrement
        sans. Ses cotes sont celles du même panneau dans WEB_CAO : c'est la
        même section, on lui garde la même place. */
-    hidden:["projet","conception","ia","carte","nets","composants","detail"],
+    /* Les champs sont masqués d'usine, et c'est le seul choix honnête : le
+       panneau n'a RIEN à montrer tant qu'aucun calcul n'a enregistré de
+       champ, et cela suppose une case cochée avant de lancer. Le bouton
+       « Voir les champs », à l'étape « Le calcul » et sous les résultats,
+       le fait apparaître au moment exact où il a quelque chose à dire. */
+    hidden:["projet","conception","ia","champs",
+            "carte","nets","composants","detail"],
     panels:{
       assistant :{grow:2  ,collapsed:false,x:260,y:120,w:440,h:640,last:"dockR"},
       ia        :{grow:1.5,collapsed:false,x:250,y:140,w:440,h:580,last:"dockR"},
@@ -47,6 +53,10 @@ const WS_CONFIG={
       couches   :{grow:1  ,collapsed:false,x:80 ,y:140,w:250,h:520,last:"dockL"},
       resultats :{grow:1.4,collapsed:false,x:220,y:220,w:640,h:400,last:"dockB"},
       journal   :{grow:1  ,collapsed:true ,x:260,y:260,w:640,h:340,last:"dockB"},
+      /* Il s'ouvre DÉTACHÉ, et grand : une carte de champ se regarde, et un
+         bandeau de deux cents pixels au fond d'un dock ne se regarde pas.
+         `last` reste le dock du bas pour celui qui l'y rattachera. */
+      champs    :{grow:2  ,collapsed:false,x:180,y:90 ,w:720,h:620,last:"dockB"},
       carte     :{grow:1  ,collapsed:false,x:150,y:140,w:340,h:420,last:"dockR"},
       detail    :{grow:1  ,collapsed:false,x:190,y:200,w:340,h:380,last:"dockR"},
       composants:{grow:1  ,collapsed:false,x:220,y:260,w:520,h:320,last:"dockB"},

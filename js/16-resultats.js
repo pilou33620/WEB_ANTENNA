@@ -146,6 +146,13 @@ function antResultatsRendre(){
           o.titre+'</button>';
       }).join("")+
       '<span class="push"></span>'+
+      /* LE CHEMIN LE PLUS COURT ENTRE UN S11 ET SON EXPLICATION. C'est en
+         regardant la courbe qu'on se demande POURQUOI elle a cette tête, et
+         le bouton doit être là, pas trois panneaux plus loin. Il n'apparaît
+         que si ce calcul a effectivement enregistré des champs. */
+      ((ANT.modele&&ANT.modele.dumps&&ANT.modele.dumps.actif
+        &&typeof chpOuvrir==="function")
+        ?'<button class="tb mini" id="bChampsRes" title="La carte du courant et du champ, animée">🎞 Champs</button>':"")+
       '<button class="tb mini" id="bRapportRes" title="Générer un rapport d\'ingénierie complet : résultats, empilage, géométrie, maillage et diagnostic des anomalies">📋 Rapport</button>'+
       '<button class="tb mini" id="bCsv">⤓ .csv</button>'+
       (ts?'<button class="tb mini" id="bSnp">⤓ .s'+ts.ports.length+
@@ -201,6 +208,8 @@ function antResultatsRendre(){
   if(box.querySelector){
     const bRap=box.querySelector("#bRapportRes");
     if(bRap)bRap.onclick=function(){ if(typeof rapOuvrir==="function")rapOuvrir(); };
+    const bChp=box.querySelector("#bChampsRes");
+    if(bChp)bChp.onclick=function(){ chpOuvrir(true); };
     const bCsv=box.querySelector("#bCsv");
     if(bCsv)bCsv.onclick=antExportCsv;
     const b1p=box.querySelector("#bS1p");

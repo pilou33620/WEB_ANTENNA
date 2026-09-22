@@ -200,6 +200,28 @@ délibéré, mais un modèle local (Ollama et consorts) tiendrait dans la même
 fonction : c'est une URL et une forme de corps de requête, le reste ne bouge
 pas.
 
+**6. La géométrie libre ne déclare pas le rôle des couches.** La carte `formes`
+pose du cuivre, la carte, le port — mais elle ne touche pas à l'empilage, et
+c'est volontaire : `IA_CHAMPS` ne porte aucun chemin de rôle, et une carte qui
+transformerait un plan de masse en signal ferait disparaître une masse sans
+qu'aucune ligne ne le dise. La conséquence se paie sur une antenne équilibrée :
+un dipôle imprimé n'a **aucune** masse, et la seconde couche reste déclarée
+« gnd » d'usine — `conRoleSeconde()` ne le corrige que pour les six motifs, qui
+le savent. *Le travail* : soit un champ `role` dans la carte `formes`, avec son
+avis et son annulation, soit une règle de l'audit local qui relève « une couche
+déclarée masse ne porte aucun cuivre », ce qui attrape le cas sans donner un
+droit d'écriture de plus. La seconde est la moins chère, et probablement la
+bonne.
+
+**7. Une géométrie libre ne sait rien d'elle-même.** Pas de fiche, pas de
+résonance estimée, pas de cote balayable : `conGabaritConforme()` rend faux dès
+qu'une forme est ajoutée au dessin, et le balayage de cote cesse d'être proposé
+— la carte le dit dans un avis, mais le dire n'est pas le réparer. Balayer une
+cote d'un dessin libre demanderait de savoir *laquelle* des coordonnées est une
+cote, c'est-à-dire de reconstruire ce qu'un gabarit sait par construction. Rien
+à faire de simple ici ; c'est l'argument qui fait préférer un motif dès qu'il
+en existe un.
+
 ---
 
 ## 2. Les limites connues, et ce qu'on en fait
@@ -267,6 +289,32 @@ chaque relecture.
   exacte serait un travail considérable pour un gain nul : CSXCAD superpose
   des primitives de même matériau sans que cela change le maillage ni le
   champ.
+* **Un dossier de calcul importé est copié, jamais lu sur place.** Un chemin
+  vers une clé USB ou un partage réseau désigne quelque chose qui peut
+  disparaître : le projet garderait une référence vers rien. La copie coûte
+  le temps d'une copie, une fois, et rend le projet complet. Seuls les
+  fichiers d'un dossier de calcul sont pris — `.vtr`, script, journal — et un
+  seul niveau de sous-dossier : ce n'est pas une commande « copie ce dossier
+  chez moi », c'est un import de calcul.
+* **La liste des calculs ne dit pas ce qu'ils valaient.** Elle donne la date,
+  le poids et le nombre de fichiers de champ ; elle ne rend pas les courbes
+  d'un calcul précédent — `resultats.json` n'en garde qu'un, le dernier.
+  Retrouver un S₁₁ d'avant-hier passe toujours par un projet enregistré sous
+  un autre nom, ce que le champ du panneau fait en une frappe.
+* **La visionneuse de champs montre un PLAN, pas un volume.** Elle découpe
+  une tranche de la grille et la colorie ; elle ne fait ni isosurface, ni
+  coupe oblique, ni ligne de champ, ni rendu volumique. C'est délibéré : la
+  question de tous les jours — « où passe le courant ? » — se répond sur un
+  plan, et coder un moteur de rendu volumique dans une page pour le reste
+  reviendrait à réécrire ParaView, qui est à côté et qui le fait bien. Ce
+  qu'elle apporte, c'est l'immédiateté et le mouvement : deux secondes, aucune
+  installation, et une animation qui distingue une onde stationnaire d'une
+  onde qui se propage — ce qu'une image figée ne fait pas.
+* **Une animation temporelle est échantillonnée.** openEMS écrit un fichier
+  par pas de temps, des milliers ; le serveur en garde au plus soixante,
+  régulièrement espacés, et réduit la finesse spatiale pour tenir dans un
+  budget. Ce qui est montré est juste ; ce n'est pas tout ce qui a été écrit,
+  et le pied du panneau l'annonce.
 * **Le mode conception n'est pas un éditeur de CAO** — pas de contraintes,
   pas de DRC, pas de netlist, pas d'empreintes. Une carte dessinée ici se
   simule ; elle ne se fabrique pas.
@@ -283,6 +331,15 @@ chaque relecture.
   laisser choisir, et un outil de calcul n'est pas un gestionnaire de versions
   — le dossier de projet, lui, se met où l'on veut, donc sous une sauvegarde
   ou un dépôt si l'on en a un.
+* **« Enregistrer » déplace le dossier de calcul, et cela peut prendre du
+  temps.** Un calcul lancé avant d'avoir nommé le projet a écrit ses champs
+  dans le `TEMP` du système ; l'enregistrement les range dans `calculs/`. Sur
+  le même disque, c'est instantané ; d'un disque à l'autre — un projet sur un
+  lecteur réseau, un `TEMP` local —, c'est une vraie copie, et plusieurs
+  centaines de méga-octets prennent le temps qu'ils prennent. Le panneau
+  annonce ce qui sera écrit avant de le faire. Si le déplacement échoue, le
+  projet est enregistré quand même et l'outil dit ce qui n'a pas pu suivre :
+  perdre les courbes parce que les champs ont résisté serait pire.
 * **Le mode conception ne crée pas un second chemin vers le solveur.** Il
   fabrique un document au format exact du parseur et le donne à la même
   fonction de chargement — donc tous les refus de l'assistant valent aussi

@@ -20,7 +20,7 @@ Interface en HTML / CSS / JavaScript, traitement en Python.
 L'outil nécessite trois éléments essentiels :
 1. **Les binaires openEMS (`openEMS/`)** contenant le solveur, ses DLL (`CSXCAD.dll`, `openEMS.exe`) et les roues Python dans `openEMS/python/`.
 2. **L'environnement virtuel Python (`env/`)** créé impérativement avec **Python 3.10 ou 3.11 (64 bits)** avec les dépendances (`pip install -r requirements.txt`).
-3. **ParaView** (optionnel mais recommandé) pour la visualisation 3D des champs électromagnétiques.
+3. **ParaView** (facultatif). Les champs s'affichent et s'animent désormais **dans l'outil** (panneau « Champs ») : ParaView ne sert plus qu'à ce qu'une carte plane ne montre pas — coupe oblique, lignes de champ, rendu volumique.
 
 *(Voir la section détaillée [Installation complète des prérequis](#installation-complète-des-prérequis) en bas de page pour les liens de téléchargement).*
 
@@ -99,16 +99,18 @@ essais figure dans l'état renvoyé à la page.
 │   ├── 00 … 06             lire et afficher la carte IPC-2581
 │   ├── 10 … 16             l'outil : état, géométrie, assistant, 3D, résultats
 │   ├── 17-objets.js        les objets qui ne sont pas sur la carte
-│   ├── 18-champs.js        enregistrer les champs, les ouvrir dans ParaView
+│   ├── 18-champs.js        enregistrer les champs, et aller les regarder
 │   ├── 19-demarrage.js     les branchements
 │   ├── 20 … 23            le mode conception : dessiner au lieu d'importer
 │   ├── 24-balayage.js      une ou deux cotes, une plage, une famille de courbes
 │   ├── 25-polygones.js     l'intersection exacte de deux polygones
-│   ├── 26-exemple.js       le bouton « Exemple » : un cas connu, d'un clic
+│   ├── 26-exemple.js       les boutons « Patch » et « IFA » : deux cas connus, d'un clic
 │   ├── 27-apercu-motif.js  le dessin coté d'un motif d'antenne, avant de le poser
 │   ├── 28-projet.js        capturer la séance, et la reprendre
 │   ├── 29-tableau-s.js     le tableau S complet, et son fichier Touchstone
 │   ├── 30-ia.js            l'assistant IA : vérification locale, et le modèle si on veut
+│   ├── 31-rapport.js       le rapport d'ingénierie
+│   ├── 32-visionneuse.js   la carte de champ animée, lue dans les .vtr — sans ParaView
 │   ├── 90-workspace.js     les panneaux détachables
 │   └── vendor/three.min.js three.js r134, posé ici et non pris sur un CDN
 ├── python/
@@ -116,9 +118,12 @@ essais figure dans l'état renvoyé à la page.
 │   ├── openems_modele.py   le document relu, vérifié, complété, maillé, chiffré
 │   ├── openems_script.py   le modèle → un script Python autonome
 │   ├── openems_run.py      l'exécution en sous-processus, et son suivi
+│   ├── openems_champs.py   les .vtr relus : inventaire, tranche, amplitude et phase
 │   ├── openems_antenne.py  la façade : les seules fonctions que web_antenna.py connaît
 │   ├── projet.py           les projets sur le disque : où on les range, et comment on les rouvre
-│   └── test/banc-openems.py
+│   └── test/
+│       ├── banc-openems.py   le banc principal : il lance tous les autres
+│       └── banc-champs.py    le format .vtr, l'inventaire, le découpage
 ├── test/
 │   ├── carte-antenne.py    fabrique une carte d'essai IPC-2581
 │   ├── patch-2450.xml      … celle qu'elle produit
@@ -126,7 +131,7 @@ essais figure dans l'état renvoyé à la page.
 │   └── banc-interface.js   ports, balayage, unités, liste blanche de l'IA
 ├── env/                    l'environnement virtuel Python (dépendances pip)
 ├── openEMS/                les binaires du solveur (à télécharger, voir « Installation »)
-└── ParaView-…/             le visualiseur 3D des champs (à télécharger, optionnel)
+└── ParaView-…/             le visualiseur 3D externe (à télécharger, facultatif)
 ```
 
 ## Ce que le serveur fait, et pourquoi il existe
@@ -196,6 +201,10 @@ est retenu d'une séance à l'autre, dans `~/.antenne-openems.json`.
 | la disposition des panneaux | elle appartient au poste, pas au travail — elle reste dans le stockage local |
 | le **suivi** d'une simulation en cours | une simulation tourne dans un processus du serveur ; c'est son *résultat* qui est gardé, et son dossier de calcul reste sur le disque à côté du projet |
 
+| gardé, mais pas dans le document | pourquoi |
+|---|---|
+| le **dossier de calcul d'openEMS** — journal, script, `.vtr` des champs | il pèse trop pour un fichier JSON ; il vit dans `calculs/`, et « Enregistrer » l'y range même s'il avait commencé dans le `TEMP` |
+
 ### Les simulations écrivent dans le projet
 
 Tant qu'aucun projet n'est ouvert, openEMS écrit dans le dossier temporaire du
@@ -204,6 +213,67 @@ projet est ouvert, les dossiers de calcul vont dans `calculs/`. Ce n'est pas un
 détail de rangement : un enregistrement de champ fait des centaines de
 méga-octets de `.vtr` que ParaView relit, et les laisser dans `TEMP` revient à
 les perdre au premier nettoyage de disque, sans que rien ne l'annonce.
+
+**Et si le calcul a été lancé avant d'avoir nommé le projet ?** C'est le cas
+le plus courant — on nomme son travail quand il a donné quelque chose.
+« Enregistrer » **déplace alors le dossier de calcul du `TEMP` vers le
+projet**, champs compris : les courbes et les `.vtr` partent ensemble, en un
+seul geste, et il n'y a rien de plus à faire. Le bouton
+**« 💾 Tout enregistrer dans le projet »**, à la fin de l'étape « Le calcul »,
+fait exactement la même chose à l'endroit où l'on regarde quand la simulation
+vient de finir.
+
+Trois bornes, et elles comptent : le déplacement ne part **que** d'un dossier
+que le serveur a lui-même créé (la page n'envoie jamais un chemin, seulement
+un identifiant de simulation), il **refuse** de bouger un calcul qui tourne
+encore, et il **n'écrase jamais** un dossier déjà rangé. Si le déplacement
+échoue — disque plein, fichier tenu ouvert par ParaView —, le projet est
+enregistré quand même et l'outil dit ce qui n'a pas pu être rangé : les
+courbes ne se perdent pas parce que les champs ont résisté.
+
+La fin d'une simulation **lève le drapeau « modifications non enregistrées »**,
+comme le ferait n'importe quel réglage. Sans cela, un projet enregistré juste
+avant le lancement s'affichait « à jour » deux heures plus tard, alors que ses
+courbes n'étaient nulle part.
+
+### Retrouver un calcul, et en importer un
+
+`resultats.json` ne retient qu'**un** calcul : le dernier. Un projet, lui, en
+accumule un par simulation lancée. Après cinq simulations, cinq dossiers sont
+dans `calculs/` avec leurs champs — et pendant longtemps la page n'en
+atteignait qu'un seul.
+
+Le bouton **« 📂 Dossiers de calcul du projet »**, à la fin de l'étape « Le
+calcul », les liste tous : date, nombre de fichiers de champ, poids. Un clic
+sur l'un d'eux l'ouvre dans la visionneuse — le pied du panneau dit alors
+lequel on regarde, et « 🎞 Voir les champs » revient au dernier. Un nouveau
+calcul lancé lève le choix de lui-même : regarder les champs d'avant-hier sur
+une géométrie qu'on vient de modifier est exactement l'erreur qu'il faut
+rendre impossible.
+
+**Importer un dossier de calcul.** Le même bloc porte un champ de chemin :
+celui d'une clé USB, d'un partage réseau, d'un calcul mené à la main sur une
+autre machine. Le dossier est **copié** dans `calculs/` sous un identifiant
+neuf, et devient un calcul comme les autres — visible dans la liste, lisible
+par la visionneuse, emporté avec le projet.
+
+| ce que l'import fait | ce qu'il ne fait pas |
+|---|---|
+| **copier** les fichiers d'un dossier de calcul : les `.vtr` des champs, le script, le journal, un seul niveau de sous-dossier | il ne **déplace** rien, et ne modifie jamais l'original — ce dossier-là appartient à quelqu'un |
+| écrire dans `<projet>/calculs/<identifiant neuf>`, et nulle part ailleurs | il ne copie pas les fichiers étrangers à un calcul, et le dit : « n fichiers laissés de côté » |
+| refuser un dossier **sans aucun `.vtr`** — il n'y aurait rien à regarder | il ne laisse jamais une copie à moitié faite : en cas d'échec, le dossier créé est retiré |
+
+Le chemin est celui du **poste qui fait tourner le serveur**, pas celui du
+navigateur : c'est la même règle que pour le dossier de travail, et pour la
+même raison. C'est aussi le seul chemin, avec la racine des projets, qu'une
+requête dicte au serveur — d'où les trois bornes du tableau ci-dessus.
+
+**Et un projet entier venu d'ailleurs ?** Il n'y a rien à importer : on pointe
+le *dossier de travail* sur le dossier qui le contient, ou on copie le projet
+dans la racine actuelle. Les chemins absolus écrits dans ses fichiers n'ont
+aucune importance — un dossier de calcul se retrouve par son **identifiant**
+sous `<projet>/calculs/`, jamais par le chemin stocké. Un projet est donc
+transportable tel quel, d'une machine à l'autre et d'un disque à l'autre.
 
 ### Enregistrer, reprendre
 
@@ -304,6 +374,47 @@ qu'on croit :
   est commandé par la **plus petite** cellule du domaine, une couche de 35 µm
   ralentit la simulation entière d'un facteur dix ou plus. À ne garder que si
   la géométrie de la tranche compte vraiment.
+
+### Les revêtements extérieurs — la couche la plus coûteuse était la seule qu'on ne voyait pas
+
+Un fichier IPC-2581 déclare son **masque de soudure** dans l'empilage comme
+n'importe quelle autre couche : sur `antenna4c.xml`, `Resist-A` et `Resist-B`,
+15 µm de résine de part et d'autre de la carte. Le tableau de cette étape, lui,
+ne montrait que deux sortes de lignes — les conducteurs, et le diélectrique
+**entre** deux conducteurs. Un vernis n'est ni l'un ni l'autre : il est posé
+**sur** le cuivre extérieur, hors de tout intervalle. Il partait donc au
+solveur sans jamais s'afficher.
+
+Ce qu'il apporte est du second ordre — une permittivité posée sur un
+vingt-cinquième de la hauteur du substrat, de quoi abaisser la résonance
+d'environ 1 %. Ce qu'il coûte ne l'est pas : **les deux faces d'une couche de
+l'empilage portent chacune une ligne de maillage obligatoire**, et 15 µm entre
+deux lignes font une cellule quarante fois plus fine que le pas visé. Le pas de
+temps FDTD suit la plus petite cellule de **tout** le domaine. Mesuré sur une
+carte d'essai qui reprend l'empilage d'`antenna4c` — quatre couches,
+120 × 55 mm, bande centrée sur 868 MHz, quatre millions de cellules :
+
+| | plus petite cellule du domaine | pas de temps | durée annoncée |
+|---|---|---|---|
+| avec les deux vernis | 15 µm, en z | 0,0497 ps | 21 h |
+| sans eux | 200 µm, dans le plan | 0,404 ps | 2 h 30 |
+
+Le maillage ne perd que cent mille cellules sur quatre millions : **ce n'est
+pas une économie de mémoire, c'est le pas de temps et rien d'autre.**
+
+Un revêtement extérieur plus fin que **50 µm** reste donc **hors du maillage**,
+et il n'est pas effacé en silence : la couche a sa ligne dans le tableau, un
+avis la nomme, et une case la remet. « Extérieur » se lit sur l'empilage et non
+sur le nom de la couche — est extérieur ce qui n'est pas entre les deux cuivres
+extrêmes, qu'un fichier nomme son masque `Resist-A` ou `L9`. **Ce qui est entre
+deux conducteurs n'est jamais écarté**, si mince soit-il : c'est un substrat, il
+porte le champ, et le supprimer collerait deux couches de cuivre l'une sur
+l'autre.
+
+Un masque **posé exprès** en mode conception, lui, reste dans le maillage sans
+qu'on ait à le redemander : ce mode ne le pose pas d'usine, il le propose et
+écrit ce qu'il coûte (voir plus bas). La borne des 50 µm ne vaut que pour ce qui
+arrive dans un fichier sans qu'on l'ait demandé.
 
 ### 3. Autour — ce qui n'est pas sur la carte
 
@@ -407,6 +518,34 @@ Un port **coaxial** n'en déclare pas : il porte déjà son propre déport de pl
 de référence, ramené à la surface de la carte, et en empiler un second
 reviendrait à compter deux fois.
 
+#### Un port collé sur la grille, au chiffre près
+
+Une boîte d'excitation est **plate dans deux directions** : c'est un segment,
+pas un volume. openEMS y cherche une composante de champ à exciter, et un
+segment posé à quatre **microns** de la ligne de maillage n'en contient
+aucune. Le solveur le dit une fois — `Unused primitive (type: Box) detected in
+property: port_excite_1` — au milieu de trois cents lignes de démarrage, puis
+il calcule jusqu'au bout un champ rigoureusement nul : énergie à 0,00e+00 d'un
+bout à l'autre, aucune résonance, et tout le temps de calcul dépensé. C'est la
+panne la plus chère que cet outil puisse produire, et la moins visible.
+
+Les quatre microns venaient de **deux arrondis qui ne se parlaient pas** : les
+lignes obligatoires sont arrondies au milliardième de millimètre, et le script
+écrivait les lignes de maillage à cinq décimales quand il écrivait les côtes du
+port à six. Un port à y = 30,111544 tombait sur une grille qui disait
+30,11154. Aucune relecture de l'un ou de l'autre ne pouvait le montrer : il
+fallait comparer les deux. Le port d'une antenne dessinée à la main tombe
+souvent sur un compte rond et ne montrait rien ; celui du patch d'essai, dont
+la côte sort d'une formule, tombait à côté **à chaque fois**.
+
+Il y a donc deux verrous, et il en faut deux : les côtes des ports sont
+**collées** sur la ligne de maillage la plus proche (elles y étaient posées en
+lignes obligatoires — l'écart n'est qu'un arrondi), et le script écrit les
+lignes et les côtes à la **même précision**. Deux nombres égaux dans le modèle
+doivent s'écrire pareil, sinon le collage ne survit pas à l'impression. Si le
+déplacement dépasse l'arrondi, l'assistant crie : cela voudrait dire qu'une
+ligne obligatoire a été perdue en route.
+
 #### Plusieurs ports, et le couplage
 
 Un seul port donne le S₁₁. Deux donnent en plus le **S₂₁**, et c'est la seule
@@ -465,10 +604,24 @@ carte** par un déport de plan de référence — exact pour un mode TEM, qui n'
 pas dispersé —, et la longueur du tronçon ne tourne donc pas la phase du
 résultat.
 
+**Le dégagement doit passer au-dessus du cuivre.** Sans lui, l'âme touche le
+plan de masse : le port est un court-circuit franc, le S₁₁ vaut 0 dB sur toute
+la bande, et rien dans le résultat ne dit pourquoi. Il était émis à la
+priorité 11, celle des *découpes* d'un versement — mais un plan de masse **sans
+découpe** n'est pas émis comme un versement : il part avec les pistes, à la
+priorité 12. Douze bat onze. Le dégagement ne perçait donc rien dès que le plan
+était plein, ce qui est le cas de toute carte d'essai et de bien des cartes
+réelles, et la simulation le disait sans ambiguïté — Z = 0,0 + 1,5j Ω au plan
+de référence, |S₁₁| = 0 dB — à qui la lançait. Il est désormais à 15 : au-dessus
+du cuivre (12) et des vias (13), en dessous de l'âme et de la gaine (20), parce
+que le dégagement creuse le cuivre et non le connecteur.
+
 Le banc d'essai le vérifie par une **vraie simulation** : le même patch, nourri
-par une sonde localisée puis par un coaxial, doit résonner au même endroit. Il
-le fait à 0,2 % près, avec l'inductance de l'âme en plus sur l'impédance
-d'entrée — ce qu'ajoute une sonde réelle.
+par une sonde localisée puis par un coaxial, doit résonner au même endroit.
+Mesuré — 2,3825 GHz à la sonde (S₁₁ = −8,6 dB, Z = 24,2 + 10,5j Ω) contre
+2,3775 GHz au coaxial (S₁₁ = −10,2 dB, Z = 27,4 + 10,2j Ω) : **0,2 % d'écart**,
+avec l'inductance de l'âme en plus sur l'impédance d'entrée — ce qu'ajoute une
+sonde réelle. La résonance tombe à 2,8 % de la formule du patch.
 
 ### 6. La boîte — l'air, la PML, le maillage
 
@@ -495,8 +648,135 @@ la largeur du cuivre le plus étroit, divisée par quatre.
 
 Cette seconde règle est plafonnée par un **budget** : deux cents lignes par
 axe dans l'emprise du cuivre. Une pastille de 0,2 mm ne doit pas emmener la
-carte entière avec elle. Quand le plafond mord, l'assistant le dit — ce cuivre
-là n'est pas résolu, et c'est à l'utilisateur d'imposer le pas s'il y tient.
+carte entière avec elle. Quand le cuivre n'est pas résolu, l'assistant le dit
+— **y compris quand le pas a été saisi à la main**, ce qui est le cas où cela
+compte le plus : un pas de 0,8 mm entré pour aller vite, sur des brins de
+1,0 mm, ne fait qu'**une** cellule en travers du cuivre, et la résonance sort
+plusieurs pour cent trop haut sans qu'aucune alerte ne le signale. Le pas
+saisi reste saisi ; il est commenté, pas corrigé.
+
+Le panneau dit aussi **laquelle des trois règles tient le pas** — λ/20, la
+largeur du cuivre, ou le plafond de lignes — parce que cela seul dit si l'on
+peut relâcher : un pas tenu par λ/20 se relâche en resserrant la bande, un pas
+tenu par le cuivre ne se relâche qu'en acceptant de moins bien le résoudre.
+
+### Deux pas dans le plan — le fond, et les bandes fines
+
+Le plafond de deux cents lignes ne dit pas « ce cuivre est trop fin pour être
+résolu ». Il dit **« raffiner toute la carte à ce pas-là coûterait plus de
+deux cents lignes par axe »** — et c'est une autre affirmation. Une piste
+large de 0,5 mm et longue de 20 ne demande le pas fin qu'**en travers**
+d'elle-même, sur un demi-millimètre : le champ tourne sur la largeur du ruban,
+pas sur sa longueur. C'est la largeur qui fixe l'impédance.
+
+Le maillage a donc **deux pas dans le plan**. Le *fond* reste ce que le budget
+de lignes permet ; des *bandes fines* sont posées en travers de chaque
+polygone trop étroit pour lui, **et seulement sur l'axe où il est étroit**.
+Les lignes d'une bande tombent exactement sur les deux bords du cuivre, qui a
+ainsi un nombre entier de cellules en travers, plus deux cellules de marge de
+chaque côté pour que le lissage rattrape le fond sans marche brutale. La règle
+du tiers ne s'y applique pas : elle corrige la densité de courant d'un bord
+que la grille ne résout **pas**, et une paire de lignes au tiers du pas fin ne
+ferait qu'une cellule-copeau de plus — c'est exactement la condition
+qu'openEMS se donne lui aussi dans `mesh_hint_from_box`.
+
+**Ce que cela coûte, et le budget qui le borne.** Mesures sur la carte d'essai
+du banc (patch 2,45 GHz, plan de masse de 70 mm, fond plafonné à 0,35 mm) :
+
+| cuivre étroit ajouté | pas fin retenu | cellules en travers | prix |
+|---|---|---|---|
+| une piste de 1 mm | 0,25 mm | 0,9 → **4,0** | **×1,01** |
+| vingt pistes de 0,5 mm | 0,125 mm | 1,4 → **4,0** | ×1,34 |
+| vingt pistes de 0,3 mm | 0,098 mm *(budget)* | 0,9 → **3,1** | ×2,02 |
+
+Une piste isolée est donc résolue **pour rien** — c'est le cas courant, celui
+d'une ligne d'alimentation ou d'un brin d'IFA. Vingt pistes éparpillées se
+paient, et le budget décide : il est exprimé en **cellules × pas de temps**
+(la seule grandeur qui mesure vraiment le prix d'un maillage, et la seule qui
+ne dépende pas de la machine), plafonné à quatre fois le maillage de fond et à
+un plafond absolu. Quand il mord, le pas fin **recule d'un cran à la fois** —
+trois cellules en travers au lieu de quatre — au lieu de renoncer, et
+l'assistant écrit ce qu'il a obtenu et ce qu'il aurait fallu.
+
+### Et trois cellules dans le substrat
+
+Le même travers se cachait en z : `_maillage` avait pour consigne écrite
+« au moins trois cellules dans un substrat, une seule ne représente pas le
+champ qui se courbe sous une piste » — et cette consigne n'avait **jamais eu
+lieu**. Ces lignes étaient rangées dans le *remplissage*, et sur une grande
+carte le pas de fond (0,6 mm) est plus épais que le substrat lui-même
+(0,37 mm) : le seuil du tiers les effaçait toutes les trois. Le patch d'essai
+tournait donc avec **une** cellule pour ses 1,6 mm de FR-4, et c'est ce champ
+vertical qui fait l'impédance de la ligne.
+
+Elles sont désormais de l'**affinage**, et leur finesse est bornée par la
+moitié de la plus petite cellule du plan : le pas de temps suit
+1/√(1/dx² + 1/dy² + 1/dz²), donc une cellule en z deux fois plus fine que la
+plus fine du plan pèse quatre contre deux — un facteur 1,4 au plus, pour les
+trois cellules qui décrivent le champ sous le ruban. En dessous de ce plancher,
+c'est le z qui commanderait le pas de temps de tout le domaine : c'est
+exactement ce que faisait le vernis de 15 µm.
+
+### Zéro est un bon état, et un mauvais affichage
+
+Sept réglages se calculent quand on les laisse à zéro : les quatre marges
+d'air, les deux pas de maillage, le compteur de pas. Mais un champ qui affiche
+« 0 » ne dit pas ce qui part au solveur, et « 0 = calculé » en petit sous le
+libellé demande de croire sur parole. Les champs affichent donc **le nombre**,
+en gris, avec une étiquette qui dit d'où il vient : `calculé` tant que le
+modèle le fournit, `imposé ↺` dès qu'on en tape un — et le bouton rend le
+champ au calcul.
+
+Ce qui n'est **pas** écrit dans l'état, c'est ce nombre. Il y resterait figé au
+maillage du jour, et l'on retomberait exactement sur le défaut que ces champs
+corrigent. L'état garde zéro, l'affichage est rempli, et retaper à l'identique
+la valeur affichée ne la fige pas : c'est le nombre qu'on y a mis soi-même.
+
+Ces sept champs sont les mêmes qu'on vienne d'un **fichier IPC-2581**, du
+**mode conception** ou d'un exemple : l'ouverture d'une carte les rend tous au
+calcul, et le modèle les recalcule à chaque retouche du dessin. Sur une carte
+importée à quatre couches, le pas sort ainsi à 0,60 mm — plafonné par le
+budget de lignes, ce que le panneau dit — avec l'avis « le cuivre le plus fin
+n'est pas résolu » à côté.
+
+### Trois rangs de lignes, et la cellule-copeau qui coûtait trois heures
+
+Le pas de temps FDTD est commandé par la **plus petite cellule de tout le
+domaine** : une seule cellule dix fois trop fine multiplie par dix le nombre de
+pas à calculer, sans rien décrire de plus. Deux mécanismes en fabriquaient.
+
+Le premier est le dessin : deux arêtes de cuivre à quelques dizaines de microns
+l'une de l'autre — l'arrondi d'un bout de piste, un ruban de 1,00 mm qui croise
+un ruban de 1,02 mm sur le même axe. Aucun fabricant ne tient cette
+différence-là. Les lignes qui en découlent sont donc **regroupées**, et
+l'assistant dit combien : *le cuivre, lui, garde ses cotes* — c'est la grille
+qu'on simplifie, jamais le dessin envoyé au solveur.
+
+Le second était plus coûteux, et il tient au croisement de deux règles. La
+règle du tiers pose ses lignes **là où l'arête tombe**, c'est-à-dire n'importe
+où par rapport à la grille régulière : rien n'empêchait une ligne de
+remplissage de se poser à quarante microns d'elle. Les lignes ont donc trois
+rangs et non deux — la **géométrie**, qui ne cède jamais ; l'**affinage**, les
+deux lignes de la règle du tiers et celles des bandes fines ; le
+**remplissage**, qui doit désormais laisser un tiers de pas à l'affinage.
+Élargir le seuil pour tout le monde serait l'erreur inverse : fusionner deux
+lignes d'affinage entre elles efface le raffinement des bords rayonnants, et
+cela s'est mesuré — le creux du S₁₁ du patch tombait de −6,6 à −2,1 dB.
+
+**Et le rang décide de l'ordre, l'ordre décide de qui cède.** Les lignes d'une
+bande fine rangées dans le remplissage arrivaient dans la même file que celles
+du fond, triées par position : une ligne du fond posée juste avant une ligne de
+marge était jugée la première, donc gardée, et la marge s'installait ensuite à
+0,05 mm d'elle — au seuil *fin*, trois fois plus tolérant. Mesuré sur vingt
+pistes de 0,5 mm : une cellule de 0,05 mm pour un pas fin de 0,125, et le pas
+de temps de tout le domaine divisé par deux et demi. Chaque ligne est donc
+jugée **à son propre seuil**, celui de l'endroit où on la pose, et le fond ne
+passe pas sous une bande : elle l'y remplace.
+
+Mesuré sur le F inversé du gabarit : plus petite cellule **0,043 → 0,235 mm**,
+pas de temps multiplié par 2,2, et un calcul qui passe de trois heures et demie
+à un peu plus d'une heure, *à maillage identique* — la grille n'a pas été
+dégrossie, elle a cessé de se contredire.
 
 Deux cellules voisines ne diffèrent jamais d'un facteur supérieur à **deux** :
 une grille qui saute de 0,5 à 2 mm réfléchit numériquement sur la marche, et
@@ -512,6 +792,32 @@ dont la face a glissé de 0,3 mm n'est plus le même substrat.
 C'est l'**énergie résiduelle** qui arrête en pratique, pas le nombre de pas :
 une simulation qui converge s'arrête à 30 % de `NrTS` et c'est normal.
 
+Le nombre de pas, justement, **se calcule** : laissé à zéro — comme un pas de
+maillage à zéro —, il est le plus grand de **deux durées qui n'ont rien à
+voir**. Le temps d'**émettre** l'impulsion d'abord : quatre fois sa durée,
+openEMS en exigeant trois sous peine de refuser de tourner. Le temps que met
+l'antenne à **oublier** ensuite, qui ne dépend que de son facteur de qualité —
+une structure résonante rend son énergie en exp(−ωt/Q), et descendre à −40 dB
+demande environ 1,5 × Q périodes ; on en prend quarante, soit un Q chargé de
+27, l'ordre de grandeur d'une antenne imprimée adaptée sur FR-4.
+
+Le second est le plus long dès qu'une antenne résonne, et c'est celui qu'on
+oubliait. Mesure faite sur le F inversé à 2,45 GHz : l'impulsion tenait en
+31 125 pas, l'énergie n'est descendue sous −40 dB qu'au **39 165ᵉ**. Un
+garde-fou posé sur la seule impulsion aurait coupé le calcul avant la mesure,
+et la troncature se serait lue comme une résonance floue — sur la même grille,
+la règle des deux critères en propose 43 459.
+
+C'est le seul réglage dont la bonne valeur change avec le **maillage** :
+l'impulsion dure un temps physique fixe, mais le nombre de pas qu'elle occupe
+dépend du pas de temps, donc de la plus petite cellule. La même antenne
+demande 23 000 pas maillée large et 81 000 maillée fin — un nombre saisi une
+fois ne vaut plus rien dès qu'on retouche la grille. Il reste saisissable pour
+qui veut borner un calcul ; l'assistant dit alors, à côté du nombre imposé,
+celui qu'il calculait, et prévient si le premier est plus court que le second.
+Le garde-fou ne coûte d'ailleurs rien quand le calcul converge : c'est un
+plafond, pas une consigne — l'énergie arrête bien avant.
+
 C'est aussi là qu'on demande d'**enregistrer les champs** — avant de lancer :
 un calcul déjà fait ne peut plus en produire. Densité de courant, champ
 électrique ou magnétique, sur un plan, une coupe, la structure ou toute la
@@ -522,11 +828,46 @@ quelques fichiers, quelques mégaoctets — 46 fichiers et 0,9 Mo sur la carte
 d'essai. Le mode **temporel** rend un fichier **par pas de temps**, des
 dizaines de milliers, et remplit un disque en quelques minutes ; il ne sert
 qu'à faire une animation, et son poids est annoncé avant. Les fichiers sont
-des `.vtr` : deux boutons les ouvrent dans **ParaView** (cherché sur le poste)
-ou, à défaut, ouvrent le dossier de calcul.
+des `.vtr`, et **l'outil les lit lui-même** : le bouton « Voir les champs »
+ouvre le panneau **Champs**, qui affiche la carte et **l'anime**. Les boutons
+« ParaView » et « Ouvrir le dossier » restent à côté, pour ce que la carte
+plane ne montre pas.
 
 Un S₁₁ dit que l'antenne résonne à 2,37 GHz ; il ne dit pas **pourquoi**. La
-carte du courant de surface, elle, le montre d'un coup d'œil.
+carte du courant de surface, elle, le montre d'un coup d'œil — et bien mieux
+en mouvement qu'arrêtée : une onde stationnaire et une onde qui se propage
+donnent la **même** image figée, et deux comportements opposés une fois
+qu'on les regarde vivre.
+
+### Le panneau « Champs »
+
+Le serveur ne renvoie pas des images : il renvoie **l'amplitude et la phase**
+de chaque point de la grille (`python/openems_champs.py`). La page recalcule
+l'image par `A·cos(φ + ωt)` à la cadence de l'écran — changer de composante,
+d'échelle, de palette ou de vitesse ne lui demande donc plus rien. Un
+enregistrement temporel, lui, est une vraie suite d'images : le serveur en
+échantillonne au plus soixante, régulièrement espacées.
+
+Ce que le panneau offre :
+
+| Réglage | Ce qu'il fait |
+| --- | --- |
+| **Série** | quel champ (J, E, H, I) et à quelle fréquence |
+| **Composante** | le module instantané, l'amplitude (enveloppe), ou Vx / Vy / Vz signés |
+| **Échelle** | linéaire, ou décibels sur 20 à 80 dB de dynamique |
+| **Gain** | éclaircit une carte trop sombre ; l'échelle affichée suit |
+| **Palette** | feu (intensités), glace-feu (grandeurs signées), gris |
+| **Cuivre** | le contour du cuivre et du port par-dessus la carte |
+| **Coupe** | pour un enregistrement volumique : le plan, et sa position |
+| **Transport** | jouer / arrêter (Espace), la phase ou le pas de temps, la vitesse |
+| **PNG / film** | l'image affichée, ou un cycle complet en `.webm` |
+
+Deux détails qui comptent. L'échelle est **fixe** pour toute l'animation : une
+échelle recalculée à chaque image ferait clignoter la carte et donnerait à un
+champ mourant l'air d'un champ intense. Et le maillage FDTD étant **gradué**
+— cellules fines sous une piste, larges dans l'air —, chaque pixel est ramené
+à sa coordonnée réelle : étaler le tableau de valeurs comme une image donnerait
+une carte juste en valeurs et fausse en géométrie.
 
 Deux boutons, un seul chemin : « Écrire le script Python » et « Lancer »
 produisent **le même texte**. Ce qui tourne est exactement ce qu'on exporte —
@@ -703,8 +1044,13 @@ couche, avec son épaisseur, son εᵣ, sa tanδ, sa conductivité et son rôle 
 `python/openems_modele.py` transforme en cotes z : chaque diélectrique devient
 un volume de matériau à pertes, chaque cuivre un plan (ou un volume, au choix
 du modèle de cuivre), et chaque interface une ligne de maillage. Le masque y
-arrive comme les autres. Il n'y a aucun chemin propre au mode conception : une
-carte dessinée et une carte importée donnent le même document.
+arrive comme les autres, à une nuance près, et elle va dans le sens du choix
+qu'on vient de faire : un revêtement extérieur plus fin que 50 µm est écarté du
+maillage **quand il arrive d'un fichier**, parce qu'il n'y a alors rien qui dise
+qu'on le voulait (voir « Les revêtements extérieurs », étape 2). Posé ici, il a
+été demandé — le document le marque, et il reste. Il n'y a pour le reste aucun
+chemin propre au mode conception : une carte dessinée et une carte importée
+donnent le même document.
 
 ### Les matériaux — les deux nombres qu'aucun fichier ne porte
 
@@ -1014,16 +1360,73 @@ appliqué(s)` et **reste annulable** tant que la conversation est ouverte — un
 réglage de simulation n'a pas d'historique comme le dessin, et sans ce bouton
 il faudrait retrouver la valeur d'avant à la main.
 
-Trois genres de cartes, et rien d'autre : des **réglages** (bande, boîte,
-maillage, arrêt, pertes, ports), des **cotes de motif** du mode conception, et
-l'**armement d'un balayage**. Jamais la sélection de cuivre, jamais l'empilage
-lu dans le fichier, jamais un chemin qui ferait disparaître un travail.
+Quatre genres de cartes, et rien d'autre : des **réglages** (bande, boîte,
+maillage, arrêt, pertes, ports), des **cotes de motif** du mode conception,
+l'**armement d'un balayage**, et de la **géométrie libre** dans le dessin.
+Jamais la sélection de cuivre, jamais l'empilage lu dans le fichier, jamais un
+chemin qui ferait disparaître un travail.
 
 La consigne envoyée au modèle **est engendrée depuis cette liste** : une liste
 recopiée à la main aurait dérivé dès le premier champ ajouté, et le modèle
 aurait proposé des réglages que la page refuse — ce qui ressemble beaucoup à un
 modèle qui se trompe, et n'en est pas un. Le banc d'essai le vérifie
 (`test/banc-interface.js`, section 9).
+
+### La géométrie libre — quand aucun motif ne trace l'antenne
+
+Les six motifs du mode conception couvrent ce qui se calcule : patch, monopôle,
+IFA, MIFA, dipôle, ligne étalon. Une fente, un anneau, un patch à coins coupés,
+un motif qu'on a en tête — rien de tout cela n'a de gabarit, et la réponse de
+l'assistant était jusqu'ici une liste de cotes à reporter à la main, c'est-à-dire
+exactement le travail qu'on venait lui confier.
+
+Une carte `formes` pose donc du cuivre. Elle donne une liste de primitives en
+millimètres — `rect`, `disque`, `poly`, `piste`, `via`, et `trou` pour une
+**découpe** —, chacune sur une couche désignée par « haut », « bas » ou son nom
+exact ; plus, en option, la **taille de carte** et le **port** qui vont avec —
+sans port, rien ne se simule, et la liste blanche sait *déplacer* un port mais
+pas en *poser* un.
+
+La carte **liste chaque forme** avant de rien écrire, parce qu'une carte qui
+annoncerait « 12 formes » demanderait de presser pour savoir ce qu'on pose :
+
+```
+⚡ Patch à coins coupés — géométrie libre
+   formes dessinées   : 0 → 5  (le dessin en cours est effacé)
+   port d'excitation  : non posé → 20 ; 0,4, empreinte 3,06 × 0,8 mm,
+                        de « Cuivre dessus » à « Cuivre dessous »
+   · rectangle · Cuivre dessous · GND · 40 × 45 mm, coin en (0 ; 0)
+   · polygone  · Cuivre dessus  · ANTENNE · 6 sommets, encombrement 24 × 24 mm
+   · piste     · Cuivre dessus  · ANTENNE · large de 3,06 mm, longue de 12 mm
+   · découpe rectangle · Cuivre dessus · 4 × 8 mm, coin en (18 ; 20)
+   · via       · Cuivre dessus  · GND · Ø 0,6 mm en (36 ; 41)
+   ⚠ forme 6 : genre « trapeze » inconnu ; les genres sont rect, disque,
+     poly, piste, via.
+                                                      [ ⚡ Appliquer ]
+```
+
+La barrière est de même nature que la liste blanche, mais elle porte sur des
+formes : un genre connu, une couche de cuivre qui **existe**, des coordonnées
+finies et bornées, une étendue dessinable, au plus 40 formes et 200 sommets,
+et rien d'entièrement hors carte — **du cuivre hors substrat flotte dans l'air
+du volume de calcul, il rayonne, et rien sur la courbe ne dira d'où vient ce
+qu'on lit**. Ce qui n'est pas refusé mais qu'on regretterait de ne pas avoir lu
+— du cuivre qui affleure le bord, un dessin qui va être effacé, un port absent
+— est dit dans un avis bleu, distinct du refus jaune. Une piste, elle, se juge
+sur son **axe** et non sur sa largeur : une ligne d'alimentation qui vient
+mourir au bord de carte — ce que font les six motifs — aurait sinon débordé de
+w/2 à chaque fois, et un avis qui se déclenche toujours ne se lit plus.
+
+Appliquer garde l'état d'avant **en entier** — les formes, la carte, la fiche
+de motif, et la pose de tous les ports — pour que le bouton « Annuler » défasse
+cette carte-là et elle seule, même si trois formes ont été dessinées à la main
+entre-temps ; le Ctrl+Z du mode conception, lui, ne saurait pas faire la
+différence.
+
+**Un motif reste préférable dès qu'il en existe un**, et la consigne le dit dans
+ces termes : un motif calcule ses cotes, tient une fiche, se repose et se
+balaye. Une géométrie libre ne sait rien d'elle-même — c'est un tas de formes,
+et l'outil ne peut en dire que ce qu'il mesure.
 
 ### Ce que le modèle sait de cet outil
 
@@ -1185,6 +1588,23 @@ vérifie l'aller-retour sur la ligne, la demi-onde guidée qui ramène
 l'impédance sur elle-même, et un repère chiffré — celui-là même où une manip
 antérieure s'était trompée d'εᵣ effectif en prenant la largeur du patch pour
 celle de la ligne.
+
+Un bloc à part éprouve le **lecteur de champs** (`python/test/banc-champs.py`,
+appelé lui aussi par le banc principal). Il n'a besoin ni d'openEMS ni d'un
+dossier de calcul : il **écrit ses propres `.vtr`**, compressés et non
+compressés, avec des grilles de tailles volontairement quelconques — c'est
+quand la longueur de l'en-tête n'est pas un multiple de trois octets que le
+décodage base 64 se décale, et une grille 4 × 4 ne le montrerait jamais. Il
+vérifie ensuite que la tranche extraite d'un volume est bien la bonne dans
+les trois directions, que la tranche proposée par défaut est celle qui
+**porte le champ** et non celle du milieu (qui, dans une boîte, est de
+l'air), que l'inventaire préfère le couple amplitude/phase aux instantanés,
+et qu'une clé inventée est refusée plutôt que résolue en chemin. Donnez-lui
+un dossier de calcul en argument et il refait le tour sur de vrais fichiers :
+
+```bash
+python python/test/banc-champs.py <dossier-de-calcul>
+```
 
 Les deux derniers blocs sont en JavaScript et tournent sous **node**, que le
 banc appelle lui-même quand il est installé : le découpage des découpes
@@ -1383,7 +1803,11 @@ pip install -r requirements.txt
 
 ### 3. Visualisation des champs avec ParaView (`ParaView-…/`)
 
-Les simulations volumiques exportent les champs électromagnétiques au format VTK (`.vtr`). ParaView permet d'en explorer les isosurfaces, coupes vectorielles et flux.
+**Facultatif.** Les champs s'affichent et s'animent dans l'outil lui-même
+(panneau « Champs », voir plus haut) : rien à installer pour la question de
+tous les jours — « où passe le courant ? ». ParaView reste utile pour ce
+qu'une carte plane ne montre pas : isosurfaces, coupes obliques, lignes de
+champ, rendu volumique.
 
 1. **Télécharger ParaView pour Windows** :
    - Téléchargement sur le site officiel : [paraview.org/download](https://www.paraview.org/download/)

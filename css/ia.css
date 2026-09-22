@@ -872,3 +872,33 @@
   border-color: #44cf6c;
   color: #fff;
 }
+
+/* La liste des formes d'une carte « géométrie libre ». Elle est LONGUE, et
+   c'est voulu : une carte qui annoncerait « 12 formes » sans les dire
+   demanderait de presser pour savoir ce qu'on pose — c'est-à-dire l'inverse
+   de ce qu'une carte d'action est. Elle défile plutôt qu'elle ne se résume. */
+.ia-action-liste {
+  font-size: 10.5px;
+  line-height: 1.55;
+  color: var(--txt-dim, #8b919c);
+  font-family: var(--mono, monospace);
+  background: rgba(0, 0, 0, 0.22);
+  border-left: 2px solid rgba(63, 160, 234, 0.35);
+  border-radius: 4px;
+  padding: 5px 8px;
+  max-height: 190px;
+  overflow: auto;
+}
+
+/* Ce qui n'est pas un refus mais qu'on regretterait de ne pas avoir lu : du
+   cuivre qui déborde du substrat, un dessin qui va être effacé, un port qui
+   manque. Un ton qui n'est ni celui du refus ni celui de la valeur posée. */
+.ia-action-avis {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--blue, #3fa0ea);
+  background: rgba(63, 160, 234, 0.07);
+  border-left: 2px solid rgba(63, 160, 234, 0.55);
+  border-radius: 4px;
+  padding: 5px 8px;
+}

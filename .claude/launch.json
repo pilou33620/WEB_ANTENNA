@@ -1,0 +1,8 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "antenne", "runtimeExecutable": "python",
+      "runtimeArgs": ["web_antenna.py", "--port", "8732", "--sans-navigateur", "--sans-maj"],
+      "port": 8732 }
+  ]
+}

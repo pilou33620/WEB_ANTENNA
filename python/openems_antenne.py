@@ -20,7 +20,10 @@
 #
 # Fonctions : etat, preparer, script, balayage, tableau_s, lancer,
 #            lancer_balayage, lancer_tableau_s, journal, arreter, liste,
-#            paraview, dossier, dossier_calculs, debit, debit_noter
+#            paraview, dossier, dossier_calculs, archiver_calcul,
+#            identifiant_neuf,
+#            debit, debit_noter,
+#            champs, champ
 # ==========================================================================
 """Porte d'entree de l'outil antenne : preparation, script, execution."""
 
@@ -43,6 +46,17 @@ except Exception as _exc:                              # noqa: BLE001
     openems_script = None
     ERREUR_SCRIPT = _exc
 
+# LE LECTEUR DE CHAMPS NE DEPEND DE RIEN -- ni d'openEMS, ni de numpy, ni de
+# VTK : il n'ouvre que du XML et de la zlib, tous deux dans la bibliotheque
+# standard. Il est donc disponible la ou le solveur ne l'est pas, et cela
+# compte : on relit sur son poste les champs d'un calcul mene ailleurs.
+try:
+    import openems_champs
+    ERREUR_CHAMPS = None
+except Exception as _exc:                              # noqa: BLE001
+    openems_champs = None
+    ERREUR_CHAMPS = _exc
+
 
 def etat():
     """Ce que ce poste sait faire, et ce qu'il ne sait pas.
@@ -54,6 +68,9 @@ def etat():
     """
     out = openems_modele.etat()
     out["preparer"] = True
+    # La visionneuse de champs est interne a l'outil : elle marche des que le
+    # lecteur de .vtr s'importe, solveur present ou non.
+    out["visionneuse"] = openems_champs is not None
     out["script"] = openems_script is not None
     if openems_script is None:
         out["script_detail"] = str(ERREUR_SCRIPT)
@@ -188,6 +205,58 @@ def dossier(ident):
     return openems_run.ouvrir_dossier(ident)
 
 
+# ==========================================================================
+# Regarder les champs SANS quitter l'outil
+# ==========================================================================
+# `paraview()` ci-dessus reste : il y a des jours ou l'on veut une coupe
+# oblique, un streamline et un export .avi, et ce jour-la ParaView est le bon
+# outil. Mais ce n'est pas le cas courant. Le cas courant est « montre-moi ou
+# passe le courant », et les deux fonctions qui suivent y repondent dans la
+# page, en deux secondes, sans rien installer.
+
+def _champs_module():
+    if openems_champs is None:
+        raise ErreurModele(
+            "Lecteur de champs indisponible : %s" % ERREUR_CHAMPS,
+            "Le bouton « Ouvrir le dossier » reste utilisable.")
+    if openems_run is None:
+        raise ErreurModele(
+            "Execution indisponible : %s" % ERREUR_RUN,
+            "Sans ce module, le serveur ne sait pas a quel dossier "
+            "correspond un identifiant de simulation.")
+    return openems_champs
+
+
+def champs(ident):
+    """Ce que ce calcul a laisse a regarder : la liste, sans les donnees.
+
+    Ne lit que des noms de fichiers : un dossier de plusieurs giga-octets
+    repond instantanement.
+    """
+    mod = _champs_module()
+    dos = openems_run.dossier_de(ident)
+    try:
+        return mod.inventaire(dos)
+    except mod.ErreurChamps as exc:
+        raise ErreurModele(exc.message, exc.conseil)
+
+
+def champ(ident, cle, axe="", indice=-1, max_points=0):
+    """Une carte de champ, prete a animer dans la page.
+
+    `cle` designe une serie de l'inventaire ; `axe` et `indice` decoupent la
+    tranche a regarder quand l'enregistrement est un volume. Aucun nom de
+    fichier ne circule : la page ne connait que des cles.
+    """
+    mod = _champs_module()
+    dos = openems_run.dossier_de(ident)
+    try:
+        return mod.serie(dos, cle, axe=axe, indice=indice,
+                         max_points=max_points or mod.MAX_POINTS)
+    except mod.ErreurChamps as exc:
+        raise ErreurModele(exc.message, exc.conseil)
+
+
 def debit():
     """Le debit sur lequel les durees sont annoncees, et d'ou il vient.
 
@@ -218,3 +287,40 @@ def dossier_calculs(chemin):
     if openems_run is None:
         return ""
     return openems_run.definir_racine_calculs(chemin)
+
+
+def identifiant_neuf():
+    """Un identifiant de calcul neuf, a la forme qu'openems_run reconnait.
+
+    Il sert a UN seul cas : un dossier de calcul importe d'ailleurs, que le
+    serveur range dans le projet. Un nom quelconque ferait un dossier que la
+    visionneuse ne retrouverait pas apres un redemarrage — c'est
+    `openems_run._RE_IDENT` qui garde cette porte, et elle ne s'ouvre que sur
+    douze caracteres hexadecimaux.
+    """
+    if openems_run is None:
+        raise ErreurModele(
+            "Execution indisponible : %s" % ERREUR_RUN,
+            "Sans ce module, le serveur ne sait pas nommer un dossier de "
+            "calcul, ni le relire ensuite.")
+    return openems_run.identifiant_neuf()
+
+
+def archiver_calcul(ident, base_destination):
+    """Range le dossier d'un calcul deja fait sous `base_destination`.
+
+    LE PENDANT DE `dossier_calculs`, POUR LE PASSE. La premiere dit ou les
+    prochains calculs ecriront ; celle-ci rapatrie ceux qui ont deja ecrit
+    ailleurs — c'est-a-dire dans le dossier temporaire du systeme, ce qui est
+    le cas de tout calcul lance avant qu'un projet ne soit ouvert. Sans elle,
+    « enregistrer le projet » apres une simulation gardait les courbes et
+    perdait les champs : quelques centaines de mega-octets de .vtr que le
+    nettoyage de disque efface un jour sans prevenir.
+
+    Le serveur fait le pont, ici comme ailleurs : projet.py donne le dossier,
+    openems_run deplace et met sa tache a jour, et aucun des deux ne connait
+    l'autre.
+    """
+    if openems_run is None:
+        raise ErreurModele("Execution indisponible : %s" % ERREUR_RUN)
+    return openems_run.archiver(ident, base_destination)

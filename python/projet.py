@@ -47,7 +47,8 @@
 #   racine. Rien d'autre n'est jamais retire.
 #
 # Fonctions : etat, definir_racine, liste, ouvrir, enregistrer, ouvert,
-#            fermer, dossier_calculs, ouvrir_explorateur,
+#            fermer, dossier_calculs, calculs, importer_calcul,
+#            ouvrir_explorateur,
 #            debit_lu, debit_noter
 # ==========================================================================
 """Les projets sur le disque : ou on les range, et comment on les reprend."""
@@ -55,6 +56,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -68,6 +70,24 @@ F_PROJET = "projet.json"
 F_CARTE = "carte.json"
 F_RESULTATS = "resultats.json"
 D_CALCULS = "calculs"
+# La fiche qu'un dossier de calcul IMPORTE porte, et que les autres n'ont
+# pas : d'ou il vient, et quand il est arrive. Sans elle, un dossier importe
+# serait indiscernable d'un calcul mene ici, et la liste ne pourrait pas dire
+# « celui-la vient de la cle USB ».
+F_IMPORT = "import.json"
+
+# CE QU'ON ACCEPTE DE COPIER, ET POURQUOI C'EST UNE LISTE BLANCHE. Importer
+# un dossier de calcul veut dire copier des champs et de quoi les relire ; ce
+# n'est pas une commande « copie ce dossier chez moi ». Le chemin vient de
+# l'utilisateur — comme la racine des projets, et c'est legitime —, mais ce
+# qu'on en tire est borne a ce qu'un dossier openEMS contient.
+EXT_CALCUL = {".vtr", ".vtk", ".vts", ".vti", ".vtu", ".h5", ".xml",
+              ".py", ".log", ".txt", ".json", ".csv", ".dat", ".m"}
+# Deux garde-fous chiffres, annonces quand ils se declenchent. Un
+# enregistrement temporel fait des dizaines de milliers de fichiers : les
+# bornes sont larges, elles n'arretent qu'un dossier qui n'a rien a faire la.
+MAX_IMPORT_OCTETS = 20 * 1024 * 1024 * 1024
+MAX_IMPORT_FICHIERS = 200000
 
 # Combien de projets la liste rend au plus. Une racine qui en contient mille
 # n'est pas un cas a servir : elle est un cas a signaler.
@@ -476,6 +496,205 @@ def dossier_calculs():
     if not _OUVERT:
         return ""
     return os.path.join(_OUVERT["dossier"], D_CALCULS)
+
+
+# ==========================================================================
+# Les calculs d'un projet : les lister, et en importer un d'ailleurs
+# --------------------------------------------------------------------------
+# POURQUOI CES DEUX FONCTIONS EXISTENT. Un projet accumule un dossier de
+# calcul par simulation lancee, et `resultats.json` n'en retient qu'UN : le
+# dernier. Apres cinq simulations, cinq dossiers sont sur le disque avec
+# leurs champs, et la page n'en atteignait qu'un seul — les quatre autres
+# etaient la, invisibles, et il fallait ParaView pour les revoir.
+#
+# `calculs()` rend la liste. `importer_calcul()` fait entrer dans cette liste
+# un dossier venu d'ailleurs : une cle USB, un partage reseau, un calcul mene
+# a la main sur une autre machine.
+#
+# ON COPIE, ON NE DEPLACE PAS, et la difference est tout sauf un detail. Le
+# dossier archive de la simulation d'aujourd'hui est A NOUS — il est dans le
+# TEMP, nous l'avons cree, le bouger ne prive personne. Un dossier qu'on
+# IMPORTE appartient a l'utilisateur, il est peut-etre sur la cle d'un
+# collegue, et le vider en croyant l'ouvrir serait la faute la plus grave que
+# cet outil puisse commettre.
+# ==========================================================================
+def _entrees_calcul(dossier):
+    """Les fichiers d'un dossier de calcul : (chemin relatif, taille).
+
+    UN SEUL NIVEAU DE SOUS-DOSSIER. Un dossier openEMS est plat, a ceci pres
+    qu'un enregistrement de champ lointain range parfois ses fichiers a cote.
+    Descendre plus bas ne servirait qu'a suivre une arborescence qui n'est
+    plus celle d'un calcul.
+    """
+    out = []
+    try:
+        entrees = sorted(os.listdir(dossier))
+    except OSError:
+        return out
+    for nom in entrees:
+        chemin = os.path.join(dossier, nom)
+        if os.path.isfile(chemin):
+            out.append((nom, _poids(chemin)))
+        elif os.path.isdir(chemin):
+            try:
+                sous = sorted(os.listdir(chemin))
+            except OSError:
+                continue
+            for n2 in sous:
+                c2 = os.path.join(chemin, n2)
+                if os.path.isfile(c2):
+                    out.append((os.path.join(nom, n2), _poids(c2)))
+    return out
+
+
+def _resume_calcul(base, nom):
+    dossier = os.path.join(base, nom)
+    entrees = _entrees_calcul(dossier)
+    vtr = sum(1 for c, _o in entrees if c.lower().endswith(".vtr"))
+    return {
+        "id": nom,
+        "modifie": _mtime(dossier),
+        "octets": sum(o for _c, o in entrees),
+        "fichiers": len(entrees),
+        "vtr": vtr,
+        "importe": _lire_json(os.path.join(dossier, F_IMPORT)),
+    }
+
+
+def calculs():
+    """Les dossiers de calcul du projet ouvert, du plus recent au plus ancien.
+
+    Rend une liste vide quand aucun projet n'est ouvert : ce n'est pas une
+    erreur, c'est qu'il n'y a nulle part ou regarder.
+    """
+    base = dossier_calculs()
+    if not base or not os.path.isdir(base):
+        return []
+    out = []
+    try:
+        noms = sorted(os.listdir(base))
+    except OSError:
+        return out
+    for nom in noms:
+        if not os.path.isdir(os.path.join(base, nom)):
+            continue
+        try:
+            out.append(_resume_calcul(base, nom))
+        except OSError:
+            continue
+    out.sort(key=lambda c: c.get("modifie") or 0, reverse=True)
+    return out
+
+
+def _source_importable(chemin):
+    """Le dossier a importer, verifie. Rend son chemin absolu.
+
+    Le chemin VIENT DE L'UTILISATEUR, comme celui de la racine : c'est lui
+    qui sait ou est son calcul, et un outil local qui l'en empecherait ne
+    servirait a rien. Ce qui est borne, c'est ce qu'on en fait — on ne fait
+    que LIRE, et seulement les fichiers dont l'extension est celle d'un
+    dossier de calcul.
+    """
+    brut = (chemin or "").strip().strip('"')
+    if not brut:
+        raise ErreurProjet("Aucun dossier indique.")
+    voulu = os.path.abspath(os.path.expanduser(os.path.expandvars(brut)))
+    if os.path.isfile(voulu):
+        raise ErreurProjet(
+            "« %s » est un fichier, pas un dossier." % voulu,
+            "Indiquez le DOSSIER du calcul — celui qui contient les .vtr.")
+    if not os.path.isdir(voulu):
+        raise ErreurProjet(
+            "Ce dossier n'existe pas : %s" % voulu,
+            "Sur un lecteur reseau, verifiez qu'il est connecte ; le chemin "
+            "est celui du poste qui fait tourner le serveur, et non celui du "
+            "navigateur.")
+    return voulu
+
+
+def importer_calcul(chemin, ident):
+    """Copie un dossier de calcul venu d'ailleurs dans le projet ouvert.
+
+    `ident` est POSE PAR LE SERVEUR, et c'est voulu : la forme d'un
+    identifiant de calcul appartient a openems_run — c'est lui qui la
+    fabrique et lui qui la reconnait —, et ce module ne sait toujours pas
+    qu'openEMS existe.
+    """
+    if not _OUVERT:
+        raise ErreurProjet(
+            "Aucun projet n'est ouvert.",
+            "Donnez un nom au projet et enregistrez-le d'abord : c'est lui "
+            "qui fournit le dossier ou ranger le calcul.")
+    source = _source_importable(chemin)
+    base = dossier_calculs()
+
+    # UN DOSSIER DEJA DANS LE PROJET NE S'IMPORTE PAS, il s'ouvre. Copier
+    # ferait un doublon de plusieurs centaines de mega-octets pour rien, et
+    # l'utilisateur croirait avoir fait quelque chose.
+    reel = os.path.realpath(source)
+    dedans = os.path.realpath(_OUVERT["dossier"])
+    try:
+        if os.path.commonpath([reel, dedans]) == dedans:
+            raise ErreurProjet(
+                "Ce dossier est deja dans le projet.",
+                "Il est dans la liste des calculs : ouvrez-le, il n'y a rien "
+                "a importer.")
+    except ValueError:
+        pass                                   # deux lecteurs differents
+
+    toutes = _entrees_calcul(source)
+    entrees = [(c, o) for c, o in toutes
+               if os.path.splitext(c)[1].lower() in EXT_CALCUL]
+    vtr = sum(1 for c, _o in entrees if c.lower().endswith(".vtr"))
+    if not vtr:
+        raise ErreurProjet(
+            "Aucun fichier .vtr dans ce dossier : il n'y a pas de champ a "
+            "regarder.",
+            "Un dossier de calcul openEMS porte ses champs sous forme de "
+            "fichiers .vtr. Verifiez que c'est bien le dossier du calcul, et "
+            "non celui qui le contient.")
+    octets = sum(o for _c, o in entrees)
+    if len(entrees) > MAX_IMPORT_FICHIERS:
+        raise ErreurProjet(
+            "Ce dossier contient %d fichiers a copier ; la limite est %d."
+            % (len(entrees), MAX_IMPORT_FICHIERS))
+    if octets > MAX_IMPORT_OCTETS:
+        raise ErreurProjet(
+            "Ce dossier pese %.1f Go ; la limite a l'import est %d Go."
+            % (octets / (1024.0 ** 3), MAX_IMPORT_OCTETS // (1024 ** 3)))
+
+    # `realpath` comme le fait openems_run en rangeant les siens : sous
+    # Windows, TEMP porte souvent le nom court 8.3 du profil, et deux
+    # ecritures du meme dossier ne se comparent pas. La page affiche ce
+    # chemin, et les deux routes doivent en donner le meme.
+    destination = os.path.join(os.path.realpath(base), ident)
+    if os.path.exists(destination):
+        raise ErreurProjet("Un calcul porte deja cet identifiant : %s" % ident)
+    try:
+        os.makedirs(destination)
+        for relatif, _o in entrees:
+            cible = os.path.join(destination, relatif)
+            sous = os.path.dirname(cible)
+            if sous and not os.path.isdir(sous):
+                os.makedirs(sous, exist_ok=True)
+            shutil.copy2(os.path.join(source, relatif), cible)
+    except (OSError, shutil.Error) as exc:
+        # UNE COPIE A MOITIE FAITE NE RESTE PAS. Elle apparaitrait dans la
+        # liste comme un calcul ordinaire, et l'on regarderait des champs
+        # tronques sans le savoir. La SOURCE, elle, n'est jamais touchee.
+        shutil.rmtree(destination, ignore_errors=True)
+        raise ErreurProjet(
+            "La copie a echoue : %s" % exc,
+            "Rien n'a ete ajoute au projet, et le dossier d'origine n'a pas "
+            "ete modifie.")
+
+    fiche = {"source": source,
+             "nom": os.path.basename(source.rstrip("/" + os.sep)),
+             "date": time.time(), "fichiers": len(entrees), "octets": octets}
+    _ecrire_json(os.path.join(destination, F_IMPORT), fiche)
+    return {"id": ident, "dossier": destination, "fichiers": len(entrees),
+            "octets": octets, "vtr": vtr, "source": source,
+            "ignores": max(0, len(toutes) - len(entrees))}
 
 
 # ==========================================================================

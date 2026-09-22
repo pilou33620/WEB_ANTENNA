@@ -103,6 +103,22 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 }
 .cks .cpt{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--txt-dim)}
 
+/* Un champ dont la valeur affichée vient du modèle et non du clavier. Elle
+   est vraie — c'est elle qui part au solveur —, mais la distinguer d'une
+   saisie est tout l'intérêt de l'afficher : le gris dit « je peux encore
+   changer si tu touches au dessin », le blanc dit « c'est toi qui l'as
+   écrit ». */
+input.auto{color:var(--txt-dim)}
+.etq{
+  display:inline-block;margin-left:6px;padding:1px 5px;border-radius:3px;
+  border:1px solid var(--border2);background:transparent;
+  font-family:var(--mono);font-size:9px;letter-spacing:.06em;
+  text-transform:none;color:var(--txt-dim);vertical-align:1px;
+}
+.etq.est-auto{opacity:.75}
+.etq.est-impose{color:var(--cyan);border-color:var(--cyan);cursor:pointer}
+.etq.est-impose:hover{background:rgba(138,240,255,.12)}
+
 .note{margin:6px 0 0;font-size:11px;color:var(--txt-dim);line-height:1.6}
 .note-inline{font-size:10.5px;color:var(--txt-dim);line-height:1.5;flex:1 1 200px}
 .note.alerte{color:var(--yellow)}
@@ -141,6 +157,13 @@ table.empilage td input{max-width:84px;display:inline-block}
 table.empilage tr.cu td.nom{color:var(--yellow)}
 table.empilage tr.gap td.nom{color:var(--txt-dim);font-size:10.5px}
 table.empilage tr.manque{background:rgba(232,68,58,.10)}
+/* Un revêtement extérieur : la ligne existe, la couche n'est pas forcément
+   dans le maillage. Barrer le nom serait dire « absent » — il n'est pas
+   absent, il est hors de la géométrie et sa case est là pour le remettre. */
+table.empilage tr.rev td.nom{color:var(--txt-dim);font-size:10.5px}
+table.empilage tr.rev.hors td{opacity:.55}
+table.empilage tr.rev td label.ck{font-size:10.5px;white-space:nowrap}
+table.empilage tr.rev td input[type=checkbox]{max-width:none}
 .src{font-style:normal;font-size:9.5px;letter-spacing:.06em;
   padding:1px 5px;border-radius:8px;border:1px solid var(--border2);
   color:var(--txt-dim)}
@@ -689,3 +712,66 @@ svg.apm .apm-cote.on text{fill:var(--yellow);font-weight:600}
 }
 .sim-assist-box .sim-assist-stats b{color:var(--txt)}
 
+
+/* =============================================================================
+   La visionneuse de champs (js/32-visionneuse.js)
+   Trois bandes : les réglages, la carte, le transport — et un pied qui dit
+   ce qu'on regarde. La carte prend TOUT le reste : c'est elle qu'on est venu
+   voir, et une barre d'outils qui grandit à sa place est une barre d'outils
+   qui ment sur ce qui compte.
+   ============================================================================= */
+.chp-body{display:flex;flex-direction:column;min-height:0}
+.chp-vue{
+  flex:1;min-height:120px;position:relative;overflow:hidden;
+  background:var(--panel);
+}
+.chp-vue canvas{display:block;cursor:crosshair}
+
+.chp-bar{row-gap:6px}
+.chp-bar .push{flex:1}
+.chp-bar select{max-width:260px}
+.chp-bar > b{
+  font-family:var(--mono);font-size:10.5px;color:var(--txt);
+  min-width:52px;text-align:center;
+}
+.chp-bar input[type=range]{
+  flex:1;min-width:80px;max-width:340px;accent-color:var(--blue);height:16px;
+}
+.chp-bar .ck.mini{
+  display:inline-flex;align-items:center;gap:5px;margin:0;padding:0;
+  font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+  color:var(--txt-dim);cursor:pointer;
+}
+.chp-bar .ck.mini input{margin:0}
+.chp-gain{
+  display:inline-flex;align-items:center;gap:5px;
+  font-family:var(--mono);font-size:10px;color:var(--txt-dim);
+}
+.chp-gain input[type=range]{width:78px;min-width:0;flex:none}
+.chp-gain b{color:var(--txt);min-width:46px;text-align:right}
+.chp-tranche{
+  display:inline-flex;align-items:center;gap:6px;
+  border-left:1px solid var(--border);padding-left:8px;
+}
+.chp-tranche input[type=range]{width:110px;min-width:0;flex:none}
+.chp-tranche b{font-family:var(--mono);font-size:10px;color:var(--txt)}
+
+.chp-pied{
+  flex:none;padding:6px 10px;border-top:1px solid var(--border);
+  background:#15171a;
+}
+.chp-pied .note{margin:0}
+.chp-info{
+  display:flex;flex-wrap:wrap;gap:4px 14px;
+  font-family:var(--mono);font-size:10.5px;color:var(--txt-dim);
+}
+.chp-info b{color:var(--txt)}
+.chp-info .alerte{color:var(--yellow)}
+.chp-info .chp-lu{margin-left:auto;color:var(--cyan)}
+.chp-accueil{
+  padding:18px 20px;max-width:560px;display:flex;flex-direction:column;
+  gap:10px;align-items:flex-start;
+}
+.chp-accueil b{font-size:13px;color:var(--txt)}
+.chp-accueil p{margin:0;font-size:12px;line-height:1.6;color:var(--txt-dim)}
+.chp-accueil p.alerte,.chp-accueil .note.alerte{color:var(--yellow)}

@@ -392,6 +392,61 @@ class Poste(http.server.SimpleHTTPRequestHandler):
                 detail += "\n" + exc.conseil
             raise Refus(404, detail)
 
+    def _oe_champs(self):
+        """La liste de ce qu'un calcul a laisse a regarder.
+
+        MEME BORNE QUE ParaView, ET POUR LA MEME RAISON : l'identifiant est
+        resolu en dossier par openems_run, qui ne connait que les dossiers
+        qu'il a crees. Aucun chemin ne vient de la requete — sans quoi cette
+        route lirait n'importe quel fichier du poste et le renverrait au
+        navigateur.
+        """
+        self._oe()
+        ident = (self._params().get("id") or [""])[0]
+        if not ident:
+            raise Refus(400, "Identifiant de simulation manquant")
+        try:
+            return openems_antenne.champs(ident)
+        except openems_antenne.ErreurModele as exc:
+            raise Refus(404, self._detail(exc))
+
+    def _oe_champ(self):
+        """Une carte de champ, prete a animer.
+
+        La page ne designe jamais un fichier : elle donne la CLE d'une serie
+        de l'inventaire, et le serveur la resout. Les autres parametres ne
+        decident que du decoupage — quel plan, a quelle hauteur, et combien
+        de points au plus.
+        """
+        self._oe()
+        p = self._params()
+        ident = (p.get("id") or [""])[0]
+        cle = (p.get("cle") or [""])[0]
+        if not ident or not cle:
+            raise Refus(400, "Identifiant ou enregistrement manquant")
+        axe = (p.get("axe") or [""])[0]
+        try:
+            indice = int((p.get("indice") or ["-1"])[0])
+        except ValueError:
+            indice = -1
+        try:
+            points = int((p.get("points") or ["0"])[0])
+        except ValueError:
+            points = 0
+        try:
+            return openems_antenne.champ(ident, cle, axe=axe, indice=indice,
+                                         max_points=points)
+        except openems_antenne.ErreurModele as exc:
+            raise Refus(404, self._detail(exc))
+
+    @staticmethod
+    def _detail(exc):
+        """Message + conseil en un seul texte : la page coupe a la premiere
+        ligne pour le titre et garde le reste comme explication."""
+        if exc.conseil:
+            return "%s\n%s" % (exc.message, exc.conseil)
+        return exc.message
+
     def _oe_arreter(self):
         self._oe()
         ident = (self._params().get("id") or [""])[0]
@@ -493,6 +548,92 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         nom = (self._params().get("nom") or [""])[0]
         return self._pr_action(lambda: projet.ouvrir_explorateur(nom or None))
 
+    def _pr_archiver(self):
+        """Range le dossier d'un calcul deja fait DANS le projet ouvert.
+
+        LE TROU QUE CETTE ROUTE BOUCHE. `_pr_suivre` ne vaut que pour les
+        calculs A VENIR : elle dit ou les prochains ecriront. Un calcul lance
+        avant qu'un projet ne soit ouvert a ecrit ses .vtr dans le dossier
+        temporaire du systeme, et enregistrer le projet apres coup n'y
+        changeait rien — on gardait les courbes et l'on perdait les champs,
+        sans que rien ne l'annonce, le jour ou Windows vide son TEMP.
+
+        LE PONT EST ICI, ET IL NE VA QUE DANS UN SENS, comme `_pr_suivre` :
+        projet.py donne un dossier, openems_run deplace le sien et met sa
+        tache a jour. Aucun chemin ne vient de la requete — seulement un
+        identifiant de simulation, que openems_run resout lui-meme et
+        seulement pour les taches qu'il a creees.
+        """
+        self._pr()
+        if openems_antenne is None:
+            raise Refus(503, "Execution indisponible : %s" % ERREUR_OPENEMS)
+        ident = (self._document(4096) or {}).get("id") or ""
+        if not ident:
+            raise Refus(400, "Identifiant de simulation manquant")
+        base = projet.dossier_calculs()
+        if not base:
+            raise Refus(422, "Aucun projet n'est ouvert : donnez un nom au "
+                             "projet et enregistrez-le d'abord, c'est lui "
+                             "qui fournit le dossier.")
+        try:
+            out = openems_antenne.archiver_calcul(ident, base)
+        except openems_antenne.ErreurModele as exc:
+            detail = exc.message
+            if exc.conseil:
+                detail += "\n" + exc.conseil
+            raise Refus(422, detail)
+        if out.get("deplace"):
+            sys.stderr.write("  Calcul %s range dans le projet : %s\n"
+                             % (ident, out.get("dossier", "")))
+        return out
+
+    def _pr_calculs(self):
+        """Les dossiers de calcul du projet ouvert.
+
+        POURQUOI CETTE ROUTE. `resultats.json` ne retient qu'UN calcul, le
+        dernier ; le projet en accumule un par simulation lancee. Sans cette
+        liste, les precedents restaient sur le disque avec leurs champs, et
+        la page n'avait aucun moyen de les designer.
+        """
+        self._pr()
+        return {"calculs": projet.calculs(),
+                "dossier": projet.dossier_calculs()}
+
+    def _pr_importer(self):
+        """Copie un dossier de calcul venu d'ailleurs dans le projet ouvert.
+
+        UN CHEMIN VENU DE LA REQUETE, ET C'EST LE SEUL DE TOUTES CES ROUTES
+        AVEC LA RACINE. La regle que l'outil s'etait fixee — « on ne lit que
+        des dossiers qu'on a crees soi-meme » — vaut pour les identifiants de
+        simulation, qui arrivent d'une page et designent un calcul en cours.
+        Elle ne peut pas valoir ici : personne d'autre que l'utilisateur ne
+        sait ou est la cle USB de son collegue. Ce qui la remplace tient en
+        trois bornes, et elles sont dans projet.py :
+
+          - on ne fait que LIRE la source, jamais l'effacer ni la deplacer ;
+          - on n'en copie que les fichiers dont l'extension est celle d'un
+            dossier de calcul, un seul niveau de sous-dossier ;
+          - on n'ecrit QUE dans `<projet>/calculs/<identifiant neuf>`.
+
+        L'identifiant vient d'openems_run : un dossier importe doit porter la
+        meme forme que les autres, sinon il serait le seul que la visionneuse
+        ne retrouverait pas apres un redemarrage du serveur.
+        """
+        self._pr()
+        if openems_antenne is None:
+            raise Refus(503, "Execution indisponible : %s" % ERREUR_OPENEMS)
+        chemin = (self._document(4096) or {}).get("chemin") or ""
+        if not chemin:
+            raise Refus(400, "Aucun dossier indique.")
+        try:
+            ident = openems_antenne.identifiant_neuf()
+        except openems_antenne.ErreurModele as exc:
+            raise Refus(503, exc.message)
+        out = self._pr_action(lambda: projet.importer_calcul(chemin, ident))
+        sys.stderr.write("  Calcul importe dans le projet : %s -> %s\n"
+                         % (out.get("source", ""), out.get("dossier", "")))
+        return out
+
     # ==================================================================
     # La cle du mode IA
     # ==================================================================
@@ -567,9 +708,11 @@ class Poste(http.server.SimpleHTTPRequestHandler):
            "/api/openems/lancer", "/api/openems/arreter",
            "/api/openems/journal", "/api/openems/paraview",
            "/api/openems/dossier",
+           "/api/openems/champs", "/api/openems/champ",
            "/api/projet", "/api/projet/ouvrir", "/api/projet/racine",
            "/api/projet/enregistrer", "/api/projet/fermer",
-           "/api/projet/dossier",
+           "/api/projet/dossier", "/api/projet/archiver",
+           "/api/projet/calculs", "/api/projet/importer",
            "/api/ia/cle")
 
     def do_GET(self):
@@ -583,8 +726,19 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         if route == "/api/openems/journal":
             self._api(self._oe_journal)
             return
+        # Les deux routes de la visionneuse de champs sont en GET : elles ne
+        # changent rien, elles LISENT le dossier d'un calcul deja fait.
+        if route == "/api/openems/champs":
+            self._api(self._oe_champs)
+            return
+        if route == "/api/openems/champ":
+            self._api(self._oe_champ)
+            return
         if route == "/api/projet":
             self._api(self._pr_etat)
+            return
+        if route == "/api/projet/calculs":
+            self._api(self._pr_calculs)
             return
         if route == "/api/projet/ouvrir":
             self._api(self._pr_ouvrir)
@@ -657,6 +811,12 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             return
         if route == "/api/projet/dossier":
             self._api(self._pr_dossier)
+            return
+        if route == "/api/projet/archiver":
+            self._api(self._pr_archiver)
+            return
+        if route == "/api/projet/importer":
+            self._api(self._pr_importer)
             return
         self._json({"detail": "Route inconnue : %s" % route}, 404)
 
