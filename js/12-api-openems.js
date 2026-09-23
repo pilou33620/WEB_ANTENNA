@@ -101,6 +101,15 @@ let OE_SEQ=0;
 
 async function oePreparer(){
   const mien=++OE_SEQ;
+  /* UN REFUS NE SURVIT PAS AU DOCUMENT QUI L'A VALU. Laissé à l'écran pendant
+     la vérification suivante, il accuse le port qu'on vient de poser — « le
+     port relie « ? » et « ? » » alors qu'il relie Conductor-1 et
+     Conductor-2 — tant que le serveur n'a pas répondu, et sur une carte
+     entière cela peut durer. Le bilan dit alors « vérification… ». */
+  if(ANT.refus){
+    ANT.refus=null;
+    if(typeof antBilanRendre==="function")antBilanRendre();
+  }
   try{
     const modele=await oePost(OE_ROUTE,antDocument());
     if(mien!==OE_SEQ)return ANT.modele;      // dépassée : on ne touche à rien

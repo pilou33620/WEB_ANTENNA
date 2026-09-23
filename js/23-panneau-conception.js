@@ -147,6 +147,8 @@ function conPanneauRendre(){
     conBlocGabarits()+
     conBlocOutils()+
     conBlocFormes();
+  /* Même raison qu'à l'assistant : voir `antChampsFideles`. */
+  antChampsFideles(corps);
   conPanneauLier(corps);
   conBarreRendre();
 }
@@ -561,6 +563,7 @@ function conApercuMaj(){
   const g=conGabarit(CON.gabarit);
   if(!d||!g)return;
   d.innerHTML=conApercuBloc(g);
+  antChampsFideles(d);
   conApercuLier();
 }
 

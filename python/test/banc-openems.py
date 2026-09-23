@@ -1662,7 +1662,98 @@ openems_modele.oublier_debit()
 
 # --------------------------------------------------------------------------
 print()
-print("17. Le calcul qui ne rend rien, et ce qu'il en dit")
+print("17. La facture du maillage : la plus petite cellule, et ce qu'elle coute")
+# CE QUE CETTE SECTION PROTEGE, ET POURQUOI ELLE EXISTE. Une carte relais
+# 868 MHz a demande cinq heures de calcul pour un S11 a -10,9 dB, et rien dans
+# l'outil ne l'avait annonce : la duree n'etait calculee que pour un balayage,
+# le budget comptait vingt periodes quand le solveur en recevait quarante, et
+# l'avis de cellule minuscule avait un seuil au vingtieme du pas vise que la
+# cellule fautive -- huit fois trop fine -- passait sans un mot. Les trois
+# defauts sont ici, et chacun a sa verification.
+openems_modele.oublier_debit()
+_ms = openems_modele.normaliser(document())
+_es = _ms["estimation"]
+_mds = _ms["maillage_detail"]
+
+verifie("le maillage publie le plancher de chaque axe",
+        all(_mds["plancher"].get(a, 0) > 0 for a in "xyz"),
+        str(_mds.get("plancher")))
+verifie("et la paire de lignes qui serre chaque axe",
+        all(_mds["pincee"].get(a) for a in "xyz"))
+_pi = _es["cellule"]["pincee"]
+verifie("la pincee de l'axe le plus serre EST la plus petite cellule",
+        abs(_pi["mm"] - _es["cellule"]["mm"]) < 1e-9,
+        "%.6f vs %.6f" % (_pi["mm"], _es["cellule"]["mm"]))
+verifie("elle nomme le rang de ses deux bords",
+        _pi["rang_a"] in ("obligatoire", "affinage", "remplissage") and
+        _pi["rang_b"] in ("obligatoire", "affinage", "remplissage"),
+        "%s / %s" % (_pi["rang_a"], _pi["rang_b"]))
+verifie("et la distance qu'elle annonce est celle de ses deux bords",
+        abs((_pi["b"] - _pi["a"]) - _pi["mm"]) < 1e-9)
+
+# LE FAUX POSITIF QUI A FAIT CHANGER LE CRITERE. Le patch du banc a une plus
+# petite cellule QUATRE FOIS ET DEMIE plus fine que le pas vise -- ce n'est pas
+# un accident, c'est le substrat de 1,6 mm divise en trois par le maillage
+# lui-meme. Un seuil calcule sur le pas vise le signalait ; le plancher de
+# l'axe, non. Voir CELLULE_AVIS_MARGE.
+verifie("le substrat divise en trois n'est pas une cellule minuscule",
+        not [a for a in _ms["avis"]
+             if a["titre"] == "Une cellule minuscule ralentit tout"],
+        "plus petite %.4f mm en %s pour un pas vise de %.4f"
+        % (_es["cellule"]["mm"], _es["cellule"]["axe"], _ms["resolution"]["die"]))
+verifie("alors qu'elle est bien plus fine que le pas vise",
+        _es["cellule"]["mm"] < _ms["resolution"]["die"] / 4.0)
+
+# LA DUREE COMPTE LE GARDE-FOU ENTIER, ET NON LA MOITIE. Elle recalculait son
+# propre nombre de pas -- vingt periodes autour de f0 -- quand `nmax` en
+# autorise NMAX_PERIODES autour de la frequence cible.
+_att = _es["cellules"] * _ms["arret"]["nmax"] / (_es["mcps_suppose"] * 1e6)
+verifie("la duree annoncee compte les pas que le solveur recevra",
+        abs(openems_modele.duree_estimee(_ms) - _att) < 1e-6,
+        "%.1f vs %.1f" % (openems_modele.duree_estimee(_ms), _att))
+
+# LE BUDGET D'AFFINAGE PARLE DU MEME CALCUL QUE LE SOLVEUR. Sur une carte dont
+# le nombre de pas vient de la decroissance -- le cas ordinaire --, le cout
+# chiffre vaut exactement cellules x nmax. Il valait la moitie.
+_mc = openems_modele.normaliser(document(arret={"energie": -30, "nmax": 0}))
+_cd = _mc["arret"]["nmax_detail"]
+if _cd["decroissance"] >= _cd["impulsion"]:
+    _cout = openems_modele._cout(_mc["estimation"], _mc["bande"])
+    verifie("le budget chiffre le meme calcul que celui qui partira",
+            abs(_cout / (_mc["estimation"]["cellules"]
+                         * _mc["arret"]["nmax"]) - 1.0) < 0.01,
+            "%.3e vs %.3e" % (_cout, _mc["estimation"]["cellules"]
+                              * _mc["arret"]["nmax"]))
+else:
+    verifie("le budget chiffre le meme calcul que celui qui partira", True)
+
+# ET ELLE SE DIT, CE QU'ELLE NE FAISAIT PAS. `duree_estimee` n'etait lue que
+# par le balayage : une simulation seule partait sans qu'aucun chiffre passe
+# devant l'operateur.
+_lourd = openems_modele.normaliser(document(maillage={"res_die": 0.25}))
+_avd = [a for a in _lourd["avis"] if a["titre"].startswith("Ce calcul")]
+verifie("un calcul de plusieurs heures le dit avant de partir",
+        len(_avd) == 1 and _avd[0]["rang"] in ("info", "attention"),
+        "%s ; duree %.0f s" % ([a["titre"] for a in _lourd["avis"]],
+                               openems_modele.duree_estimee(_lourd)))
+verifie("et il annonce la duree en clair",
+        _avd and "h" in _avd[0]["texte"].split(":")[0])
+verifie("au-dela de deux heures, l'avis passe en attention",
+        [a for a in openems_modele.normaliser(
+            document(maillage={"res_die": 0.20}))["avis"]
+         if a["titre"].startswith("Ce calcul")][0]["rang"] == "attention")
+verifie("un calcul court ne dit rien",
+        not [a for a in _ms["avis"] if a["titre"].startswith("Ce calcul")],
+        "%.0f s" % openems_modele.duree_estimee(_ms))
+verifie("la duree se lit en heures et minutes",
+        openems_modele._duree_texte(3 * 3600 + 26 * 60) == "3 h 26" and
+        openems_modele._duree_texte(70) == "70 s" and
+        openems_modele._duree_texte(600) == "10 min",
+        openems_modele._duree_texte(3 * 3600 + 26 * 60))
+
+# --------------------------------------------------------------------------
+print()
+print("18. Le calcul qui ne rend rien, et ce qu'il en dit")
 # CE QUE CETTE SECTION PROTEGE. Une simulation dont toutes les grandeurs
 # ressortent None est survivable depuis longtemps : elle ne tue plus la suite
 # d'un balayage. Elle ne disait pas CE QUI avait rate, et la seule facon de
@@ -1805,7 +1896,7 @@ if _run is not None:
 
 # --------------------------------------------------------------------------
 print()
-print("18. La ligne d'alimentation ramenee au pied de l'antenne")
+print("19. La ligne d'alimentation ramenee au pied de l'antenne")
 # CE QUE CETTE SECTION PROTEGE, ET LA FAUTE QU'ELLE A DEJA ATTRAPEE.
 # L'impedance sort du port, c'est-a-dire du bord de la carte : entre elle et
 # l'antenne il y a un bout de ruban, et un ruban FAIT TOURNER l'impedance. La
@@ -1923,7 +2014,55 @@ if _np_lg is not None:
 
 # --------------------------------------------------------------------------
 print()
-print("19. Le lecteur de champs .vtr")
+print("20. Le port court-circuite par le cuivre lui-meme")
+# LE CAS VU SUR P01x274PCB-C.xml : une pastille du net d'antenne recopiee sur
+# la couche de masse, juste sous le port. Les deux bornes touchent l'antenne,
+# le calcul va au bout, et le S11 a l'air d'un resultat.
+_d = document()
+_d["cuivre"][1]["polys"][0]["m"] = 1                   # le plan : la masse
+_px, _py = _d["port"]["x"], _d["port"]["y"]
+
+
+def _court(doc):
+    return [a for a in openems_modele.normaliser(doc)["avis"]
+            if "a elle-meme" in a["titre"]]
+
+
+verifie("antenne dessus, masse dessous : rien a dire", not _court(_d))
+
+# La pastille est dans un DEGAGEMENT du plan : isolee de la masse, comme la
+# pastille fantome l'etait sur la carte reelle.
+_dc = json.loads(json.dumps(_d))
+_dc["cuivre"][1]["polys"][0]["t"] = [rect(_px - 1.0, _py - 1.0, 2.0, 2.0)]
+_dc["cuivre"][1]["polys"].append({"o": rect(_px - 0.5, _py - 0.5, 1.0, 1.0)})
+_av = _court(_dc)
+verifie("une pastille d'antenne sous le port, cote masse : avis grave",
+        len(_av) == 1 and _av[0]["rang"] == "grave"
+        and "l'antenne" in _av[0]["titre"], _av)
+
+# Posee DANS le plan plein, elle est le meme metal que la masse : le plan
+# devient « mixte », et le port d'une sonde ordinaire n'est pas court-circuite.
+_dp = json.loads(json.dumps(_d))
+_dp["cuivre"][1]["polys"].append({"o": rect(_px - 0.5, _py - 0.5, 1.0, 1.0)})
+verifie("une pastille d'antenne fondue dans le plan de masse : rien a dire",
+        not _court(_dp), _court(_dp))
+
+_dm = json.loads(json.dumps(_d))
+_dm["cuivre"][0]["polys"].append(
+    {"o": rect(_px - 0.5, _py - 0.5, 1.0, 1.0), "m": 1})
+_dm["cuivre"][0]["polys"][0]["o"] = rect(0, 0, 5, 5)   # le patch s'ecarte
+_av = _court(_dm)
+verifie("masse des deux cotes du port : avis grave aussi",
+        len(_av) == 1 and "la masse" in _av[0]["titre"], _av)
+
+_dn = json.loads(json.dumps(_dc))
+_dn["cuivre"][1]["polys"][0].pop("m")
+verifie("sans masse connue (fichier sans nets) : on se tait",
+        not _court(_dn))
+
+# --------------------------------------------------------------------------
+print()
+print("21. Le lecteur de champs .vtr")
 # IL A SON PROPRE BANC, parce qu'il fabrique ses fichiers d'essai et qu'il
 # n'a besoin ni d'openEMS ni d'un dossier de calcul : le format .vtr se
 # verifie en ecrivant des fichiers dont on connait le contenu, ce qui est
@@ -1952,7 +2091,7 @@ except Exception as _exc:                              # noqa: BLE001
 
 # --------------------------------------------------------------------------
 print()
-print("20. Les bancs JavaScript (decoupage de polygones, logique de la page)")
+print("22. Les bancs JavaScript (decoupage de polygones, logique de la page)")
 # IL EST EN JAVASCRIPT, ET IL EST QUAND MEME VERIFIE ICI. Le decoupage d'une
 # decoupe au bord d'un versement est le seul morceau de l'outil dont on ne
 # voit PAS le resultat : une fente mal coupee ne fait pas d'erreur, elle fait

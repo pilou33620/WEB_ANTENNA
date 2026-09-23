@@ -1649,6 +1649,86 @@ global.antCuivreCalcul = vraiCalcul;
 V.modele = null;
 
 console.log("");
+console.log("22. Les chemins de la surimpression, retenus eux aussi");
+/* CE QUI S'EPROUVE ICI EST LA SECONDE MOITIE DU MEME PROBLEME QUE LA SECTION
+   21. Celle-la garde le RESULTAT de `antCuivreDuModele` — les tableaux de
+   sommets ne sont plus recalcules a chaque image. Mais les Path2D qu'on en
+   tirait l'etaient encore : un chemin neuf par bloc, et tous les sommets
+   redecrits au navigateur, soixante fois par seconde pendant un deplacement.
+   C'est ce qui rendait une carte de fabrication plus lourde a manipuler ici
+   que dans la visionneuse de WEB_CAO, dont c'est pourtant le meme code : la
+   visionneuse construit ses chemins UNE FOIS (`mdlChemins`), la surimpression
+   etait le seul endroit qui y avait echappe.
+
+   ON COMPTE LES CONSTRUCTIONS, pas les pixels : ce qu'on met a l'epreuve est
+   la regle de rafraichissement, et les trois facons de s'y tromper sont les
+   memes qu'a la section 21 — ne rien retenir, retenir apres un changement, et
+   retenir d'une carte a l'autre. La troisieme est ici gratuite : la cle est
+   l'identite de l'objet rendu par `antCuivreDuModele`, donc les deux cles de
+   la section 21 valent pour celle-ci sans etre recopiees. */
+const vraiPath2D = global.Path2D;
+let chemins = 0;
+global.Path2D = function(){
+  chemins++;
+  this.moveTo=function(){}; this.lineTo=function(){};
+  this.arc=function(){};    this.rect=function(){};
+};
+const vraiPolyDans = global.mdlPolyDans;
+global.mdlPolyDans = function(){};
+
+const cuA = {blocs:[{couche:"L1",polys:[{o:[0,0,1,0,1,1],t:[]}]},
+                    {couche:"L2",polys:[{o:[0,0,2,0,2,2],t:[[0,0,1,0,1,1]]}]}]};
+const chA = antRetenuChemins(cuA);
+verifie("un cuivre neuf construit un chemin par bloc",
+        chemins === 2 && chA.length === 2, chemins + " chemin(s)");
+const chA2 = antRetenuChemins(cuA);
+verifie("le repeindre a l'identique n'en construit aucun",
+        chemins === 2, chemins + " chemin(s)");
+verifie("et rend les memes chemins, sans les recopier",
+        chA === chA2);
+
+/* Le cuivre a ete recalcule : `antCuivreDuModele` rend un AUTRE objet, et
+   c'est la seule chose que ce cache a besoin de voir. */
+const cuB = {blocs:[{couche:"L1",polys:[{o:[0,0,3,0,3,3],t:[]}]}]};
+antRetenuChemins(cuB);
+verifie("un cuivre recalcule refait ses chemins",
+        chemins === 3, chemins + " chemin(s)");
+antRetenuChemins(cuB);
+verifie("et le nouveau est retenu a son tour",
+        chemins === 3, chemins + " chemin(s)");
+
+/* LE MAILLAGE : des milliers de lignes quand il est fin, c'est-a-dire
+   exactement quand on l'affiche pour le juger. */
+chemins = 0;
+const mx = [0,1,2], my = [0,1];
+antMaillageChemin(mx,my,1,0,0,10,10);
+antMaillageChemin(mx,my,1,0,0,10,10);
+verifie("la grille FDTD n'est decrite qu'une fois",
+        chemins === 1, chemins + " chemin(s)");
+antMaillageChemin(mx,my,1/25.4,0,0,10,10);
+verifie("changer d'unite la refait",
+        chemins === 2, chemins + " chemin(s)");
+antMaillageChemin(mx,my,1,0,0,12,12);
+verifie("une boite qui grandit la refait aussi",
+        chemins === 3, chemins + " chemin(s)");
+
+/* LES OBJETS HORS CARTE : deux chemins, un par couleur. */
+chemins = 0;
+const mObj = {primitives:[{type:"boite",materiau:"metal",a:[0,0,0],b:[1,1,1]},
+                          {type:"sphere",materiau:"air",c:[0,0,0],r:1},
+                          {type:"fil",materiau:"metal",r:0.2,pts:[[0,0],[1,1]]}]};
+antObjetsChemins(mObj,1);
+antObjetsChemins(mObj,1);
+verifie("les objets tiennent en deux chemins, construits une fois",
+        chemins === 2, chemins + " chemin(s)");
+antObjetsChemins(mObj,1/25.4);
+verifie("changer d'unite les refait",
+        chemins === 4, chemins + " chemin(s)");
+
+global.Path2D = vraiPath2D;
+global.mdlPolyDans = vraiPolyDans;
+
+console.log("");
 console.log("12. L'empilage du mode conception");
 /* CE QUE CETTE SECTION EPROUVE, ET POURQUOI. L'empilage est le seul reglage
    du mode qui ne se voit pas sur le dessin : une couche de trop, un
@@ -2043,6 +2123,44 @@ verifie("le rapport Markdown contient les titres et données structurées",
         mdRapport.includes("## 1. Synthèse & Indicateurs Clés") &&
         mdRapport.includes("## 4. Empilage PCB (Stack-up)"));
 
+/* LA PLUS PETITE CELLULE ET LA CHARGE, DANS LE MARKDOWN. Le tableau HTML les
+   portait déjà ; le Markdown — celui qu'on relit pour comprendre pourquoi un
+   calcul a duré cinq heures — ne disait que le pas visé et le pas de temps,
+   c'est-à-dire tout sauf le chiffre qui commande les deux. */
+const donneesPc = JSON.parse(JSON.stringify(donneesConv));
+donneesPc.maillage.res_die_mm = 0.599;
+donneesPc.maillage.cellules = 4226775;
+donneesPc.maillage.min_cell_mm = [0.0744, 0.483, 0.1233];
+donneesPc.maillage.cellule = {mm:0.0744, axe:"x", quoi:"lignes", couche:"",
+                                pincee:{mm:0.0744, a:8.0156, b:8.0900,
+                                        rang_a:"obligatoire",
+                                        rang_b:"remplissage"}};
+donneesPc.solver.nmax = 193873;
+const mdPc = rapGenererMarkdown(donneesPc, diagsConv);
+verifie("le rapport Markdown dit la plus petite cellule et son axe",
+        mdPc.includes("Plus petite cellule : 0,0744 mm en x"), mdPc);
+verifie("il dit de combien elle est sous le pas visé",
+        mdPc.includes("8,1 fois moins que le pas visé"), mdPc);
+verifie("il nomme les deux lignes qui la bornent et leur rang",
+        mdPc.includes("(obligatoire)") && mdPc.includes("(remplissage)"),
+        mdPc);
+verifie("et il chiffre la charge, qui est le produit des deux facteurs",
+        /Charge : 4226775 cellules × 193873 pas = 8,19e\+11/.test(mdPc)
+        || /Charge : 4226775 cellules × 193873 pas = 8\.19e\+11/.test(mdPc),
+        mdPc);
+
+/* UNE COUCHE NOMMEE QUAND LA CELLULE EST EN Z, et pas une paire de lignes :
+   le vernis épargné de 15 microns est le cas d'école, et il se corrige dans
+   l'empilage, pas dans le dessin. */
+const donneesPcZ = JSON.parse(JSON.stringify(donneesPc));
+donneesPcZ.maillage.min_cell_mm = [0.483, 0.483, 0.015];
+donneesPcZ.maillage.cellule = {mm:0.015, axe:"z", quoi:"dielectrique",
+                                 couche:"Resist-A", ep:0.015,
+                                 revetement:true, pincee:null};
+verifie("en z, c'est la couche qui est nommée",
+        rapGenererMarkdown(donneesPcZ, diagsConv)
+          .includes("la couche « Resist-A »"));
+
 console.log("\n14. La saisie décimale robuste dans l'assistant");
 console.log("");
 console.log("15. Les reglages calcules : la valeur s'affiche, l'etat reste a zero");
@@ -2192,6 +2310,53 @@ elTest.value = "-2";
 elTest.onchange();
 verifie("une valeur sous le minimum est ramenée au min sur change",
         cibleTest.res_die === 0 && elTest.value === "0");
+
+console.log("");
+console.log("16. Un panneau reconstruit ne montre QUE ce que l'etat porte");
+/* LA PANNE EPROUVEE ICI NE SE VOIT SUR AUCUNE CAPTURE D'ECRAN. Au
+   rechargement de la page — la reprise de session en est un —, le navigateur
+   remet dans les champs et les listes ce qu'ils portaient avant, sans
+   qu'aucun `change` ne parte. L'assistant affichait alors un port pose a
+   4,726 mm entre « Conductor-4 » et « Conductor-2 » pendant qu'`ANT.ports`
+   portait un port vierge, et le serveur refusait un document dont les deux
+   couches etaient vides : « recues : « ? » et « ? » ». Une demi-journee pour
+   comprendre qu'il fallait croire le refus et non l'ecran.
+
+   `antChampsFideles` reecrit chaque champ avec ce que le BALISAGE declare,
+   c'est-a-dire l'etat, puisque c'est lui qui vient de le rendre. */
+const posesAuto=[];
+function champRestaure(o){
+  return Object.assign({setAttribute(n,v){ posesAuto.push(n+"="+v); }}, o);
+}
+const inputFantome=champRestaure({tagName:"INPUT", type:"text",
+                                  value:"4,726", defaultValue:"0"});
+const caseFantome=champRestaure({tagName:"INPUT", type:"checkbox",
+                                 checked:true, defaultChecked:false});
+const listeVide=champRestaure({tagName:"SELECT", multiple:false, selectedIndex:2,
+  options:[{defaultSelected:false},{defaultSelected:false},
+           {defaultSelected:false}]});
+const listeChoisie=champRestaure({tagName:"SELECT", multiple:false, selectedIndex:0,
+  options:[{defaultSelected:false},{defaultSelected:true},
+           {defaultSelected:false}]});
+const champsFantomes=[inputFantome,caseFantome,listeVide,listeChoisie];
+antChampsFideles({querySelectorAll(){ return champsFantomes; }});
+
+verifie("un champ restaure par le navigateur revient a ce que l'etat a ecrit",
+        inputFantome.value === "0", inputFantome.value);
+verifie("une case a cocher restauree revient elle aussi",
+        caseFantome.checked === false);
+verifie("une liste dont l'etat n'a rien choisi revient a « — choisir — »",
+        listeVide.selectedIndex === 0, String(listeVide.selectedIndex));
+verifie("et celle que l'etat a remplie garde SON option, pas la premiere",
+        listeChoisie.selectedIndex === 1, String(listeChoisie.selectedIndex));
+verifie("chaque champ dit au navigateur de ne rien retenir la fois suivante",
+        posesAuto.length === 4 &&
+        posesAuto.every(p => p === "autocomplete=off"));
+/* Appelee sur un panneau absent — un dock replie, un panneau ferme —, elle
+   ne doit pas casser le rendu de tout le reste. */
+antChampsFideles(null);
+antChampsFideles({});
+verifie("une racine absente ou sans champs ne fait rien exploser", true);
 
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")

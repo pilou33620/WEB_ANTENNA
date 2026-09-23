@@ -437,6 +437,14 @@ function mdlPadPlace(pad,hote,couches,sortie){
   for(const pd of pads){
     if(pd.a&&!pd.d)continue;                 // antipad seul : rien à remplir
     let c=mdlCoucheDe(pd.c);
+    /* UNE COUCHE IGNORÉE N'EST PAS UNE COUCHE INCONNUE. Le parseur laisse de
+       côté pochoir, sérigraphie, zones… (`ignores`, voir _role_calque) : leur
+       nom manque donc à la liste, et le repli « ALL » ci-dessous recopiait
+       sur TOUS les cuivres chaque pastille CMS dont le padstack cite
+       « MetalMask-A ». Sur P01x274PCB-C.xml : 1 191 pastilles fantômes sur
+       les couches internes et le dessous, dont une sous le port, qui
+       court-circuitait l'antenne sur elle-même. */
+    if(c<0&&mdlCoucheIgnoree(pd.c))continue;
     if(c<0){
       /* « ALL » et compagnie : une pastille traversante existe sur tous les
          cuivres, une pastille de composant sur celui du composant. */
@@ -450,6 +458,13 @@ function mdlPadPlace(pad,hote,couches,sortie){
     sortie.push({c:c,x:base.x,y:base.y,rot:rot,mir:mir,
                  d:pd.d||(ps?ps.pad:0),forme:pd.f,pad:pad,hote:hote});
   }
+}
+function mdlCoucheIgnoree(nom){
+  const ign=V.modele&&V.modele.ignores;
+  if(!ign||!nom)return false;
+  if(Object.prototype.hasOwnProperty.call(ign,nom))return true;
+  const bas=String(nom).toLowerCase();
+  return Object.keys(ign).some(k=>k.toLowerCase()===bas);
 }
 function mdlCuivres(){
   const out=[];
@@ -619,7 +634,8 @@ function mdlCharger(modele,nomFichier){
      dans la liste. */
   V.parNet=modele.nets.map(function(nom,i){
     return {i:i,nom:nom,pistes:[],arcs:[],plans:[],pads:[],trous:[],
-            longueur:0,couches:new Set()};
+            longueur:0,couches:new Set(),
+            classe:"signal",autoDetecte:true,autoRaison:"",tensionNominale:null};
   });
   const net=function(i){return (i>=0&&i<V.parNet.length)?V.parNet[i]:null;};
 
@@ -649,14 +665,47 @@ function mdlCharger(modele,nomFichier){
     comp.boite=mdlBoiteComp(comp);
     for(const pad of (comp.pads||[]))mdlPadPlace(pad,comp,V.couches,poses);
   }
+  const netParXY = new Map();
   for(const q of poses){
     const c=V.couches[q.c]; if(!c)continue;
     c.pads.push(q); c.cpt++;
-    const n=net(q.pad.n==null?-1:q.pad.n);
-    if(n){n.pads.push(q);n.couches.add(q.c);}
+    const netId = q.pad.n==null?-1:q.pad.n;
+    const n=net(netId);
+    if(n){
+      n.pads.push(q);
+      n.couches.add(q.c);
+      if(netId >= 0){
+        netParXY.set(mdlCleXY(q.x, q.y), netId);
+      }
+    }
+  }
+  for(const p of (modele.pistes || [])){
+    if(p.n >= 0 && p.p && p.p.length >= 4){
+      const k1 = mdlCleXY(p.p[0], p.p[1]);
+      if(!netParXY.has(k1)) netParXY.set(k1, p.n);
+      const k2 = mdlCleXY(p.p[p.p.length-2], p.p[p.p.length-1]);
+      if(!netParXY.has(k2)) netParXY.set(k2, p.n);
+    }
   }
   V.parXY=new Map();
   for(const t of modele.percages){
+    if(t.n == null || t.n < 0){
+      const k = mdlCleXY(t.x, t.y);
+      if(netParXY.has(k)){
+        t.n = netParXY.get(k);
+      } else {
+        const ix = Math.round(t.x * 1000), iy = Math.round(t.y * 1000);
+        for(let dx = -1; dx <= 1 && (t.n == null || t.n < 0); dx++){
+          for(let dy = -1; dy <= 1; dy++){
+            const nk = (ix + dx) + "," + (iy + dy);
+            if(netParXY.has(nk)){
+              t.n = netParXY.get(nk);
+              break;
+            }
+          }
+        }
+      }
+    }
     const n=net(t.n==null?-1:t.n); if(n)n.trous.push(t);
     V.parXY.set(mdlCleXY(t.x,t.y),t);
   }
@@ -664,6 +713,7 @@ function mdlCharger(modele,nomFichier){
   mdlChemins();
   V.bbox=mdlBoite();
   ltPreparer();
+  mdlAutoDetecterClassesNets(modele.classes_nets, modele.netClasses || V.netClasses);
   return V;
 }
 
@@ -1066,18 +1116,26 @@ function ltAutoRole(cu){
      ON LIT DONC LE CUIVRE : le net du plus grand versement de la couche dit ce
      qu'elle est, bien mieux que son type. Le nom de net l'emporte sur le type
      déclaré, jamais l'inverse. */
-  const netPlan=(typeof simNetDuPlanIpc==="function")?simNetDuPlanIpc(cu.couche):"";
+  /* MAIS IL FAUT ASSEZ DE CUIVRE POUR QUE CE NET VEUILLE DIRE QUELQUE CHOSE,
+     et c'est la seconde moitié du correctif. Lire « le net du plus grand
+     versement » SANS regarder combien il en couvre fait passer pour un plan de
+     masse toute couche de signal qui porte trois thermals GND : sur Design1,
+     Conductor-1 — la couche des pistes, 6,8 % de cuivre plein — partait au
+     serveur en `role:"plane"`. Une couche de signal annoncée comme plan de
+     référence fausse la recherche du plan le plus proche, donc la hauteur,
+     donc [C] et [L] — en silence, et avec un chiffre crédible. Le net dit
+     LEQUEL des rôles, la surface dit S'IL Y EN A UN : les deux, jamais l'un
+     sans l'autre. Le type déclaré par le fichier, lui, reste souverain — c'est
+     le test `/PLANE/` juste en dessous, qui n'a pas besoin de cuivre pour
+     valoir. */
+  const c=V.couches[cu.couche];
+  const assez=!!(c&&c.tauxPlan>=LT_SEUIL_PLAN);
+  const netPlan=(assez&&typeof simNetDuPlanIpc==="function")
+                  ?simNetDuPlanIpc(cu.couche):"";
   if(/GND|MASSE|0V|VSS/i.test(netPlan))return "gnd";
   if(/VCC|VDD|\+|PWR|POWER|ALIM/i.test(netPlan))return "pwr";
   if(/PLANE/.test(typeStr))return "gnd";
-  const c=V.couches[cu.couche];
-  if(c&&c.tauxPlan>=LT_SEUIL_PLAN){
-    if(typeof simNetDuPlanIpc==="function"){
-      const net=simNetDuPlanIpc(cu.couche);
-      if(/VCC|VDD|\+|PWR|POWER|ALIM/i.test(net))return "pwr";
-    }
-    return "gnd";
-  }
+  if(assez)return "gnd";
   return "signal";
 }
 
@@ -1314,4 +1372,188 @@ function ltManques(){
   out.aucunPlan=!LT.cu.some(e=>e.plan);
   out.total=out.ep.length+out.er.length+out.epaisseur.length;
   return out;
+}
+
+/* ==========================================================================
+   Classification des Nets (PWR, GND, Signal) & Auto-détection
+   ========================================================================== */
+const MDL_GND_RE=/^(?:.*[_\-\.\+]|[adprf]|chassis|analog|digital|sys|iso|safety)?(?:gnd|masse|ground|earth|terre|0v|vss|vee|shield|blindage)(?:[_\-\.\+].*|[adprf]|iso|chassis|analog|digital|sys|safety|\d.*)?$/i;
+const MDL_PWR_RE=/^(\+|-)?\d+(\.\d+)?[vV]\d*$|^(\+|-)?\d+[vVpP]\d*[vV]?$|^(vcc|vdd|vbat|vbus|vin|vout|vsys|vmain|vcore|vio|avdd|dvdd|vdda|vddd|vref|vpp|pwr|power|alim|supply|pos|rail)([_\-\.]|$|\d)/i;
+const MDL_PWR_SUB_RE=/(\b|_|\-|\+)(vcc|vdd|vbat|vbus|vin|vout|vsys|vmain|vcore|vio|avdd|dvdd|3v3|5v|12v|1v8|2v5|0v9|1v2|1v0)(\b|_|\-|$)/i;
+
+/* Détecte la tension nominale d'un net à partir de son nom (ex: +3V3 -> 3.3, 1V8 -> 1.8, 1P2V -> 1.2) */
+function mdlDetecterTensionNet(nom){
+  if(!nom||typeof nom!=="string")return null;
+  const s=nom.trim();
+  let m=s.match(/(?:^|[_\-\.\+])(\d+)[vVpP](\d+)[vV]?(?:[_\-\.]|$)/i);
+  if(m)return parseFloat(m[1]+"."+m[2]);
+  m=s.match(/(?:^|[_\-\.\+])(\d+(?:\.\d+)?)[vV](?:[_\-\.]|$)/i);
+  if(m){
+    const v=parseFloat(m[1]);
+    if(v>0&&v<=1000)return v;
+  }
+  if(/^(vcc|vdd)$/i.test(s))return 3.3;
+  return null;
+}
+
+/* Analyse un net et propose une classification (PWR, GND ou Signal) */
+function mdlDetecterClasseNet(netObj, classesIpc, capGndNetSet){
+  const nom=netObj.nom||"";
+  if(!nom)return {classe:"signal", autoDetecte:true, autoRaison:"Sans nom", tensionNominale:null};
+
+  const tension=mdlDetecterTensionNet(nom);
+
+  // 1. Spécification explicite IPC-2581 si présente
+  if(classesIpc&&classesIpc[nom]){
+    const c=String(classesIpc[nom]).trim().toUpperCase();
+    if(/GROUND|GND/.test(c))
+      return {classe:"gnd", autoDetecte:true, autoRaison:"IPC-2581 netClass : "+c, tensionNominale:null};
+    if(/POWER|PWR/.test(c))
+      return {classe:"pwr", autoDetecte:true, autoRaison:"IPC-2581 netClass : "+c, tensionNominale:tension};
+    if(/SIGNAL/.test(c)&&!MDL_GND_RE.test(nom)&&!MDL_PWR_RE.test(nom)&&!MDL_PWR_SUB_RE.test(nom))
+      return {classe:"signal", autoDetecte:true, autoRaison:"IPC-2581 netClass : SIGNAL", tensionNominale:null};
+  }
+
+  // 2. Motif de nom : Masse (GND)
+  const nomEpure=nom.replace(/[\s_-]/g,"");
+  if(MDL_GND_RE.test(nom)||MDL_GND_RE.test(nomEpure)||/^(0v|vss|gnd)$/i.test(nomEpure)){
+    return {classe:"gnd", autoDetecte:true, autoRaison:"Nom de masse ("+nom+")", tensionNominale:null};
+  }
+
+  // 3. Motif de nom : Alimentation (PWR)
+  if(MDL_PWR_RE.test(nom)||MDL_PWR_SUB_RE.test(nom)||tension!=null){
+    return {classe:"pwr", autoDetecte:true, autoRaison:"Nom d'alimentation ("+nom+(tension?" "+tension+"V":"")+")", tensionNominale:tension};
+  }
+
+  // 4. Détection via les condensateurs de découplage vers GND
+  if(capGndNetSet&&capGndNetSet.has(nom)){
+    return {classe:"pwr", autoDetecte:true, autoRaison:"Relié au découplage (condensateurs vers GND)", tensionNominale:tension};
+  }
+
+  // 5. Grand plan de cuivre sur la carte
+  if(LT&&LT.aire>0){
+    let airePlans=0;
+    for(const pl of (netObj.plans||[])){
+      for(const ct of (pl.g||[])){
+        airePlans+=ltAire(ct.o);
+        for(const t of (ct.t||[]))airePlans-=ltAire(t);
+      }
+    }
+    const taux=airePlans/LT.aire;
+    if(taux>=0.25){
+      if(/masse|gnd|ground/i.test(nom))
+        return {classe:"gnd", autoDetecte:true, autoRaison:"Plan de masse étendu ("+Math.round(taux*100)+" %)", tensionNominale:null};
+      if(/vcc|vdd|pwr|power|alim|\+/i.test(nom))
+        return {classe:"pwr", autoDetecte:true, autoRaison:"Plan d'alimentation étendu ("+Math.round(taux*100)+" %)", tensionNominale:tension};
+    }
+  }
+
+  // 6. Défaut : Signal
+  return {classe:"signal", autoDetecte:true, autoRaison:"Signal par défaut", tensionNominale:null};
+}
+
+/* Auto-détecte les classes de tous les nets et initialise V.modele.netClasses */
+function mdlAutoDetecterClassesNets(classesIpc, classesPersist){
+  if(!V.parNet||!V.parNet.length)return;
+
+  // Repérer les nets GND potentiels pour trouver les condensateurs de découplage
+  const gndNets=new Set();
+  for(const n of V.parNet){
+    if(!n||!n.nom)continue;
+    if(classesPersist&&classesPersist[n.nom]==="gnd"){gndNets.add(n.nom);continue;}
+    if(classesIpc&&/GROUND|GND/i.test(classesIpc[n.nom])){gndNets.add(n.nom);continue;}
+    if(MDL_GND_RE.test(n.nom.replace(/[\s_-]/g,""))){gndNets.add(n.nom);continue;}
+  }
+
+  // Trouver les nets reliés à ces masses par des capacités (découplage)
+  const capPwrNets=new Set();
+  if(V.modele&&Array.isArray(V.modele.composants)&&gndNets.size>0){
+    for(const comp of V.modele.composants){
+      const isCap=/^[cC]/i.test(comp.ref||"")||/cap/i.test(comp.type||"")||/[pnum]F/i.test(comp.val||"");
+      if(!isCap)continue;
+      const netsDuComp=new Set();
+      for(const p of (comp.pads||[])){
+        const num=p.pad&&p.pad.n!=null?p.pad.n:-1;
+        const n=(num>=0&&num<V.parNet.length)?V.parNet[num].nom:"";
+        if(n)netsDuComp.add(n);
+      }
+      for(const pin of (comp.pins||[])){
+        const num=pin.n!=null?pin.n:-1;
+        const n=(num>=0&&num<V.parNet.length)?V.parNet[num].nom:"";
+        if(n)netsDuComp.add(n);
+      }
+      let aGnd=false;
+      const autres=[];
+      for(const n of netsDuComp){
+        if(gndNets.has(n))aGnd=true;
+        else autres.push(n);
+      }
+      if(aGnd){
+        for(const n of autres)capPwrNets.add(n);
+      }
+    }
+  }
+
+  // Appliquer la détection à chaque net
+  const mapClasses={};
+  for(const n of V.parNet){
+    if(!n||!n.nom)continue;
+    if(classesPersist&&classesPersist[n.nom]){
+      const cl=classesPersist[n.nom].toLowerCase();
+      n.classe=(cl==="pwr"||cl==="gnd")?cl:"signal";
+      n.autoDetecte=false;
+      n.autoRaison="Choix mémorisé";
+      n.tensionNominale=(n.classe==="pwr")?mdlDetecterTensionNet(n.nom):null;
+    }else{
+      const det=mdlDetecterClasseNet(n,classesIpc,capPwrNets);
+      n.classe=det.classe;
+      n.autoDetecte=true;
+      n.autoRaison=det.autoRaison;
+      n.tensionNominale=det.tensionNominale;
+    }
+    mapClasses[n.nom]=n.classe;
+  }
+  if(V.modele){
+    V.modele.netClasses=mapClasses;
+  }
+  V.netClasses=mapClasses;
+}
+
+/* Applique un dictionnaire de classes { [nomNet]: "pwr"|"gnd"|"signal" } */
+function mdlAppliquerClassesNets(dictClasses){
+  if(!dictClasses||!V.parNet)return;
+  if(!V.modele)V.modele={};
+  if(!V.modele.netClasses)V.modele.netClasses={};
+  for(const n of V.parNet){
+    if(!n||!n.nom)continue;
+    if(dictClasses[n.nom]!=null){
+      const cl=String(dictClasses[n.nom]).toLowerCase();
+      n.classe=(cl==="pwr"||cl==="gnd")?cl:"signal";
+      n.autoDetecte=false;
+      n.tensionNominale=(n.classe==="pwr")?mdlDetecterTensionNet(n.nom):null;
+      V.modele.netClasses[n.nom]=n.classe;
+    }
+  }
+  V.netClasses=Object.assign({},V.modele.netClasses);
+}
+
+/* Classe d'un net par son index dans V.parNet ("signal", "pwr", ou "gnd") */
+function mdlNetClasse(i){
+  const n=(i>=0&&V.parNet&&i<V.parNet.length)?V.parNet[i]:null;
+  return n?(n.classe||"signal"):"signal";
+}
+
+/* Définit manuellement la classe d'un net */
+function mdlNetPoserClasse(i,classe){
+  const n=(i>=0&&V.parNet&&i<V.parNet.length)?V.parNet[i]:null;
+  if(!n||!n.nom)return;
+  const cl=(classe==="pwr"||classe==="gnd")?classe:"signal";
+  n.classe=cl;
+  n.autoDetecte=false;
+  n.tensionNominale=(cl==="pwr")?mdlDetecterTensionNet(n.nom):null;
+  if(!V.modele)V.modele={};
+  if(!V.modele.netClasses)V.modele.netClasses={};
+  V.modele.netClasses[n.nom]=cl;
+  if(!V.netClasses)V.netClasses={};
+  V.netClasses[n.nom]=cl;
 }

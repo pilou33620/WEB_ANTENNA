@@ -607,6 +607,10 @@ ${(s&&s.n_tranches>1)?`<span class="chp-tranche">
 <span class="push"></span>
 <button class="tb mini" id="chpRafr" title="Relire le dossier de calcul">↻</button>`;
 
+  /* Même raison qu'à l'assistant : voir `antChampsFideles`. Ici c'est la
+     série, la composante et la palette qu'un rechargement ferait mentir. */
+  antChampsFideles(b);
+
   chpTransport();
   chpPied();
   chpLier();
@@ -634,6 +638,7 @@ function chpTransport(){
 ${(typeof MediaRecorder!=="undefined")?
  `<button class="tb mini${CHP.enreg?" danger":""}" id="chpFilm"
    title="Enregistrer l'animation en vidéo .webm">${CHP.enreg?"■ arrêter":"⏺ film"}</button>`:""}`;
+  antChampsFideles(t);
 }
 
 function chpCurseurSync(){

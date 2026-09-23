@@ -301,8 +301,9 @@ function peindreNet(c,dpr,net,mev){
   if(!g)return;
   poserMonde(c,dpr);
   const min=1/V.vue.scale;
+  const xtSurCuivre=typeof simXtSurCuivre==="function"&&simXtSurCuivre();
   c.strokeStyle="#ffffff"; c.fillStyle="#ffffff";
-  c.globalAlpha=0.85; c.lineCap="round"; c.lineJoin="round";
+  c.globalAlpha=xtSurCuivre?0.35:0.85; c.lineCap="round"; c.lineJoin="round";
   if(g.plans)for(const p of g.plans)c.fill(p,"evenodd");
   if(g.pads)c.fill(g.pads,"nonzero");
   for(const [w,chemin] of g.traits){

@@ -498,12 +498,7 @@ ${b.devis?`<div class="recap${b.devis.refus?" ko":""}">
    pour chacun — ils n'ont pas tous le même maillage —, mais il faut bien
    annoncer un ordre de grandeur avant d'appeler. */
 function antBalDuree(){
-  const m=ANT.modele;
-  if(!m)return 0;
-  const e=m.estimation;
-  const pas=Math.min(m.arret.nmax,
-                     Math.max(2000,Math.round(20/(m.bande.f0*e.dt_s))));
-  return e.cellules*pas/(e.mcps_suppose*1e6);
+  return antDureeModele(ANT.modele);
 }
 
 function antBalayageLier(box){

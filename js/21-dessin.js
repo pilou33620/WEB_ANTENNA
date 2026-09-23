@@ -363,11 +363,26 @@ function conPeindreGrille(c,dpr){
   c.save();
   c.strokeStyle="rgba(140,150,165,0.13)";
   c.lineWidth=0.7/V.vue.scale;
-  c.beginPath();
-  for(let x=0;x<=L+1e-9;x+=pas){ c.moveTo(x,0); c.lineTo(x,W); }
-  for(let y=0;y<=W+1e-9;y+=pas){ c.moveTo(0,y); c.lineTo(L,y); }
-  c.stroke();
+  c.stroke(conGrilleChemin(pas,L,W));
   c.restore();
+}
+
+/* LE QUADRILLAGE EST RETENU, comme les chemins de la visionneuse et ceux de
+   la surimpression (15-overlay2d.js) : il ne dépend que du pas retenu et de
+   la carte, pas de l'image. Le pas, lui, change par PALIERS — il suit la
+   suite 1-2-5 et ne bouge qu'en franchissant six pixels —, si bien qu'un zoom
+   continu ne reconstruit le chemin qu'aux quelques instants où le dessin
+   change vraiment. */
+const CON_GRILLE_CHEMIN={cle:"", chemin:null};
+
+function conGrilleChemin(pas,L,W){
+  const cle=pas+"|"+L+"|"+W;
+  if(CON_GRILLE_CHEMIN.cle===cle)return CON_GRILLE_CHEMIN.chemin;
+  const p=new Path2D();
+  for(let x=0;x<=L+1e-9;x+=pas){ p.moveTo(x,0); p.lineTo(x,W); }
+  for(let y=0;y<=W+1e-9;y+=pas){ p.moveTo(0,y); p.lineTo(L,y); }
+  CON_GRILLE_CHEMIN.cle=cle; CON_GRILLE_CHEMIN.chemin=p;
+  return p;
 }
 
 /* La forme choisie : un liseré, pas un aplat. On doit continuer de voir le

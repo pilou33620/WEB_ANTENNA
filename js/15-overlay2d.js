@@ -44,36 +44,54 @@ function antSurimpression(c,dpr,W,H){
    contour suffit à dire « il y a quelque chose ici », et la vue 3D dit à
    quelle hauteur.
    ------------------------------------------------------------------------- */
+/* DEUX CHEMINS, UN PAR COULEUR, construits une fois — même raison que pour le
+   cuivre retenu plus bas : ce sont les objets du modèle, ils ne bougent qu'avec
+   lui, et les redécrire à chaque image était du travail rendu au navigateur
+   pour un dessin identique. Le pointillé, lui, reste posé sur le contexte à
+   chaque image : son pas est en unités du monde, il DOIT suivre le zoom. */
+const ANT_OBJETS_CHEMINS={prims:null, k:0, metal:null, autre:null};
+
+function antObjetsChemins(m,k){
+  if(ANT_OBJETS_CHEMINS.prims===m.primitives&&ANT_OBJETS_CHEMINS.k===k)
+    return ANT_OBJETS_CHEMINS;
+  const metal=new Path2D(), autre=new Path2D();
+  for(const o of m.primitives){
+    const p=(o.materiau==="metal")?metal:autre;
+    if(o.type==="boite"){
+      p.rect(o.a[0]*k,o.a[1]*k,(o.b[0]-o.a[0])*k,(o.b[1]-o.a[1])*k);
+    }else if(o.type==="sphere"){
+      p.moveTo((o.c[0]+o.r)*k,o.c[1]*k);
+      p.arc(o.c[0]*k,o.c[1]*k,o.r*k,0,2*Math.PI);
+    }else if(o.type==="cylindre"){
+      p.moveTo(o.a[0]*k,o.a[1]*k); p.lineTo(o.b[0]*k,o.b[1]*k);
+      p.moveTo((o.a[0]+o.r)*k,o.a[1]*k);
+      p.arc(o.a[0]*k,o.a[1]*k,o.r*k,0,2*Math.PI);
+    }else{
+      o.pts.forEach((q,i)=>i?p.lineTo(q[0]*k,q[1]*k):p.moveTo(q[0]*k,q[1]*k));
+      /* Un fil vertical se projette en UN POINT : sans ce cercle, il
+         disparaîtrait de la vue de dessus alors qu'il est bien dans le
+         modèle. */
+      const r=Math.max(o.r,0.3)*k;
+      p.moveTo(o.pts[0][0]*k+r,o.pts[0][1]*k);
+      p.arc(o.pts[0][0]*k,o.pts[0][1]*k,r,0,2*Math.PI);
+    }
+  }
+  ANT_OBJETS_CHEMINS.prims=m.primitives; ANT_OBJETS_CHEMINS.k=k;
+  ANT_OBJETS_CHEMINS.metal=metal; ANT_OBJETS_CHEMINS.autre=autre;
+  return ANT_OBJETS_CHEMINS;
+}
+
 function antPeindreObjets(c,dpr){
   const m=ANT.modele;
   if(!m||!m.primitives||!m.primitives.length)return;
   const k=(V.unite==="in")?(1/25.4):1;
+  const ch=antObjetsChemins(m,k);
   poserMonde(c,dpr);
   c.save();
   c.lineWidth=1.2/V.vue.scale;
   c.setLineDash([4/V.vue.scale,3/V.vue.scale]);
-  for(const o of m.primitives){
-    c.strokeStyle=(o.materiau==="metal")?"#c8ccd2":"#8af0ff";
-    if(o.type==="boite"){
-      c.strokeRect(o.a[0]*k,o.a[1]*k,(o.b[0]-o.a[0])*k,(o.b[1]-o.a[1])*k);
-    }else if(o.type==="sphere"){
-      c.beginPath(); c.arc(o.c[0]*k,o.c[1]*k,o.r*k,0,2*Math.PI); c.stroke();
-    }else if(o.type==="cylindre"){
-      c.beginPath();
-      c.moveTo(o.a[0]*k,o.a[1]*k); c.lineTo(o.b[0]*k,o.b[1]*k); c.stroke();
-      c.beginPath(); c.arc(o.a[0]*k,o.a[1]*k,o.r*k,0,2*Math.PI); c.stroke();
-    }else{
-      c.beginPath();
-      o.pts.forEach((q,i)=>i?c.lineTo(q[0]*k,q[1]*k):c.moveTo(q[0]*k,q[1]*k));
-      c.stroke();
-      /* Un fil vertical se projette en UN POINT : sans ce cercle, il
-         disparaîtrait de la vue de dessus alors qu'il est bien dans le
-         modèle. */
-      c.beginPath();
-      c.arc(o.pts[0][0]*k,o.pts[0][1]*k,Math.max(o.r,0.3)*k,0,2*Math.PI);
-      c.stroke();
-    }
-  }
+  c.strokeStyle="#c8ccd2"; c.stroke(ch.metal);
+  c.strokeStyle="#8af0ff"; c.stroke(ch.autre);
   c.restore();
 }
 
@@ -86,6 +104,40 @@ function antPeindreObjets(c,dpr){
    faible opacité éclaircit sans effacer — on continue de lire de quelle
    couche il s'agit.
    ------------------------------------------------------------------------- */
+/* LES CHEMINS SONT RETENUS, ET C'EST LA MOITIÉ QUI MANQUAIT. 11-geometrie.js
+   garde déjà le RÉSULTAT de `antCuivreDuModele` — les tableaux de sommets ne
+   sont plus recalculés à chaque image. Mais les Path2D qu'on en tirait, eux,
+   l'étaient : un `new Path2D()` par bloc et un parcours de tous les sommets,
+   soixante fois par seconde pendant un déplacement. Sur un plan de masse
+   découpé à quelques milliers de sommets, c'est exactement ce que la
+   visionneuse évite depuis toujours en construisant ses chemins UNE FOIS
+   (`mdlChemins`, 02-modele.js) — la surimpression était le seul endroit qui
+   avait échappé à la règle, et c'est pour cela qu'une carte lourde traînait
+   ici et pas dans WEB_CAO.
+
+   LA CLÉ EST L'IDENTITÉ DU CUIVRE, et il n'en faut pas d'autre. Tant que
+   `antCuivreDuModele()` rend le MÊME objet, sa géométrie n'a pas bougé : ses
+   deux clés à lui — l'âge de l'état et l'identité de la carte — sont déjà la
+   bonne réponse à « qu'est-ce qui a changé ». En recopier les conditions ici
+   ferait deux vérités pour une seule question, et la seconde finirait par
+   dater. */
+const ANT_RETENU_CHEMINS={cuivre:null, chemins:null};
+
+function antRetenuChemins(cu){
+  if(ANT_RETENU_CHEMINS.cuivre===cu)return ANT_RETENU_CHEMINS.chemins;
+  const chemins=cu.blocs.map(function(bloc){
+    const p=new Path2D();
+    for(const poly of bloc.polys){
+      mdlPolyDans(p,poly.o);
+      for(const t of (poly.t||[]))mdlPolyDans(p,t);
+    }
+    return p;
+  });
+  ANT_RETENU_CHEMINS.cuivre=cu;
+  ANT_RETENU_CHEMINS.chemins=chemins;
+  return chemins;
+}
+
 function antPeindreRetenu(c,dpr){
   if(!ANT.nets.size&&!ANT.formes.length&&ANT.netMasse<0)return;
   const cu=antCuivreDuModele();
@@ -94,14 +146,7 @@ function antPeindreRetenu(c,dpr){
   poserMonde(c,dpr);
   c.save();
   c.fillStyle="rgba(255,255,255,0.30)";
-  for(const bloc of cu.blocs){
-    const p=new Path2D();
-    for(const poly of bloc.polys){
-      mdlPolyDans(p,poly.o);
-      for(const t of (poly.t||[]))mdlPolyDans(p,t);
-    }
-    c.fill(p,"evenodd");
-  }
+  for(const p of antRetenuChemins(cu))c.fill(p,"evenodd");
   c.restore();
 }
 
@@ -154,7 +199,36 @@ function antPeindreBoite(c,dpr){
 
 /* -------------------------------------------------------------------------
    Le maillage FDTD (grille Yee), vu de dessus
+   -------------------------------------------------------------------------
+   UNE GRILLE FINE EN COMPTE DES MILLIERS DE LIGNES, et c'est justement quand
+   elle est fine qu'on l'affiche pour la juger. La décrire à chaque image
+   revenait à dicter au navigateur, soixante fois par seconde, un dessin qui
+   ne change qu'avec le maillage. Il est donc retenu comme les autres : les
+   tableaux de coordonnées viennent du serveur, et leur identité suffit à dire
+   qu'ils n'ont pas bougé. L'emprise de la boîte entre dans la clé — elle
+   grandit avec les marges sans que le maillage change de tableau.
    ------------------------------------------------------------------------- */
+const ANT_MAILLAGE_CHEMIN={mx:null, my:null, cle:"", chemin:null};
+
+function antMaillageChemin(mx,my,k,x1,y1,x2,y2){
+  const cle=k+"|"+x1+"|"+y1+"|"+x2+"|"+y2;
+  if(ANT_MAILLAGE_CHEMIN.mx===mx&&ANT_MAILLAGE_CHEMIN.my===my&&
+     ANT_MAILLAGE_CHEMIN.cle===cle)
+    return ANT_MAILLAGE_CHEMIN.chemin;
+  const p=new Path2D();
+  for(let i=0;i<mx.length;i++){
+    const x=mx[i]*k;
+    p.moveTo(x,y1); p.lineTo(x,y2);
+  }
+  for(let j=0;j<my.length;j++){
+    const y=my[j]*k;
+    p.moveTo(x1,y); p.lineTo(x2,y);
+  }
+  ANT_MAILLAGE_CHEMIN.mx=mx; ANT_MAILLAGE_CHEMIN.my=my;
+  ANT_MAILLAGE_CHEMIN.cle=cle; ANT_MAILLAGE_CHEMIN.chemin=p;
+  return p;
+}
+
 function antPeindreMaillage(c,dpr){
   if(!ANT.vueMaillage)return;
   const m=ANT.modele;
@@ -169,18 +243,7 @@ function antPeindreMaillage(c,dpr){
   c.save();
   c.lineWidth=0.75/V.vue.scale;
   c.strokeStyle="rgba(63, 160, 234, 0.28)";
-  c.beginPath();
-  for(let i=0;i<mx.length;i++){
-    const x=mx[i]*k;
-    c.moveTo(x,y1);
-    c.lineTo(x,y2);
-  }
-  for(let j=0;j<my.length;j++){
-    const y=my[j]*k;
-    c.moveTo(x1,y);
-    c.lineTo(x2,y);
-  }
-  c.stroke();
+  c.stroke(antMaillageChemin(mx,my,k,x1,y1,x2,y2));
   c.restore();
 
   /* Étiquette en pixels CSS dans le coin supérieur gauche */
@@ -306,10 +369,13 @@ function antPortEn(wx,wy){
   ANT.port.y=+wy.toFixed(4);
   ANT.port.pose=true;
 
+  antAntenneSousPort(wx,wy);
   const trouve=antPisteSous(wx,wy);
   if(trouve){
-    ANT.port.w=+Math.max(trouve.w,0.05).toFixed(4);
-    ANT.port.l=ANT.port.w;
+    if(trouve.w>0){
+      ANT.port.w=+Math.max(trouve.w,0.05).toFixed(4);
+      ANT.port.l=ANT.port.w;
+    }
     ANT.port.de=V.couches[trouve.c]?V.couches[trouve.c].nom:ANT.port.de;
   }
   if(!ANT.port.de&&LT.cu.length)ANT.port.de=LT.cu[0].nom;
@@ -320,12 +386,65 @@ function antPortEn(wx,wy){
   antMaj(true);
 }
 
+/* POSER LE PORT SUR L'ANTENNE LA DÉSIGNE, QUAND RIEN NE L'A ÉTÉ. Le geste dit
+   « c'est ici qu'on alimente l'antenne » : si l'étape « Le cuivre » n'a rien
+   retenu, le cuivre sous le clic — hors net de masse — est l'antenne, et le
+   laisser dehors donnait un modèle fait de la seule masse, que le serveur
+   refuse (« Aucune antenne designee »). On ne touche à rien quand une antenne
+   est déjà désignée : ce qui a été choisi à la main ne se remplace pas au
+   passage. Ni quand la masse est un fourre-tout : il porte déjà toute la
+   carte, antenne comprise.
+
+   Ce qui est trouvé entre comme le ferait « Prendre la sélection » : par son
+   net quand c'en est un vrai, pièce par pièce sinon. */
+function antAntenneSousPort(wx,wy){
+  if(ANT.nets.size||ANT.formes.length)return null;
+  if(ANT.netMasse>=0&&antNetFourreTout(ANT.netMasse))return null;
+  let trouve=null;
+  const prendre=function(net,f){
+    if(trouve||net===ANT.netMasse)return;
+    trouve=(typeof net==="number"&&net>=0&&!antNetFourreTout(net))
+      ? {net:net,c:f.c} : {forme:f,c:f.c};
+  };
+  for(const couche of V.couches){
+    if(!couche.cuivre||!ANT.couches.has(couche.i))continue;
+    for(const q of couche.pads){
+      if(Math.hypot(wx-q.x,wy-q.y)>Math.max((q.d||0)/2,1e-6))continue;
+      prendre(q.pad?q.pad.n:-1,{k:"pad",c:q.c,o:q});
+    }
+    for(const p of couche.pistes){
+      const demi=Math.max((p.w||0)/2,1e-6);
+      for(let i=0;i+3<p.p.length;i+=2)
+        if(antDistSeg(wx,wy,p.p[i],p.p[i+1],p.p[i+2],p.p[i+3])<=demi){
+          prendre(p.n,{k:"piste",c:p.c,o:p}); break;
+        }
+    }
+    for(const g of couche.plans)
+      if(mdlPlanContient(g,wx,wy))prendre(g.n,{k:"plan",c:g.c,o:g});
+  }
+  if(!trouve)return null;
+  if(trouve.forme)antAjouterFormes([trouve.forme]);
+  else ANT.nets.add(trouve.net);
+  antVieillir();
+  if(typeof wsHint==="function")
+    wsHint("Antenne désignée par le port : "+
+           (trouve.forme?antFormeNom(trouve.forme)
+                        :"net « "+((V.parNet[trouve.net]||{}).nom||"?")+" »")+
+           ". Complétez-la à l'étape « Le cuivre » si elle a d'autres morceaux.");
+  return trouve;
+}
+
 /* La piste ou la pastille de cuivre retenue qui passe sous ce point, s'il y
    en a une. On ne cherche que dans le cuivre RETENU : cliquer à côté, sur une
-   piste qui n'est pas dans le modèle, ne doit pas donner sa largeur au port. */
+   piste qui n'est pas dans le modèle, ne doit pas donner sa largeur au port.
+
+   L'ANTENNE AVANT LA MASSE. Une antenne du dessous passe sous la masse du
+   dessus : au même point, la piste de masse de la couche 1 donnait au port sa
+   largeur ET sa couche — un port posé sur la mauvaise face. La masse ne sert
+   que si aucun cuivre de l'antenne n'est sous le clic. Un versement de
+   l'antenne compte aussi, pour la couche seulement (w:0 : il n'a pas de
+   largeur de piste à prêter). */
 function antPisteSous(wx,wy){
-  const nets=new Set(ANT.nets);
-  if(ANT.netMasse>=0)nets.add(ANT.netMasse);
   let meilleur=null, d2=Infinity;
 
   const piste=function(p){
@@ -342,13 +461,18 @@ function antPisteSous(wx,wy){
     const d=Math.hypot(wx-q.x,wy-q.y);
     if(d<=r&&d*d<d2){d2=d*d;meilleur={w:q.d||r*2,c:q.c};}
   };
-
-  for(const ni of nets){
+  const plan=function(g){
+    if(!meilleur&&ANT.couches.has(g.c)&&mdlPlanContient(g,wx,wy))
+      meilleur={w:0,c:g.c};
+  };
+  const parcourir=function(ni){
     const n=V.parNet[ni];
-    if(!n)continue;
+    if(!n)return;
     for(const p of n.pistes)piste(p);
     for(const q of n.pads)pastille(q);
-  }
+  };
+
+  for(const ni of ANT.nets)parcourir(ni);
   /* Les formes désignées à la main comptent autant : sur une carte sans nets,
      c'est le SEUL cuivre du modèle, et sans elles poser le port ne trouverait
      aucune largeur de piste sous le curseur. */
@@ -356,6 +480,10 @@ function antPisteSous(wx,wy){
     if(f.k==="piste")piste(f.o);
     else if(f.k==="pad")pastille(f.o);
   }
+  for(const ni of ANT.nets){ const n=V.parNet[ni]; if(n)for(const g of n.plans)plan(g); }
+  for(const f of ANT.formes)if(f.k==="plan")plan(f.o);
+  if(meilleur)return meilleur;
+  if(ANT.netMasse>=0&&!ANT.nets.has(ANT.netMasse))parcourir(ANT.netMasse);
   return meilleur;
 }
 

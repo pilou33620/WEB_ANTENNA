@@ -234,9 +234,20 @@ function antCuivreCalcul(){
     return blocs.get(ci);
   };
 
+  /* LE CUIVRE DE LA MASSE SEULE EST MARQUÉ (m:1). C'est le seul que le
+     serveur a le droit de retirer quand le plan de référence le cache à
+     l'antenne (voir `_masse_cachee`, python/openems_modele.py). Un net qui
+     est à la fois l'antenne et la masse n'est pas marqué : c'est l'antenne.
+     UN FOURRE-TOUT NON PLUS : pris comme masse sur un fichier sans
+     connectivité, il porte TOUTE la carte, antenne comprise — le marquer
+     ferait dire au serveur « aucune antenne » alors qu'elle y est, et lui
+     permettrait de la retirer comme de la masse cachée. */
   for(const ni of nets){
     const n=V.parNet[ni];
     if(!n)continue;
+    const masse=(ni===ANT.netMasse&&!ANT.nets.has(ni)&&!antNetFourreTout(ni));
+    const avant=new Map();
+    if(masse)for(const [ci,b] of blocs)avant.set(ci,b.polys.length);
 
     for(const p of n.pistes){
       if(!ANT.couches.has(p.c))continue;
@@ -272,6 +283,9 @@ function antCuivreCalcul(){
         const poly=antPadEnPoly(q);
         if(poly){bloc(q.c).polys.push({o:poly});compte.pads++;}
       }
+    if(masse)
+      for(const [ci,b] of blocs)
+        for(let k=avant.get(ci)||0;k<b.polys.length;k++)b.polys[k].m=1;
   }
 
   /* Les formes désignées une à une. `deja` répond à « cet objet est-il déjà

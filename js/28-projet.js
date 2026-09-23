@@ -182,6 +182,7 @@ function prjAntenne(){
     netMasse:ANT.netMasse,
     couches:Array.from(ANT.couches),
     avecVias:!!ANT.avecVias, avecPastilles:!!ANT.avecPastilles,
+    masseCachee:!!ANT.masseCachee,
     modeleCuivre:ANT.modeleCuivre,
     pertes:ANT.pertes,
     primitives:ANT.primitives,
@@ -256,8 +257,18 @@ function prjCapturer(nom){
     fichier:V.fichier||"",
     resultats:ANT.resultat
       ? {resultat:ANT.resultat,
+         /* LA DUREE ET L'AVANCEMENT PARTENT AVEC, et leur absence etait une
+            perte de donnees pure. Un projet relu rendait un rapport dont la
+            section « Metriques Solveur » disait « Duree : 0,0 s », « Pas
+            executes : — », « Vitesse moyenne : — » sur un calcul qui avait
+            tourne cinq heures : les trois seuls chiffres qui auraient dit
+            ce que le maillage coute reellement, et les trois qui n'etaient
+            pas sauves. Ce sont aussi ceux qui permettent de comparer la
+            duree annoncee a la duree vraie. */
          tache:ANT.tache?{id:ANT.tache.id, dossier:ANT.tache.dossier||"",
-                          etat:ANT.tache.etat}:null}
+                          etat:ANT.tache.etat,
+                          duree:ANT.tache.duree||0,
+                          avancement:ANT.tache.avancement||null}:null}
       : null
   };
   if(prjSource()==="dessin")doc.carte=null;
@@ -303,6 +314,7 @@ function prjAntAppliquer(a){
   if(isFinite(a.netMasse))ANT.netMasse=V.parNet[a.netMasse]?a.netMasse:-1;
   if(typeof a.avecVias==="boolean")ANT.avecVias=a.avecVias;
   if(typeof a.avecPastilles==="boolean")ANT.avecPastilles=a.avecPastilles;
+  if(typeof a.masseCachee==="boolean")ANT.masseCachee=a.masseCachee;
 
   if(["feuille","pec","volume"].indexOf(a.modeleCuivre)>=0)
     ANT.modeleCuivre=a.modeleCuivre;

@@ -228,6 +228,60 @@ function antMaj(immediat){
 }
 
 /* ==========================================================================
+   Un panneau ne montre QUE ce que l'état porte
+   --------------------------------------------------------------------------
+   LE NAVIGATEUR REMET LES CHAMPS COMME IL LES AVAIT LAISSÉS, et c'est une
+   panne qui ne se voit pas : au rechargement de la page — la reprise de
+   session en est un —, Chrome et Firefox réappliquent aux champs et aux
+   listes la valeur qu'ils portaient avant. Sans qu'aucun `change` ne parte,
+   donc sans que l'état en sache rien.
+
+   CE QUE ÇA DONNE. `antRaz()` vient de recréer un port vierge ; le panneau,
+   lui, affiche encore X = 4,726 mm et « Conductor-4 → Conductor-2 », restaurés
+   par le navigateur. Tout est cohérent à l'écran, le serveur refuse, et son
+   message parle de couches « ? » qu'on croit voir sélectionnées. Un panneau
+   qui ment sur l'état est pire qu'un panneau vide : on cherche la faute
+   partout ailleurs, et d'abord dans le solveur.
+
+   ON RÉÉCRIT DONC CE QUE LE RENDU A DÉCIDÉ, juste après l'avoir inséré.
+   `defaultValue`, `defaultChecked` et `defaultSelected` sont les attributs du
+   balisage — c'est-à-dire l'état, puisque c'est lui qui vient de les écrire ;
+   `value`, `checked` et `selected` sont ce que le navigateur montre. Les faire
+   coïncider rend la restauration inoffensive.
+
+   L'ÉTAT EST L'AUTORITÉ, ET JAMAIS L'INVERSE. Relire le champ pour en nourrir
+   l'état aurait l'air plus simple et ferait ADOPTER le fantôme : un port posé
+   à des coordonnées d'avant le rechargement, sur une carte qui n'est peut-être
+   plus la même, est exactement ce qu'il ne faut pas garder.
+
+   `autocomplete="off"` est posé au passage. Il ne répare pas ce rendu-ci — la
+   restauration a déjà eu lieu — mais il dit au navigateur de ne rien retenir
+   de ce champ, donc de n'avoir rien à restaurer la fois suivante.
+   ========================================================================== */
+function antChampsFideles(racine){
+  if(!racine||!racine.querySelectorAll)return;
+  racine.querySelectorAll("input,select,textarea").forEach(function(el){
+    el.setAttribute("autocomplete","off");
+    if(el.tagName==="SELECT"){
+      let n=-1;
+      for(let k=0;k<el.options.length;k++){
+        const o=el.options[k];
+        if(el.multiple)o.selected=o.defaultSelected;
+        else if(o.defaultSelected&&n<0)n=k;
+      }
+      /* Une liste simple SANS attribut `selected` montre sa première option :
+         c'est le défaut du HTML, et remettre -1 afficherait une case vide là
+         où le balisage dit « — choisir — ». */
+      if(!el.multiple)el.selectedIndex=(n>=0)?n:0;
+    }else{
+      const genre=String(el.type||"").toLowerCase();
+      if(genre==="checkbox"||genre==="radio")el.checked=el.defaultChecked;
+      else el.value=el.defaultValue;
+    }
+  });
+}
+
+/* ==========================================================================
    Le squelette
    ========================================================================== */
 function antAssistantRendre(forcer){
@@ -252,6 +306,10 @@ function antAssistantRendre(forcer){
   if((forcer&&!saisieEnCours)||corps.dataset.etape!==etapeId){
     corps.dataset.etape=etapeId;
     corps.innerHTML=ANT_CORPS[etapeId]();
+    /* AVANT DE BRANCHER, ET NON APRÈS : la liaison écrit dans l'état ce
+       qu'elle lit dans le champ. Un champ restauré par le navigateur qui
+       serait branché d'abord ferait entrer le fantôme dans l'état. */
+    antChampsFideles(corps);
     ANT_LIER[etapeId](corps);
   }else{
     antEtapeActualiser(etapeId,corps);
@@ -355,9 +413,7 @@ function antBilanRendre(){
      divisé par un débit supposé : la vérité dépend du processeur, du nombre
      de fils, de la mémoire. Annoncer « 14 min 32 s » serait une précision
      mensongère ; annoncer « quelques dizaines de minutes » est utile. */
-  const pas=Math.min(m.arret.nmax,
-                     Math.max(2000,Math.round(20/(m.bande.f0*e.dt_s))));
-  const secondes=e.cellules*pas/(e.mcps_suppose*1e6);
+  const secondes=antDureeModele(m);
 
   box.className="pnl-bar bilan";
   box.innerHTML=
@@ -396,7 +452,11 @@ function antDuree(s){
   if(!isFinite(s)||s<=0)return "—";
   if(s<90)return Math.round(s)+" s";
   if(s<5400)return Math.round(s/60)+" min";
-  return (s/3600).toFixed(1).replace(".",",")+" h";
+  /* Même écriture que `_duree_texte` côté serveur : « 3 h 06 », et non
+     « 3,1 h » à côté d'un avis qui dit l'autre. */
+  let h=Math.floor(s/3600), mn=Math.round((s-3600*h)/60);
+  if(mn===60){h++;mn=0;}
+  return h+" h "+String(mn).padStart(2,"0");
 }
 
 function antAvisHtml(avis){
@@ -486,12 +546,27 @@ ${sansNets?'<p class="alerte">Ce fichier ne déclare pas de connectivité : tout
     <small>${ANT.viasSupposes?("dont "+ANT.viasSupposes+" de portée non déclarée"):""}</small></label>
   <label class="ck"><input type="checkbox" id="antPads"${ANT.avecPastilles?" checked":""}>
     Les pastilles de ces nets</label>
+  <label class="ck"><input type="checkbox" id="antMasseCachee"${ANT.masseCachee?" checked":""}>
+    Garder toute la masse
+    <small>${antMasseCacheeNote()}</small></label>
 </div>
 
 <div class="recap" id="antCuivreRecap">
   ${antCuivreRecapHtml()}
 </div>`;
 };
+
+/* Ce que la case « Garder toute la masse » change, dit avec les chiffres du
+   dernier modèle vérifié quand il y en a un. */
+function antMasseCacheeNote(){
+  if(ANT.masseCachee)return "y compris derrière le plan de référence";
+  const mc=ANT.modele&&ANT.modele.masse_cachee;
+  if(mc&&mc.reference&&mc.retires){
+    const n=Object.values(mc.retires).reduce((a,b)=>a+b,0);
+    return "sinon "+aEnt(n)+" polygone(s) caché(s) par « "+aEsc(mc.reference)+" » sont retirés";
+  }
+  return "sinon la masse cachée par le plan de référence est retirée";
+}
 
 function antCuivreRecapHtml(){
   const cu=antCuivreDuModele();
@@ -544,6 +619,9 @@ ANT_LIER.cuivre=function(box){
   });
   box.querySelector("#antVias").onchange=function(){
     ANT.avecVias=this.checked; antMaj(true);
+  };
+  box.querySelector("#antMasseCachee").onchange=function(){
+    ANT.masseCachee=this.checked; antMaj(true);
   };
   box.querySelector("#antPads").onchange=function(){
     ANT.avecPastilles=this.checked; antMaj(true);

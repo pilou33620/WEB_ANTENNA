@@ -62,6 +62,10 @@ const ANT={
   couches:new Set(),           // index des couches de cuivre à modéliser
   avecVias:true,               // les perçages métallisés des nets retenus
   avecPastilles:true,          // les pastilles des nets retenus
+  /* Garder la masse que le plan de référence cache à l'antenne. Non par
+     défaut : un plan plein est opaque à ces fréquences, et cette masse-là
+     coûte du maillage sans rien changer de visible (voir `_masse_cachee`). */
+  masseCachee:false,
 
   /* -- 2. l'empilage ----------------------------------------------------- */
   /* « feuille » : surface sans épaisseur qui porte quand même la résistance
@@ -276,7 +280,7 @@ function antPortRetirer(i){
 function antPortDoc(p,i){
   const d={type:p.type||"localise", nom:"port "+(i+1),
            dir:p.dir, x:p.x, y:p.y, w:p.w, l:p.l, ecart:p.ecart,
-           R:p.R, de:p.de, a:p.a, excite:!!p.excite};
+           R:p.R, de:p.de, a:p.a, excite:!!p.excite, pose:!!p.pose};
   if(p.type==="coaxial"){
     d.ra=p.ra; d.rb=p.rb; d.er=p.er;
     d.ep_gaine=p.ep_gaine; d.longueur=p.longueur;
@@ -297,6 +301,18 @@ function antPortDoc(p,i){
 function antCoaxZ0(p){
   if(!(p.ra>0)||!(p.rb>p.ra)||!(p.er>0))return 0;
   return 59.9585/Math.sqrt(p.er)*Math.log(p.rb/p.ra);
+}
+
+/* LA DURÉE D'UN CALCUL, CELLE DU SERVEUR (`duree_estimee`,
+   python/openems_modele.py). La page en refaisait une à elle — vingt périodes
+   à f0 au lieu du garde-fou `nmax` — et le bandeau disait « 87 min » juste
+   au-dessus d'un avis qui disait « 3 h 06 ». Le calcul local ne sert plus
+   qu'aux modèles d'avant `duree_s` (un projet relu), avec la même formule. */
+function antDureeModele(m){
+  const e=m&&m.estimation;
+  if(!e)return 0;
+  if(isFinite(e.duree_s))return e.duree_s;
+  return e.cellules*m.arret.nmax/(e.mcps_suppose*1e6);
 }
 
 /* Multiplicateur de l'unité de fréquence affichée. */
@@ -338,6 +354,15 @@ function antRaz(){
                 croise:false, source2:"", min2:0, max2:0, pas2:0,
                 points:[], devis:null};
   document.body.classList.remove("pose-port");
+  /* LE PANNEAU EST PÉRIMÉ DÈS QUE L'ÉTAT L'EST. `antAssistantRendre` ne
+     reconstruit une étape que si elle CHANGE : après une remise à neuf,
+     l'étape affichée peut être la même, et ses champs montreraient alors la
+     carte d'avant — position du port comprise. Effacer le repère force la
+     reconstruction au prochain rendu, quel qu'il soit. */
+  /* `dataset` est testé : le banc d'essai (test/banc-interface.js) charge ces
+     modules sans navigateur, avec un document en trompe-l'œil. */
+  const corpsAssistant=document.getElementById("assistantCorps");
+  if(corpsAssistant&&corpsAssistant.dataset)corpsAssistant.dataset.etape="";
   ANT.boite={mx:0,my:0,mz_haut:0,mz_bas:0,pml:8};
   ANT.maillage={res_air:0,res_die:0,tiers:true};
   ANT.primitives=[];
@@ -514,6 +539,7 @@ function antDocument(){
     arret:{energie:ANT.arret.energie, nmax:ANT.arret.nmax},
     nf2ff:{actif:ANT.nf2ff.actif},
     pertes:{mode:ANT.pertes.mode, f_kappa:ANT.pertes.f_kappa},
+    masse:{cachee:!!ANT.masseCachee},
     primitives:ANT.primitives,
     dumps:{actif:ANT.dumps.actif, types:ANT.dumps.types.slice(),
            mode:ANT.dumps.mode, region:ANT.dumps.region,

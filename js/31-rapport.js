@@ -917,6 +917,37 @@ function rapGenererMarkdown(d, diags){
          + (d.maillage.res_fin_mm ? ", bandes fines = " + rapNb(d.maillage.res_fin_mm, 3) + " mm sur "
             + (d.maillage.bandes_x + d.maillage.bandes_y) + " bande(s)" : ""));
   L.push("- Pas de temps CFL : " + rapNb(d.maillage.dt_ps, 4) + " ps");
+  /* LA PLUS PETITE CELLULE, ENFIN ECRITE. Le tableau HTML la montrait déjà ;
+     le Markdown — celui qu'on relit trois jours plus tard pour comprendre
+     pourquoi un calcul a duré cinq heures — ne la portait pas, et c'est
+     pourtant LE chiffre qui commande le pas de temps, donc le nombre de pas,
+     donc la facture. `cellule.pincee` nomme en plus les deux lignes qui la
+     bornent et leur rang : voir `_pincee` dans python/openems_modele.py. */
+  if(d.maillage.min_cell_mm && d.maillage.min_cell_mm.length){
+    const pc = Math.min.apply(null, d.maillage.min_cell_mm);
+    const c  = d.maillage.cellule;
+    let t = "- Plus petite cellule : " + rapNb(pc, 4) + " mm";
+    if(c && c.axe) t += " en " + c.axe;
+    if(pc > 0 && d.maillage.res_die_mm > 0)
+      t += ", soit " + rapNb(d.maillage.res_die_mm / pc, 1)
+         + " fois moins que le pas visé";
+    if(c && c.pincee)
+      t += " — entre " + rapNb(c.pincee.a, 4) + " (" + c.pincee.rang_a
+         + ") et " + rapNb(c.pincee.b, 4) + " (" + c.pincee.rang_b + ")";
+    else if(c && c.couche)
+      t += " — la couche « " + c.couche + " »";
+    L.push(t + ". Le pas de temps est commandé par elle seule.");
+  }
+  /* LA CHARGE, C'EST-A-DIRE CE QUE LE CALCUL COUTE VRAIMENT. Ni les cellules
+     ni les pas ne disent rien tout seuls : c'est leur PRODUIT qui se paie en
+     heures, et c'est lui qu'on veut pouvoir comparer d'un maillage à
+     l'autre. */
+  if(d.maillage.cellules && d.solver.nmax){
+    const charge = d.maillage.cellules * d.solver.nmax;
+    L.push("- Charge : " + Math.round(d.maillage.cellules) + " cellules × "
+           + d.solver.nmax + " pas = " + charge.toExponential(2)
+           + " mises à jour");
+  }
   L.push("");
 
   // 7. Solveur

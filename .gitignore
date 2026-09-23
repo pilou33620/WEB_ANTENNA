@@ -27,7 +27,7 @@ ParaView-*
 paraview-*
 
 # =============================================================================
-# Caches et artefacts Python
+# Caches et artefacts Python & Node
 # =============================================================================
 __pycache__/
 *.py[cod]
@@ -37,6 +37,10 @@ dist/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
+.coverage
+htmlcov/
+node_modules/
 
 # =============================================================================
 # Fichiers temporaires de calcul, scratch et sorties volumineuses
@@ -46,8 +50,62 @@ scratch_*.json
 *.vtr
 *.vts
 *.vti
+*.vtk
+*.vtu
+*.pvtr
+*.pvtu
 *.h5
 *.hdf5
+dump/
+dumps/
+*.log
+
+# =============================================================================
+# Projets locaux, calculs et réglages utilisateur
+# =============================================================================
+# Dossiers de travail choisis localement par l'utilisateur
+projets/
+projects/
+calculs/
+.antenne-openems.json
+croisement-*.json
+!croisement-g-y0.json
+
+# =============================================================================
+# Exports de simulation (Touchstone, vidéos, rapports)
+# =============================================================================
+# Fichiers Touchstone (paramètres S exportés)
+*.s1p
+*.s2p
+*.s3p
+*.s4p
+*.snp
+*.ts
+
+# Captures vidéo de champ de la visionneuse
+*.webm
+*.mp4
+*.avi
+*.gif
+
+# Rapports générés
+rapport*.html
+rapport*.pdf
+rapport*.md
+
+# =============================================================================
+# Fichiers de fabrication et cartes locales (IPC-2581 lourds)
+# =============================================================================
+# Seuls les fichiers d'essai du dépôt (antenna4c.xml, test/*.xml) sont suivis.
+# Les exports industriels lourds testés localement ne doivent pas être versionnés.
+*.xml
+!antenna4c.xml
+!test/*.xml
+!test/**/*.xml
+*.cvg
+*.ipc
+*.ipc2581
+*.zip
 
 # =============================================================================
 # Le secret du mode IA
@@ -58,10 +116,15 @@ scratch_*.json
 api_key_free_ia_studio.txt
 
 # =============================================================================
-# IDEs, éditeurs et OS
+# IDEs, éditeurs, assistants IA et OS
 # =============================================================================
 .vscode/
 .idea/
+.claude/*
+!.claude/launch.json
+.cursor/
+.windsurf/
+.antigravity/
 *.sublime-project
 *.sublime-workspace
 *.swp
@@ -70,3 +133,9 @@ api_key_free_ia_studio.txt
 .DS_Store
 Thumbs.db
 desktop.ini
+Nouveau dossier/
+New folder/
+*.tmp
+*.temp
+tmp/
+temp/

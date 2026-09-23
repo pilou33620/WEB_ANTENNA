@@ -285,6 +285,7 @@ class UserShape:
 @dataclass
 class Net:
     name: str
+    net_class: str = ""
     tracks: List[Track] = field(default_factory=list)
     arcs: List[Arc] = field(default_factory=list)
     copper_planes: List[CopperPlane] = field(default_factory=list)
@@ -309,6 +310,10 @@ class IPCDesign:
     shapes: Dict[str, ShapeDefinition] = field(default_factory=dict)
     user_shapes: Dict[str, UserShape] = field(default_factory=dict)
     texts: List[TextElement] = field(default_factory=list)
+    # Calques du fichier volontairement laisses de cote (serigraphie, masque,
+    # cotation, keepouts...) : nom -> layerFunction. Voir le filtre de
+    # IPC2581Parser._role_calque.
+    ignored_layers: Dict[str, str] = field(default_factory=dict)
 
     def get_or_create_net(self, net_name: str) -> Net:
         if net_name not in self.nets:

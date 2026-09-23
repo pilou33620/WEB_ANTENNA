@@ -284,20 +284,26 @@ function ltSurchargerRole(cle, role){
 /* ==========================================================================
    Nets
    ========================================================================== */
+let PNL_NETS_CLASSE_FILTRE="tous";
+
 function pnlNets(){
   const box=$("listeNets");
   if(!V.modele){box.innerHTML="";return;}
   const f=($("filtreNets").value||"").trim().toLowerCase();
+  const fc=PNL_NETS_CLASSE_FILTRE;
   const liste=V.parNet
-    .filter(n=>n.nom&&(!f||n.nom.toLowerCase().indexOf(f)>=0))
+    .filter(n=>n.nom&&(!f||n.nom.toLowerCase().indexOf(f)>=0)&&(fc==="tous"||(n.classe||"signal")===fc))
     .sort(function(a,b){return a.nom.localeCompare(b.nom,"fr",{numeric:true});});
   if(!liste.length){
-    box.innerHTML='<div class="rien">'+(f?"Aucun net ne correspond.":"Aucun net.")+"</div>";
+    box.innerHTML='<div class="rien">'+(f?"Aucun net ne correspond.":"Aucun net dans cette catégorie.")+"</div>";
     return;
   }
   const vus=liste.slice(0,PNL_MAX);
   box.innerHTML=vus.map(function(n){
+    const cl=n.classe||"signal";
+    const badge='<span class="badge-net badge-'+cl+'">'+cl.toUpperCase()+'</span>';
     return '<button class="ligne'+(selNets().has(n.i)?" on":"")+'" data-net="'+n.i+'">'
+      +badge
       +"<b>"+mdlEsc(n.nom)+"</b>"
       +'<span class="cpt">'+n.pistes.length+" p · "+mdlNb(n.longueur,1)+" "+V.unite
       +(n.trous.length?" · "+n.trous.length+" ⌀":"")+"</span></button>";
@@ -309,6 +315,201 @@ function pnlNets(){
     /* Ctrl+clic ajoute, ici comme sur la carte : on compare souvent trois nets
        qu'on trouve par leur nom plutôt qu'en les cherchant du curseur. */
     b.onclick=function(ev){ choisirNet(+b.dataset.net, ev.ctrlKey||ev.metaKey); };
+  });
+
+  // Mettre à jour l'état actif des boutons de filtre dans le panneau
+  const barF=$("barFiltreClassesNets");
+  if(barF){
+    barF.querySelectorAll("[data-filtre-classe]").forEach(function(btn){
+      btn.classList.toggle("on", btn.dataset.filtreClasse===PNL_NETS_CLASSE_FILTRE);
+    });
+  }
+}
+
+/* =============================================================================
+   Modale de Classification des Nets (PWR, GND, Signal) & Préréglages Simulation
+   ============================================================================= */
+let MODALE_NETS_FILTRE = "tous";
+let MODALE_NETS_RECHERCHE = "";
+
+function ouvrirModalNets(){
+  if(!V.modele||!V.parNet||!V.parNet.length)return;
+  const mod=$("modaleNets");
+  if(!mod)return;
+  mod.hidden=false;
+  MODALE_NETS_FILTRE="tous";
+  MODALE_NETS_RECHERCHE="";
+  const inRech=$("rechercheModaleNets");
+  if(inRech)inRech.value="";
+  mettreAJourBoutonsFiltreModale();
+  mettreAJourKpiModaleNets();
+  rendreModalNets();
+  mettreAJourApercuPrereglages();
+}
+
+function fermerModalNets(){
+  const mod=$("modaleNets");
+  if(mod)mod.hidden=true;
+}
+
+function validerModalNets(){
+  if(typeof simAppliquerPrereglagesClassesNets==="function"){
+    simAppliquerPrereglagesClassesNets();
+  }
+  if(typeof prefEcrire==="function")prefEcrire();
+  pnlNets();
+  pnlDetail();
+  pnlInfos();
+  const gnd=V.parNet.filter(n=>n.classe==="gnd").length;
+  const pwr=V.parNet.filter(n=>n.classe==="pwr").length;
+  const sig=V.parNet.filter(n=>n.classe==="signal").length;
+  hint("Nets classifiés : "+gnd+" masse(s) [GND], "+pwr+" alim [PWR], "+sig+" signal. Préréglages appliqués.");
+  fermerModalNets();
+}
+
+function reinitialiserAutoDetectionModaleNets(){
+  if(typeof mdlAutoDetecterClassesNets==="function"){
+    mdlAutoDetecterClassesNets(V.modele?V.modele.classes_nets:null, null);
+  }
+  mettreAJourKpiModaleNets();
+  rendreModalNets();
+  mettreAJourApercuPrereglages();
+}
+
+function toutSignalModaleNets(){
+  if(!V.parNet)return;
+  for(const n of V.parNet){
+    if(!n||!n.nom)continue;
+    mdlNetPoserClasse(n.i,"signal");
+  }
+  mettreAJourKpiModaleNets();
+  rendreModalNets();
+  mettreAJourApercuPrereglages();
+}
+
+function mettreAJourBoutonsFiltreModale(){
+  const grp=$("grpFiltreModale");
+  if(grp){
+    grp.querySelectorAll("[data-filtre]").forEach(function(b){
+      b.classList.toggle("on", b.dataset.filtre===MODALE_NETS_FILTRE);
+    });
+  }
+  const kpiBox=$("modaleNetsKpi");
+  if(kpiBox){
+    kpiBox.querySelectorAll(".kpi-chip").forEach(function(c){
+      c.classList.toggle("actif", c.dataset.filter===MODALE_NETS_FILTRE);
+    });
+  }
+}
+
+function mettreAJourKpiModaleNets(){
+  if(!V.parNet)return;
+  let gnd=0, pwr=0, sig=0;
+  for(const n of V.parNet){
+    if(!n||!n.nom)continue;
+    if(n.classe==="gnd")gnd++;
+    else if(n.classe==="pwr")pwr++;
+    else sig++;
+  }
+  if($("kpiTotalNets"))$("kpiTotalNets").textContent=V.parNet.length;
+  if($("kpiGndNets"))$("kpiGndNets").textContent=gnd;
+  if($("kpiPwrNets"))$("kpiPwrNets").textContent=pwr;
+  if($("kpiSigNets"))$("kpiSigNets").textContent=sig;
+}
+
+function mettreAJourApercuPrereglages(){
+  const el=$("simPresetsDetail");
+  if(!el||!V.parNet)return;
+  const gndNets=V.parNet.filter(n=>n.classe==="gnd");
+  const pwrNets=V.parNet.filter(n=>n.classe==="pwr");
+  const sigNets=V.parNet.filter(n=>n.classe==="signal");
+
+  let railPdn="aucun";
+  let voltPdn="";
+  if(pwrNets.length){
+    let best=pwrNets[0];
+    let maxSc=-1;
+    for(const p of pwrNets){
+      const sc=(p.pads?p.pads.length:0)+(p.trous?p.trous.length:0)+(/3v3|vdd|vcc|5v/i.test(p.nom)?100:0);
+      if(sc>maxSc){best=p; maxSc=sc;}
+    }
+    railPdn=best.nom;
+    const v=best.tensionNominale||((typeof mdlDetecterTensionNet==="function")?mdlDetecterTensionNet(best.nom):null);
+    voltPdn=v?" ("+v+" V)":"";
+  }
+
+  el.innerHTML='<span>🟢 <b>Plans de masse SI :</b> '+(gndNets.length?gndNets.length+' net(s) configuré(s) comme référence de retour RF ('+gndNets.map(n=>mdlEsc(n.nom)).slice(0,3).join(", ")+(gndNets.length>3?'…':'')+')':'aucun net de masse')+'.</span>'
+    +'<br><span>⚡ <b>Intégrité d\'alimentation PI :</b> '+(pwrNets.length?pwrNets.length+' rail(s) PWR. Rail actif : <b>'+mdlEsc(railPdn)+'</b>'+voltPdn+' pour l\'impédance cible PDN & découplages.':'aucun rail détecté')+'.</span>'
+    +'<br><span>〰 <b>Signaux haute vitesse SI :</b> '+sigNets.length+' net(s) privilégié(s) pour l\'impédance de ligne (50 Ω, différentiel) et diaphonie.</span>';
+}
+
+function rendreModalNets(){
+  const tbody=$("corpsTableNetsModal");
+  if(!tbody||!V.parNet)return;
+  const f=(MODALE_NETS_RECHERCHE||"").trim().toLowerCase();
+  const fc=MODALE_NETS_FILTRE;
+
+  const liste=V.parNet.filter(function(n){
+    if(!n||!n.nom)return false;
+    if(f&&n.nom.toLowerCase().indexOf(f)<0)return false;
+    if(fc==="tous")return true;
+    return (n.classe||"signal")===fc;
+  }).sort(function(a,b){
+    return a.nom.localeCompare(b.nom,"fr",{numeric:true});
+  });
+
+  if(!liste.length){
+    tbody.innerHTML='<tr><td colspan="4" class="rien" style="text-align:center;padding:24px">Aucun net ne correspond au filtre.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML=liste.slice(0,300).map(function(n){
+    const cl=n.classe||"signal";
+    const geo=[
+      mdlNb(n.longueur,1)+" "+V.unite,
+      n.pistes.length+" p",
+      n.trous.length+" ⌀",
+      (n.plans.length?n.plans.length+" plan(s)":"")
+    ].filter(Boolean).join(" · ");
+
+    const raison=n.autoDetecte
+      ? 'Auto : <b>'+mdlEsc(n.autoRaison||"—")+'</b>'
+      : '<span style="color:var(--cyan)">Manuel</span>';
+
+    return '<tr data-net-id="'+n.i+'">'
+      +'<td class="net-nom"><b>'+mdlEsc(n.nom)+'</b></td>'
+      +'<td class="net-geo">'+geo+'</td>'
+      +'<td>'
+      +'  <div class="seg-ctrl" data-net-seg="'+n.i+'">'
+      +'    <button class="seg-btn'+(cl==="gnd"?" on gnd":"")+'" data-type="gnd" title="Classer en masse (GND)">⏚ GND</button>'
+      +'    <button class="seg-btn'+(cl==="pwr"?" on pwr":"")+'" data-type="pwr" title="Classer en alimentation (PWR)">⚡ PWR</button>'
+      +'    <button class="seg-btn'+(cl==="signal"?" on sig":"")+'" data-type="signal" title="Classer en signal">〰 Signal</button>'
+      +'  </div>'
+      +'</td>'
+      +'<td class="net-det">'+raison+'</td>'
+      +'</tr>';
+  }).join("")
+  +(liste.length>300?'<tr><td colspan="4" class="rien" style="text-align:center">… et '+(liste.length-300)+' autres : affinez la recherche.</td></tr>':'');
+
+  // Brancher les clics sur les boutons segmentés
+  tbody.querySelectorAll("[data-net-seg]").forEach(function(ctrl){
+    const idx=+ctrl.dataset.netSeg;
+    ctrl.querySelectorAll("[data-type]").forEach(function(btn){
+      btn.onclick=function(){
+        const typ=btn.dataset.type;
+        if(typeof mdlNetPoserClasse==="function")mdlNetPoserClasse(idx,typ);
+        ctrl.querySelectorAll(".seg-btn").forEach(function(b){
+          b.className="seg-btn"+(b.dataset.type===typ?" on "+(typ==="signal"?"sig":typ):"");
+        });
+        const tr=ctrl.closest("tr");
+        if(tr){
+          const det=tr.querySelector(".net-det");
+          if(det)det.innerHTML='<span style="color:var(--cyan)">Manuel</span>';
+        }
+        mettreAJourKpiModaleNets();
+        mettreAJourApercuPrereglages();
+      };
+    });
   });
 }
 
@@ -522,8 +723,16 @@ function pnlDetail(){
   if(V.net>=0){
     const n=V.parNet[V.net];
     const couches=[...n.couches].map(mdlCoucheNom).filter(Boolean).join(", ");
+    const cl=n.classe||"signal";
+    const badge='<span class="badge-net badge-'+cl+'">'+cl.toUpperCase()+'</span>';
+    const selClasse='<span class="seg-ctrl pnl-classe-sel">'
+      +'<button class="seg-btn'+(cl==="gnd"?" on gnd":"")+'" data-set-classe="gnd" title="Classer en masse (GND)">GND</button>'
+      +'<button class="seg-btn'+(cl==="pwr"?" on pwr":"")+'" data-set-classe="pwr" title="Classer en alimentation (PWR)">PWR</button>'
+      +'<button class="seg-btn'+(cl==="signal"?" on sig":"")+'" data-set-classe="signal" title="Classer en signal">Signal</button>'
+      +'</span>';
     h+='<div class="fiche"><h3>Net</h3><table>'
-      +l("Nom",'<span class="val">'+mdlEsc(n.nom)+"</span>")
+      +l("Nom",badge+'<span class="val">'+mdlEsc(n.nom)+"</span>")
+      +l("Classification",selClasse)
       +l("Longueur",mdlMes(n.longueur,2))
       +l("Pistes",n.pistes.length+(n.arcs.length?" + "+n.arcs.length+" arc(s)":""))
       +l("Pastilles",n.pads.length)
@@ -617,6 +826,15 @@ function pnlDetail(){
     b.onclick=function(){
       const v=b.dataset.vsel;
       if(v==="rien")choisirRien(); else selOter(+v);
+    };
+  });
+  box.querySelectorAll("[data-set-classe]").forEach(function(b){
+    b.onclick=function(e){
+      e.stopPropagation();
+      const cl=b.dataset.setClasse;
+      if(typeof mdlNetPoserClasse==="function")mdlNetPoserClasse(V.net,cl);
+      if(typeof simAppliquerPrereglagesClassesNets==="function")simAppliquerPrereglagesClassesNets();
+      pnlNets(); pnlDetail(); dessiner();
     };
   });
 }

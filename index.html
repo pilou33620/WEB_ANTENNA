@@ -320,7 +320,14 @@
     <div class="pnl-body">
       <div class="pnl-bar">
         <input type="search" id="filtreNets" placeholder="filtrer…" autocomplete="off">
+        <button class="tb mini" id="bNetClasser" title="Classifier les nets (PWR, GND, Signal)">⚡ Classifier</button>
         <button class="tb mini" id="bNetRien" title="Ne plus mettre de net en évidence">✕</button>
+      </div>
+      <div class="pnl-bar" id="barFiltreClassesNets">
+        <button class="tb mini on" data-filtre-classe="tous">Tous</button>
+        <button class="tb mini" data-filtre-classe="signal">Signal</button>
+        <button class="tb mini" data-filtre-classe="pwr">PWR</button>
+        <button class="tb mini" data-filtre-classe="gnd">GND</button>
       </div>
       <div class="scroll" id="listeNets"></div>
     </div>
@@ -362,6 +369,67 @@
 <div id="dropZone"></div>
 <div id="dragGhost"></div>
 <div id="rapportModal" class="rap-modal" hidden></div>
+
+<!-- Modale de classification des nets (PWR, GND, Signal) & Préréglages Simulation -->
+<div id="modaleNets" class="modal-overlay" hidden>
+  <div class="modal-box modale-nets-box">
+    <header class="modal-head">
+      <div>
+        <h3>⚡ Classification des Nets &amp; Préréglages Simulation</h3>
+        <small id="modaleNetsSousTitre">Assignez chaque net en PWR, GND ou Signal pour configurer automatiquement les simulations SI / PI.</small>
+      </div>
+      <button class="pnl-btn" id="bModaleNetsFermer" title="Fermer">✕</button>
+    </header>
+    <div class="modal-body">
+      <div class="kpi-bar" id="modaleNetsKpi">
+        <div class="kpi-chip kpi-total">Total : <b id="kpiTotalNets">0</b> nets</div>
+        <div class="kpi-chip kpi-gnd" data-filter="gnd" title="Filtrer les masses">⏚ GND (Masse) : <b id="kpiGndNets">0</b></div>
+        <div class="kpi-chip kpi-pwr" data-filter="pwr" title="Filtrer les alimentations">⚡ PWR (Alim) : <b id="kpiPwrNets">0</b></div>
+        <div class="kpi-chip kpi-sig" data-filter="signal" title="Filtrer les signaux">〰 Signal : <b id="kpiSigNets">0</b></div>
+      </div>
+
+      <div class="modal-ctrls">
+        <input type="search" id="rechercheModaleNets" placeholder="Rechercher un net par nom..." autocomplete="off">
+        <div class="btn-group-filtre" id="grpFiltreModale">
+          <button class="tb mini on" data-filtre="tous">Tous</button>
+          <button class="tb mini" data-filtre="gnd">⏚ GND</button>
+          <button class="tb mini" data-filtre="pwr">⚡ PWR</button>
+          <button class="tb mini" data-filtre="signal">〰 Signal</button>
+        </div>
+        <div class="actions-lot">
+          <button class="tb mini" id="bModaleAutoDetect" title="Relancer l'auto-détection automatique sur tous les nets">✨ Auto-détection</button>
+          <button class="tb mini" id="bModaleToutSignal" title="Passer tous les nets affichés en Signal">Tout Signal</button>
+        </div>
+      </div>
+
+      <div class="scroll table-wrap">
+        <table class="table-nets-modal">
+          <thead>
+            <tr>
+              <th style="width:28%">Net</th>
+              <th style="width:24%">Détails (cuivre / vias / plans)</th>
+              <th style="width:26%">Classification</th>
+              <th style="width:22%">Origine / Motif</th>
+            </tr>
+          </thead>
+          <tbody id="corpsTableNetsModal"></tbody>
+        </table>
+      </div>
+
+      <div class="sim-presets-banner" id="simPresetsBanner">
+        <div class="banner-title">🎯 Préréglages de simulation configurés automatiquement :</div>
+        <div class="banner-content" id="simPresetsDetail"></div>
+      </div>
+    </div>
+    <footer class="modal-foot">
+      <span class="foot-hint" id="modaleNetsHint"></span>
+      <div class="foot-acts">
+        <button class="tb" id="bModaleNetsAnnuler">Passer</button>
+        <button class="tb on" id="bModaleNetsValider">✓ Valider et appliquer les préréglages</button>
+      </div>
+    </footer>
+  </div>
+</div>
 
 <footer>
   <span>Fichier <b id="fNom">—</b></span>

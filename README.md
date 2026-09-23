@@ -89,15 +89,15 @@ essais figure dans l'état renvoyé à la page.
 
 ```
 ├── web_antenna.py          le serveur : trois choses qu'un navigateur ne sait pas faire
-├── index.html              la page
+├── index.html              la page, avec la modale de classification des nets (PWR, GND, Signal)
 ├── css/
-│   ├── theme.css           le thème « dashboard nocturne »
+│   ├── theme.css           le thème « dashboard nocturne » et les styles des modales / badges
 │   ├── workspace.css       les panneaux détachables
 │   ├── antenne.css         ce que cet outil ajoute
 │   └── ia.css              le panneau de l'assistant IA, repris de WEB_CAO
 ├── js/
-│   ├── 00 … 06             lire et afficher la carte IPC-2581
-│   ├── 10 … 16             l'outil : état, géométrie, assistant, 3D, résultats
+│   ├── 00 … 06             lire, afficher et classifier la carte IPC-2581 (GND, PWR, Signal)
+│   ├── 10 … 16             l'outil : état, géométrie, assistant, 3D, surimpression 2D accélérée Path2D
 │   ├── 17-objets.js        les objets qui ne sont pas sur la carte
 │   ├── 18-champs.js        enregistrer les champs, et aller les regarder
 │   ├── 19-demarrage.js     les branchements
@@ -109,26 +109,26 @@ essais figure dans l'état renvoyé à la page.
 │   ├── 28-projet.js        capturer la séance, et la reprendre
 │   ├── 29-tableau-s.js     le tableau S complet, et son fichier Touchstone
 │   ├── 30-ia.js            l'assistant IA : vérification locale, et le modèle si on veut
-│   ├── 31-rapport.js       le rapport d'ingénierie
+│   ├── 31-rapport.js       le rapport d'ingénierie (avec charge cellules × nmax et localisation de la plus petite cellule)
 │   ├── 32-visionneuse.js   la carte de champ animée, lue dans les .vtr — sans ParaView
 │   ├── 90-workspace.js     les panneaux détachables
 │   └── vendor/three.min.js three.js r134, posé ici et non pris sur un CDN
 ├── python/
-│   ├── ipc2581_*.py        le parseur IPC-2581 et sa traduction en JSON
-│   ├── openems_modele.py   le document relu, vérifié, complété, maillé, chiffré
+│   ├── ipc2581_*.py        le parseur IPC-2581 (filtrage calques hors cuivre/perçage, netClass) et sa traduction en JSON
+│   ├── openems_modele.py   le document relu, vérifié, nettoyé (masse cachée, fusions, ports), maillé, chiffré
 │   ├── openems_script.py   le modèle → un script Python autonome
 │   ├── openems_run.py      l'exécution en sous-processus, et son suivi
 │   ├── openems_champs.py   les .vtr relus : inventaire, tranche, amplitude et phase
 │   ├── openems_antenne.py  la façade : les seules fonctions que web_antenna.py connaît
 │   ├── projet.py           les projets sur le disque : où on les range, et comment on les rouvre
 │   └── test/
-│       ├── banc-openems.py   le banc principal : il lance tous les autres
+│       ├── banc-openems.py   le banc principal : 771 vérifications sans solveur, 22 sections
 │       └── banc-champs.py    le format .vtr, l'inventaire, le découpage
 ├── test/
 │   ├── carte-antenne.py    fabrique une carte d'essai IPC-2581
 │   ├── patch-2450.xml      … celle qu'elle produit
 │   ├── banc-polygones.js   le découpage des découpes, cas dégénérés compris
-│   └── banc-interface.js   ports, balayage, unités, liste blanche de l'IA
+│   └── banc-interface.js   ports, balayage, unités, liste blanche de l'IA, classification nets, robustesse
 ├── env/                    l'environnement virtuel Python (dépendances pip)
 ├── openEMS/                les binaires du solveur (à télécharger, voir « Installation »)
 └── ParaView-…/             le visualiseur 3D externe (à télécharger, facultatif)
@@ -328,6 +328,48 @@ tronquer change le diagramme et l'impédance.
 Les **couches** se cochent une par une. C'est le principal levier sur la taille
 du maillage, et c'est pourquoi il est à l'étape 1 et non caché dans les
 réglages.
+
+#### La classification des nets (GND, PWR, Signal) & préréglages de simulation
+
+Pour les cartes complexes où cohabitent des dizaines ou centaines d'équipotentielles,
+le bouton **« ⚡ Classifier »** du panneau Nets ouvre une modale dédiée :
+- **Auto-détection multi-critères** : lit l'attribut officiel IPC-2581 `netClass`
+  s'il est présent (`GROUND`, `POWER`, `SIGNAL`), applique des expressions
+  régulières exhaustives sur les nomenclatures usuelles (`GND`, `0V`, `VCC`, `VDD`,
+  `+3V3`, `1V8`...), calcule la tension nominale des rails, repère les condensateurs
+  de découplage reliant une alimentation à la masse, et détecte les versements de
+  cuivre surfaciques (> 25 % de l'aire de la carte).
+- **Contrôle segmenté immédiat** : chaque net s'assigne d'un clic en ⏚ **GND**,
+  ⚡ **PWR** ou 〰 **Signal**. Des filtres rapides par boutons (`Tous`, `Signal`,
+  `PWR`, `GND`) et une recherche textuelle permettent un tri instantané.
+- **Préréglages de simulation automatiques** : valider applique immédiatement
+  le plan de masse dominant, configure les garde-fous pour les lignes RF / signaux
+  rapides (SI) et identifie les plans d'alimentation pour l'intégrité de puissance (PI).
+
+#### Le nettoyage géométrique transparent et la masse cachée
+
+Sur une carte de fabrication réelle (comme le cas d'école `P01x274PCB-C.xml`, avec ses milliers de pastilles),
+quatre simplifications automatiques évitent au solveur des millions de cellules inutiles :
+
+* **La masse cachée par le plan de référence** : sur un empilage multicouche, le
+  cuivre de masse situé entièrement derrière le plan de masse de référence (opaque
+  en FDTD aux fréquences de calcul) ne participe pas au rayonnement de l'antenne.
+  L'outil le retire automatiquement ainsi que les vias de couture devenus orphelins.
+  Une case **« Garder toute la masse »** permet de désactiver ce filtre pour
+  comparer — sur une carte 4 couches, l'écart sur le rayonnement est typiquement
+  inférieur au dixième de décibel, pour un gain de maillage et de temps considérable.
+* **L'absorption des polygones recouverts** : les pastilles et pistes tracées
+  *à l'intérieur* d'un plan plein sur la même couche constituent le même métal.
+  Leurs arêtes ajoutaient des dizaines de lignes de maillage parasites sans décrire
+  la moindre frontière physique : elles sont désormais absorbées et décomptées.
+* **L'écart des polygones dégénérés** : les débris d'exportation CAO inférieurs à
+  1 µm (rayons de pastilles thermiques discrétisés, contours aplatis) tiraient la
+  largeur de cuivre minimale vers zéro et faussaient le pas fin du maillage. Ils
+  sont éliminés à l'entrée.
+* **La réduction d'empilage** : deux couches diélectriques identiques séparées
+  par une couche conductrice entièrement vide (aucun cuivre retenu, aucun via,
+  aucun port) sont fusionnées en un seul diélectrique continu d'épaisseur cumulée,
+  allégeant le maillage en Z.
 
 ### 2. L'empilage — ce que le fichier ne dit pas
 
@@ -545,6 +587,32 @@ lignes et les côtes à la **même précision**. Deux nombres égaux dans le mod
 doivent s'écrire pareil, sinon le collage ne survit pas à l'impression. Si le
 déplacement dépasse l'arrondi, l'assistant crie : cela voudrait dire qu'une
 ligne obligatoire a été perdue en route.
+
+#### Le port court-circuité par le cuivre lui-même, et le piège des pastilles parasites
+
+Un cas particulièrement sournois se produit sur les circuits multicouches complexes
+(rencontré sur `P01x274PCB-C.xml`) : une pastille de composant ou de test appartenant au
+net d'antenne se retrouve dupliquée par l'outil de CAO sur la couche de masse,
+dans une réserve (antipad) située *directement sous le port*.
+Les deux bornes du port touchent alors le même potentiel ou un îlot parasite,
+le solveur FDTD résout un court-circuit franc, et le S₁₁ ressemble à s'y méprendre
+à une courbe de réflexion physique. Le calcul va au bout sans la moindre erreur,
+et l'opérateur croit analyser son antenne alors qu'il mesure un court-circuit.
+
+L'outil intègre un **contrôle topologique préventif** :
+- Il vérifie la présence et la nature du cuivre sous chaque borne du port.
+- Si une pastille d'antenne isolée de la masse se trouve sous le port côté masse,
+  ou si la masse est présente des deux côtés du port, un avis **grave** bloque la
+  validation avant tout lancement inutile.
+
+#### Désignation intelligente au clic
+
+Poser le port sur une antenne alors qu'aucun cuivre n'a encore été retenu (étape 1
+laissée vierge) **désigne automatiquement le cuivre sous le curseur** comme antenne
+(par son net s'il existe, ou pièce par pièce), en ignorant le plan de masse sous-jacent.
+De plus, l'antenne est toujours prioritaire sur la masse lors de la détection de la
+couche et de la largeur de ruban : cliquer sur un ruban de face inférieure ne lui
+attribue plus par erreur la couche du plan de masse supérieur qui le croise.
 
 #### Plusieurs ports, et le couplage
 
@@ -838,6 +906,44 @@ carte du courant de surface, elle, le montre d'un coup d'œil — et bien mieux
 en mouvement qu'arrêtée : une onde stationnaire et une onde qui se propage
 donnent la **même** image figée, et deux comportements opposés une fois
 qu'on les regarde vivre.
+
+#### La plus petite cellule, la charge globale et la durée annoncée
+
+Le temps passé dans une simulation FDTD est le produit direct de deux grandeurs :
+$$\text{Charge} = \text{Cellules} \times N_\text{pas}$$
+Ni le nombre de mailles ni le nombre d'itérations ne résument le coût à eux seuls :
+une cellule deux fois plus fine divise le pas de temps CFL par deux, ce qui double
+le nombre d'itérations $N_\text{pas}$ nécessaires pour couvrir le même temps physique
+tout en augmentant le maillage. La facture se paie donc **deux fois**.
+
+* **Diagnostic précis de la plus petite cellule ("pincée")** : l'outil identifie
+  l'axe critique ($x$, $y$ ou $z$), la dimension exacte en millimètres et le ratio
+  par rapport au pas visé. Il nomme en clair les deux lignes de maillage qui la
+  bornent et leur rang (`obligatoire`, `affinage` ou `remplissage`), ou la couche
+  diélectrique responsable en Z (ex: vernis épargné de 15 µm). Si une maille est
+  anormalement écrasée sous le plancher de grille, un avertissement en donne la cause
+  exacte.
+* **Charge totale chiffrée** : le produit $\text{cellules} \times n_\text{max}$ est
+  chiffré en mises à jour dans le bilan et reporté fidèlement dans le rapport
+  d'ingénierie Markdown (ex: $4{,}2\times 10^6 \times 190\,000 = 8{,}2\times 10^{11}$ mises à jour).
+* **Durée annoncée réaliste** : elle se base sur le plafond $n_\text{max}$ entier
+  (et non une fraction optimiste), exprimée en clair (« 3 h 26 », « 45 min », « 70 s »).
+  Au-delà de deux heures de calcul estimées au débit mesuré du poste, un avertissement
+  préventif « *Ce calcul prendra un moment* » s'affiche avant tout lancement.
+
+#### Le diagnostic d'un calcul qui ne rend rien
+
+Une simulation dont les grandeurs de sortie restent indéterminées ou corrompues
+est automatiquement analysée sur sa courbe d'énergie résiduelle :
+- **Divergence numérique** : l'énergie monte jusqu'au bout au lieu de décroître.
+  Le diagnostic renvoie directement à la stabilité du maillage (rapport de pas excessif
+  ou cellule aberrante).
+- **Coupure prématurée** : le solveur a atteint le plafond d'itérations $n_\text{max}$
+  alors que l'énergie était encore en pleine décroissance. Le diagnostic chiffre l'écart
+  au seuil d'arrêt et conseille d'augmenter le garde-fou $n_\text{max}$.
+- **Énergie éteinte sans résultat utile** : l'impulsion s'est bien dissipée mais aucune
+  réflexion physique exploitable n'apparaît. Le diagnostic oriente vers la position
+  du port ou un court-circuit métallique sous-jacent.
 
 ### Le panneau « Champs »
 
@@ -1438,6 +1544,28 @@ face à une ligne étroite ; qu'allonger une ligne d'alimentation **n'adapte
 pas**, elle fait tourner Γ sans changer son module. Un modèle générique
 proposerait le contraire de chacune de ces quatre choses.
 
+## La vue 2D et la surimpression — fluidité à 60 fps et saisie fidèle
+
+La vue 2D combine la CAO de la carte et la surimpression de la simulation (le cuivre
+retenu, les ports, la boîte d'air et la grille FDTD Yee) :
+
+* **Accélération vectorielle par `Path2D` en cache** : sur une carte multicouche
+  complexe ou un maillage fin comprenant des milliers de lignes de coordonnées et des
+  centaines d'îlots de cuivre, redécrire la géométrie au contexte Canvas à chaque
+  trame faisait chuter le rafraîchissement lors des zooms et déplacements continus.
+  Désormais, le cuivre retenu (`antRetenuChemins`), la grille de maillage FDTD
+  (`antMaillageChemin`) et le quadrillage du mode conception (`conGrilleChemin`)
+  sont matérialisés dans des objets `Path2D` mis en cache. L'affichage s'exécute
+  à 60 images par seconde sans aucune saccade.
+* **Fidélité stricte des champs contre les fantômes du navigateur** : au
+  rechargement de la page ou lors d'une restauration de session, Chrome et Firefox
+  remettent parfois dans les champs textuels et menus déroulants les valeurs de la
+  session précédente sans émettre d'événement `change` (ce qui laissait par exemple
+  afficher un port à d'anciennes coordonnées alors que l'état interne était vierge).
+  La fonction `antChampsFideles` réimpose systématiquement ce que l'état mémorise
+  et désactive `autocomplete="off"` pour garantir que l'écran reflète fidèlement
+  la réalité du modèle envoyé au solveur.
+
 ## L'aperçu 3D
 
 Quatre des fautes qui gâchent une simulation d'antenne ne se voient **pas**
@@ -1555,44 +1683,59 @@ tous les outils liraient sans broncher et dont la moitié serait inventée.
 python python/test/banc-openems.py
 ```
 
-556 vérifications sans solveur : cotes en z, sens des polygones, maillage,
-refus attendus, conversion pouces/millimètres, script généré, les deux
-modèles de pertes, les quatre primitives, la conductivité déclarée d'un
-conducteur, le poids des enregistrements, les ports multiples et leurs refus,
-la géométrie du connecteur coaxial, les points d'un balayage — croisement
-compris, où le garde-fou porte sur le produit —, l'assemblage des colonnes
-d'un tableau S et le résultat complet que chacune garde, ce qu'un calcul qui
-ne rend rien dit de lui-même, le désembedage d'une ligne d'alimentation, la
-calibration de la durée sur le débit du poste, et les refus d'un nom de
-projet — et la **liste blanche du mode IA**, qui sont les deux seuls endroits
-de l'outil où une chaîne venue du réseau touche quelque chose : le système de
-fichiers pour l'un, l'état de la simulation pour l'autre.
+771 vérifications sans solveur réparties en 22 sections : cotes en z, sens des
+polygones, maillage, refus attendus, conversion pouces/millimètres, script
+généré, les deux modèles de pertes, les quatre primitives, la conductivité
+déclarée d'un conducteur, le poids des enregistrements, les ports multiples et
+leurs refus, la géométrie du connecteur coaxial, les points d'un balayage —
+croisement compris, où le garde-fou porte sur le produit —, l'assemblage des
+colonnes d'un tableau S et le résultat complet que chacune garde, la calibration
+de la durée sur le débit du poste, la facture du maillage et la plus petite
+cellule (« pincée »), le calcul qui ne rend rien et son diagnostic d'énergie,
+le désembedage d'une ligne d'alimentation, le port court-circuité par le cuivre
+lui-même, et les refus d'un nom de projet — et la **liste blanche du mode IA**,
+qui sont les deux seuls endroits de l'outil où une chaîne venue du réseau touche
+quelque chose : le système de fichiers pour l'un, l'état de la simulation pour
+l'autre.
 
-Trois de ces sections méritent d'être signalées parce qu'elles n'éprouvent pas
-du code de ce dépôt au sens ordinaire. Celle du **calcul qui ne rend rien**
-fabrique des journaux d'openEMS ligne à ligne — avec son signe détaché,
-« (- 7.32dB) », qui avait déjà fait manquer une lecture — et vérifie que les
-trois cas se distinguent : une divergence, une descente tronquée, une descente
-propre. Celle du **désembedage** extrait du script généré le bloc de calcul et
-l'**exécute** : ce bloc est du texte écrit dans le script, pas une fonction du
-dépôt, et en tenir une seconde copie dans le banc ne prouverait rien. Celle de
-la **liste blanche du mode IA** éprouve une *barrière* et non un calcul : un
-calcul faux rend un mauvais nombre et finit par se voir, une barrière qui
-laisse passer ne se voit jamais — le réglage change, la simulation tourne, et
-le résultat a l'air d'un résultat. Elle vérifie donc qu'un chemin hors liste
-est refusé, qu'une valeur hors bornes l'est en disant laquelle, qu'aller puis
-revenir remet exactement ce qui était là, que la consigne envoyée au modèle ne
-peut pas s'écarter de la liste que la page applique, et que ce qui revient du
-réseau est échappé avant d'être affiché. Elle
-vérifie l'aller-retour sur la ligne, la demi-onde guidée qui ramène
-l'impédance sur elle-même, et un repère chiffré — celui-là même où une manip
-antérieure s'était trompée d'εᵣ effectif en prenant la largeur du patch pour
-celle de la ligne.
+Cinq de ces sections méritent d'être signalées parce qu'elles n'éprouvent pas
+du code de ce dépôt au sens ordinaire :
+
+1. **La facture du maillage et la plus petite cellule** (section 17) : vérifie
+   que la plus petite cellule annonce le rang de ses deux bords (`obligatoire`,
+   `affinage`, `remplissage`), que la pincée correspond au plancher de l'axe, que
+   le substrat divisé en trois n'est pas confondu avec une cellule minuscule,
+   que le budget en cellules-pas chiffre exactement ce qui partira au solveur, et
+   qu'un calcul de plusieurs heures est annoncé en clair avec l'avis préventif
+   adéquat.
+2. **Le calcul qui ne rend rien** (section 18) : fabrique des journaux d'openEMS
+   ligne à ligne — avec son signe détaché, « (- 7.32dB) », qui avait déjà fait
+   manquer une lecture — et vérifie que les trois cas se distinguent : une
+   divergence numérique (énergie croissante), une descente tronquée par le
+   garde-fou $n_\text{max}$, et une descente propre.
+3. **Le désembedage d'une ligne** (section 19) : extrait du script généré le
+   bloc de calcul analytique et l'**exécute** : ce bloc est du texte écrit dans
+   le script, pas une fonction du dépôt, et en tenir une seconde copie dans le banc
+   ne prouverait rien. Il éprouve l'aller-retour sur la ligne, la demi-onde guidée
+   qui ramène l'impédance sur elle-même, et vérifie qu'on n'a pas confondu l'εᵣ
+   effectif de la ligne avec celui du patch.
+4. **Le port court-circuité par le cuivre** (section 20) : simule une pastille
+   du net d'antenne recopiée sur le plan de masse sous le port (le cas vu sur
+   `P01x274PCB-C.xml`) et vérifie qu'un avis grave bloque le calcul, tout en
+   laissant passer une sonde normale ou une pastille fondue dans la masse.
+5. **La liste blanche du mode IA** : éprouve une *barrière* et non un calcul : un
+   calcul faux rend un mauvais nombre et finit par se voir, une barrière qui
+   laisse passer ne se voit jamais — le réglage change, la simulation tourne, et
+   le résultat a l'air d'un résultat. Elle vérifie donc qu'un chemin hors liste
+   est refusé, qu'une valeur hors bornes l'est en disant laquelle, qu'aller puis
+   revenir remet exactement ce qui était là, que la consigne envoyée au modèle ne
+   peut pas s'écarter de la liste que la page applique, et que ce qui revient du
+   réseau est échappé avant d'être affiché.
 
 Un bloc à part éprouve le **lecteur de champs** (`python/test/banc-champs.py`,
-appelé lui aussi par le banc principal). Il n'a besoin ni d'openEMS ni d'un
-dossier de calcul : il **écrit ses propres `.vtr`**, compressés et non
-compressés, avec des grilles de tailles volontairement quelconques — c'est
+appelé lui aussi par le banc principal, 26 vérifications). Il n'a besoin ni
+d'openEMS ni d'un dossier de calcul : il **écrit ses propres `.vtr`**, compressés
+et non compressés, avec des grilles de tailles volontairement quelconques — c'est
 quand la longueur de l'en-tête n'est pas un multiple de trois octets que le
 décodage base 64 se décale, et une grille 4 × 4 ne le montrerait jamais. Il
 vérifie ensuite que la tranche extraite d'un volume est bien la bonne dans
@@ -1608,20 +1751,15 @@ python python/test/banc-champs.py <dossier-de-calcul>
 
 Les deux derniers blocs sont en JavaScript et tournent sous **node**, que le
 banc appelle lui-même quand il est installé : le découpage des découpes
-(`test/banc-polygones.js`, cas dégénérés compris) et la logique de la page
-(`test/banc-interface.js` : la liste des ports, la description d'un balayage,
-les conversions d'unité, les motifs d'antenne, les gestes du dessin avec leur
-historique, l'**empilage du mode conception** — chaque modèle d'usine tombe-t-il
-sur l'épaisseur qu'il annonce, le dessin survit-il à un changement de nombre de
-couches, le masque arrive-t-il au solveur, un port devenu faux est-il vu —,
-l'ordre des colonnes d'un fichier Touchstone, et le balayage d'une
-cote de **motif** — que le dessin revienne en place au bit près, que la carte
-et le port suivent la cote, qu'un second port survive au point, et que les
-cotes du motif disparaissent dès que le dessin n'en est plus la copie). Ce sont les
-endroits de l'interface où une faute ne se voit pas — une conversion fausse
-d'un facteur 25,4 rend une antenne qui a l'air d'une antenne, et un `.s2p`
-écrit dans l'ordre des lignes au lieu de celui des colonnes échange S₁₂ et
-S₂₁ sans que rien ne le montre.
+(`test/banc-polygones.js`, 13 vérifications, cas dégénérés compris) et la logique
+de la page (`test/banc-interface.js`, **397 vérifications**) :
+- la classification des nets (GND, PWR, Signal), l'auto-détection, les filtres et les préréglages ;
+- la mise en cache vectorielle `Path2D` du cuivre, de la grille Yee FDTD et du quadrillage ;
+- la fidélité stricte des champs (`antChampsFideles`) neutralisant les valeurs fantômes du navigateur ;
+- la génération du rapport Markdown enrichi avec la plus petite cellule ("pincée" bornée) et la charge globale $\text{cellules} \times n_\text{max}$ ;
+- la liste des ports, la description d'un balayage, les conversions d'unité, les motifs d'antenne, les gestes du dessin avec leur historique ;
+- l'**empilage du mode conception** — chaque modèle d'usine tombe-t-il sur l'épaisseur qu'il annonce, le dessin survit-il à un changement de nombre de couches, le masque arrive-t-il au solveur, un port devenu faux est-il vu — ;
+- l'ordre des colonnes d'un fichier Touchstone, et le balayage d'une cote de **motif** — que le dessin revienne en place au bit près, que la carte et le port suivent la cote, qu'un second port survive au point, et que les cotes du motif disparaissent dès que le dessin n'en est plus la copie.
 
 ```bash
 python python/test/banc-openems.py --simuler
@@ -1748,6 +1886,28 @@ découpes de versement l'ont toujours été.
 * **La conversation ne va pas dans le projet.** Elle vit le temps de la page,
   la clé comprise. Ce qui reste d'une séance, ce sont les réglages qu'on a
   appliqués — et ceux-là, le projet les garde comme les autres.
+* **Les calques hors simulation dans les exports IPC-2581** : les exports CAO
+  industriels portent souvent des dizaines de calques documentaires (sérigraphie,
+  masque de soudure, pâte, zones de composants, keepouts, cotations). Le parseur les
+  filtre désormais automatiquement via `layerFunction` (`CONDUCTOR`, `SIGNAL`,
+  `PLANE`, `POWER`, `GROUND`, `MIXED`, et les perçages `DRILL`) pour éviter qu'une
+  zone de composant ou un contour mécanique ne se transforme en plan de cuivre.
+  Un calque sans fonction déclarée reste conservé par précaution — un cuivre perdu
+  coûtant plus cher qu'un calque de trop.
+* **La masse cachée derrière le plan de référence** : sur une carte multicouche,
+  le cuivre de masse situé entièrement derrière le plan de masse continu principal
+  est retiré par défaut avec ses vias orphelins. Un plan plein étant opaque en FDTD,
+  l'écart sur le rayonnement lointain est infime (moins de 0,1 dB) pour un gain de
+  maillage appréciable. La case « Garder toute la masse » permet de forcer leur calcul
+  si nécessaire.
+* **Les ports court-circuités par le cuivre** : une pastille du net d'antenne
+  présente par erreur sur la couche de masse sous le port ou un port reliant la masse
+  à elle-même sont détectés et bloqués par une alerte grave avant tout lancement,
+  évitant de calculer une fausse antenne qui a l'air de résonner.
+* **Les valeurs fantômes restaurées par le navigateur** : au rechargement, le
+  navigateur pouvait réinjecter d'anciennes valeurs dans les champs sans événement
+  `change`. L'alignement strict (`antChampsFideles`) et `autocomplete="off"`
+  garantissent désormais que l'interface ne montre que ce que l'état porte réellement.
 
 ## Installation complète des prérequis
 

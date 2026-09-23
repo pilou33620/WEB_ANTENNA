@@ -113,6 +113,18 @@ MARGE_BANDE = 2
 # construirait des maillages pour rien.
 AFFINAGE_RECUL = 1.3
 AFFINAGE_ESSAIS = 24
+# AU-DELA DE TANT DE LIGNES DE BANDE SUR UN AXE, l'essai n'est meme pas
+# construit : vingt mille lignes, c'est cent fois un maillage d'antenne
+# ordinaire, et le budget en cellules-pas le refuserait de toute facon --
+# mais apres des minutes de fusion. Voir `_mailler`.
+LIGNES_MAX_BANDES = 20000
+# UN POLYGONE PLUS MINCE QU'UN MICRON N'EST PAS DU CUIVRE, C'EST UN DECHET
+# D'EXPORT : rayon de pastille thermique, contour aplati, copeau de
+# remplissage. openEMS l'ignorerait en silence, mais d'ici la il fixait la
+# « largeur de cuivre minimale » a zero -- donc le pas fin vise, les
+# avertissements « cuivre non resolu », et les essais d'affinage. 707 sur
+# P01x274PCB-C.xml. On les ecarte a l'entree, et on les compte.
+LARGEUR_DEGENEREE_MM = 1e-3
 # LE BUDGET DE L'AFFINAGE, EN CELLULES-PAS DE TEMPS (voir `_cout`) : un plafond
 # absolu, et un plafond relatif au maillage de fond. Les deux sont
 # necessaires. Sans l'absolu, une grande carte s'affinerait jusqu'a la nuit de
@@ -185,6 +197,35 @@ NMAX_IMPULSIONS = 4.0
 # justement qu'il coute : une antenne qui ne s'eteint pas.
 NMAX_PERIODES = 40.0
 NMAX_PLANCHER = 5000
+# A PARTIR DE QUAND UNE CELLULE MINCE SE SIGNALE. Le vingtieme du pas vise
+# etait un chiffre rond, et il laissait passer exactement ce qu'il fallait
+# attraper : sur une carte relais 868 MHz, une cellule de 0,074 mm pour un pas
+# de 0,599 -- huit fois trop fine, un facteur 3,5 sur le pas de temps, DONC
+# 3,5 fois plus de pas -- passait sous le seuil de 0,030 mm sans un mot, et le
+# calcul a dure cinq heures au lieu d'une heure et demie.
+#
+# MAIS AUCUN RATIO AU PAS VISE NE FAIT L'AFFAIRE, ET C'EST LA MESURE QUI L'A
+# DIT. Resserrer au quart attrapait bien les 0,074 mm -- et signalait du meme
+# coup un patch 2,45 GHz parfaitement sain, dont la plus petite cellule
+# (0,533 mm pour un pas vise de 2,41) n'est rien d'autre que le substrat de
+# 1,6 mm divise en trois, c'est-a-dire l'affinage que le maillage s'impose
+# LUI-MEME. Un substrat mince devant le pas vise rend ce rapport aussi grand
+# qu'on veut sans qu'aucune faute ait ete commise.
+#
+# LE BON REPERE EST DONC LE PLANCHER QUE LA GRILLE S'EST DONNE SUR CET AXE
+# -- `pas_local/4` dans le plan, `plan/2` en z, tous deux ecrits dans
+# `maillage_detail["plancher"]`. En dessous, aucune ligne ORDINAIRE ne peut
+# descendre : `_fusionner` les filtre. Ce qui passe quand meme est forcement
+# une paire d'obligatoires, c'est-a-dire un accident de geometrie -- et c'est
+# exactement ce qu'on veut signaler, ni plus ni moins. Le facteur ci-dessous
+# n'est qu'une marge d'arrondi.
+CELLULE_AVIS_MARGE = 0.9
+# A PARTIR DE QUAND UNE DUREE SE DIT. `duree_estimee` existait depuis
+# toujours et n'etait lue que par le balayage : une simulation SEULE partait
+# sans qu'aucun chiffre passe devant l'operateur -- et c'est pourtant par elle
+# qu'on commence. Une demi-heure est le seuil ou l'on cesse d'attendre devant
+# l'ecran, c'est-a-dire celui ou l'on veut avoir choisi.
+DUREE_AVIS_S = 1800.0
 # CE QUI SEPARE DEUX ARETES DE CUIVRE SANS RIEN SEPARER DU TOUT. Deux bords a
 # quelques dizaines de microns l'un de l'autre ne sont pas deux bords : c'est
 # le meme, rendu deux fois -- l'arrondi d'un bout de piste, un ruban de 1,00 mm
@@ -594,6 +635,148 @@ def _empilage(doc, k_mm, modele_cu):
     return conducteurs, dielectriques, z, supposes, revetements
 
 
+def _masse_cachee(doc, cuivre, conducteurs, vias, ports):
+    """Retire la masse que le plan de reference cache a l'antenne.
+
+    A CES FREQUENCES, UN PLAN DE CUIVRE PLEIN EST OPAQUE. L'epaisseur de peau
+    est de deux microns a 868 MHz, et le champ de l'antenne ne traverse pas
+    35 microns de cuivre : ce qui est DERRIERE le plan de reference -- un plan
+    d'alimentation, le versement de masse de la face opposee -- n'est pas vu,
+    sauf par ses bords et par les trous du plan. Relie ou non par des vias de
+    couture : une masse est definie par son CONTOUR, et c'est le plan de
+    reference qui le porte.
+
+    CE QUI EST RETIRE, ET RIEN D'AUTRE : un polygone du net de masse, sur une
+    couche derriere le plan de reference qui ne porte aucun port, et dont la boite englobante entiere tombe dans la surface
+    pleine du plan de reference. Ce qui deborde du plan reste, en entier.
+
+    Le plan de reference : la couche ou le port excite prend sa masse, et
+    seules les couches situees au-dela, du cote oppose a l'antenne, sont
+    concernees. Ce n'est PAS sans perte, a la difference de
+    `_absorber_contenus` : les trous du plan (degagements des vias
+    traversants) laissent fuir un peu de champ vers ce qui est retire. D'ou
+    la case « garder toute la masse » de la page, et l'avis qui le dit.
+
+    Rend (plan de reference, {couche: polygones retires}), ou (None, {}).
+    """
+    if _dict(_dict(doc).get("masse")).get("cachee"):
+        return None, {}
+    # LE PORT DIT OU SONT L'ANTENNE ET SON PLAN : il relie la couche de
+    # l'antenne (« de ») a celle de la masse (« a »). La presence de cuivre ne
+    # le dirait pas -- un net d'antenne a des pastilles traversantes sur
+    # toutes les couches.
+    port = next((p for p in ports if p.get("excite")), ports[0] if ports else None)
+    if port is None:
+        return None, {}
+    z_de = {c["nom"]: c["z0"] for c in conducteurs}
+    blocs = {b["couche"]: b for b in cuivre}
+    ref = blocs.get(port["a"])
+    if (ref is None or port["de"] not in z_de
+            or not any(q.get("m") for q in ref["polys"])):
+        return None, {}
+    z_ant, z_ref = z_de[port["de"]], ref["z0"]
+    if abs(z_ant - z_ref) < 1e-12:
+        return None, {}
+    dessous = z_ref < z_ant          # le cote cache est au-dela du plan
+
+    proteges = {ref["couche"]}
+    for p in ports:
+        proteges.update((p["de"], p["a"]))
+
+    # Les coordonnees sont deja en mm ici. Seules les vraies surfaces du plan
+    # servent de contenant : une pastille de 1 mm2 n'en cache aucune autre.
+    surfaces = []
+    for q in ref["polys"]:
+        bb = _boite_pts(q["o"])
+        if (bb[2] - bb[0]) * (bb[3] - bb[1]) >= 1.0:
+            surfaces.append(_Surface(q, 2.0))
+    if not surfaces:
+        return None, {}
+
+    retires = {}
+    for b in cuivre:
+        if b["couche"] in proteges:
+            continue
+        # Seules les couches DERRIERE le plan, vues depuis l'antenne.
+        if (b["z0"] >= z_ref) if dessous else (b["z0"] <= z_ref):
+            continue
+        gardes = []
+        for q in b["polys"]:
+            if q.get("m"):
+                r = _boite_pts(q["o"])
+                if any(sf.contient(r) for sf in surfaces):
+                    retires[b["couche"]] = retires.get(b["couche"], 0) + 1
+                    continue
+            gardes.append(q)
+        b["polys"] = gardes
+    cuivre[:] = [b for b in cuivre if b["polys"]]
+    if not retires:
+        return None, {}
+
+    # LES VIAS SUIVENT. Un via de couture qui descendait jusqu'a la face
+    # opposee s'arrete desormais a la derniere couche gardee qu'il traverse ;
+    # celui qui ne relie plus deux couches gardees ne relie plus rien.
+    gardees = {b["couche"] for b in cuivre} | proteges
+    cond = sorted((c for c in conducteurs if c["nom"] in gardees),
+                  key=lambda c: c["z0"])
+    nouveaux = []
+    for v in vias:
+        pris = [c for c in cond if v["z0"] - 1e-9 <= c["z0"] and c["z1"] <= v["z1"] + 1e-9]
+        if len(pris) < 2:
+            continue
+        v["z0"], v["z1"] = pris[0]["z0"], pris[-1]["z1"]
+        v["de"], v["a"] = pris[0]["nom"], pris[-1]["nom"]
+        nouveaux.append(v)
+    vias[:] = nouveaux
+    return ref["couche"], retires
+
+
+def _reduire_empilage(conducteurs, dielectriques, cuivre, vias, ports):
+    """Fusionne deux dielectriques identiques separes par une couche de
+    cuivre que rien n'utilise.
+
+    UNE INTERFACE ENTRE DEUX MATERIAUX IDENTIQUES N'EST PAS UNE INTERFACE.
+    Une couche interne sans cuivre retenu, sans via qui s'y arrete et sans
+    port, entre deux FR-4 de meme Dk et de meme Df : le champ y traverse un
+    milieu homogene, et le decrire comme deux substrats ne change rien a la
+    physique. Mais chaque substrat reclame ses propres cellules en z, et ses
+    deux faces des lignes obligatoires -- c'est ce qui menait l'empilage de
+    P01x274 a 108 lignes. La fusion ne touche AUCUNE cote z : seulement en
+    mode feuille ou pec, ou le cuivre est un plan sans epaisseur. En mode
+    volume, la couche vide a une epaisseur, et la retirer deplacerait tout ce
+    qui est au-dessus.
+    """
+    if any(c["z1"] != c["z0"] for c in conducteurs):
+        return conducteurs, dielectriques, []
+    utiles = {b["couche"] for b in cuivre}
+    for v in vias:
+        utiles.update((v["de"], v["a"]))
+    for p in ports:
+        utiles.update((p["de"], p["a"]))
+
+    dies = sorted((dict(d) for d in dielectriques), key=lambda d: d["z0"])
+    gardes, fusions = [], []
+    for c in sorted(conducteurs, key=lambda c: c["z0"]):
+        if c["nom"] in utiles:
+            gardes.append(c)
+            continue
+        dessous = next((d for d in dies if abs(d["z1"] - c["z0"]) < 1e-9), None)
+        dessus = next((d for d in dies if abs(d["z0"] - c["z0"]) < 1e-9), None)
+        if (dessous is None or dessus is None
+                or abs(dessous["er"] - dessus["er"]) > 1e-9
+                or abs(dessous["df"] - dessus["df"]) > 1e-9):
+            gardes.append(c)
+            continue
+        dessous["nom"] = dessous["nom"] + " + " + dessus["nom"]
+        dessous["z1"] = dessus["z1"]
+        dessous["ep"] = dessous["z1"] - dessous["z0"]
+        dies.remove(dessus)
+        fusions.append(c["nom"])
+    if not fusions or not gardes:
+        return conducteurs, dielectriques, []
+    return gardes, dies, fusions
+
+
 def _conducteur(conducteurs, nom):
     for c in conducteurs:
         if c["nom"] == nom:
@@ -615,6 +798,8 @@ def _cuivre(doc, conducteurs, k_mm):
     out = []
     boite = None
     total = 0
+    degeneres = 0
+    absorbes = 0
     for bloc in _liste(_dict(doc).get("cuivre")):
         bloc = _dict(bloc)
         nom = _texte(bloc.get("couche"))
@@ -631,12 +816,20 @@ def _cuivre(doc, conducteurs, k_mm):
             o = _sens(_polyligne(p.get("o")), horaire=False)
             if len(o) < 3:
                 continue
+            if _largeur_equivalente(o) * k_mm < LARGEUR_DEGENEREE_MM:
+                degeneres += 1
+                continue
             trous = []
             for t in _liste(p.get("t")):
                 tp = _sens(_polyligne(t), horaire=True)
                 if len(tp) >= 3:
                     trous.append(tp)
-            polys.append({"o": o, "t": trous})
+            poly = {"o": o, "t": trous}
+            # « m » : ce polygone vient du net de MASSE seul, pas de l'antenne.
+            # C'est lui, et lui seul, que `_masse_cachee` peut retirer.
+            if p.get("m"):
+                poly["m"] = True
+            polys.append(poly)
             total += 1
             for x, y in o:
                 x *= k_mm
@@ -650,6 +843,8 @@ def _cuivre(doc, conducteurs, k_mm):
                     boite[3] = max(boite[3], y)
         if not polys:
             continue
+        polys, n_abs = _absorber_contenus(polys, k_mm)
+        absorbes += n_abs
         # Mise a l'echelle apres le calcul de la boite : les deux parcourent
         # les memes points, autant ne les parcourir qu'une fois.
         if k_mm != 1.0:
@@ -667,7 +862,160 @@ def _cuivre(doc, conducteurs, k_mm):
             "Aucun cuivre dans la selection.",
             "Designez l'antenne sur la carte : cliquez son net, ou "
             "Ctrl+clic pour en prendre plusieurs.")
-    return out, boite, total
+    return out, boite, total - absorbes, degeneres, absorbes
+
+
+# LE CUIVRE POSE SUR DU CUIVRE N'AJOUTE AUCUN METAL. Une pastille de masse au
+# milieu du plan de masse, la piste qui court dessus : leur union avec le plan
+# EST le plan. openEMS remplit les memes cellules avec ou sans elles -- la
+# simulation est identique --, mais chacune de leurs aretes attirait des
+# lignes de maillage qui ne decrivent plus rien, puisqu'il n'y a pas d'arete
+# de metal a cet endroit. Sur P01x274PCB-C.xml, ce sont des milliers de
+# pastilles et de troncons. On ne retire QUE ce qui est prouve contenu : la
+# boite englobante entiere du petit polygone dans la surface pleine d'un
+# autre, sans toucher ni son contour ni aucune de ses decoupes. Le doute
+# garde le polygone.
+def _boite_pts(pts):
+    xs = [q[0] for q in pts]
+    ys = [q[1] for q in pts]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+class _Surface:
+    """La surface pleine d'un polygone -- contour moins decoupes -- et un seul
+    test : ce rectangle y est-il ENTIEREMENT ?
+
+    Les aretes (contour ET decoupes) sont rangees par bande horizontale de
+    `pas`, pour que chaque test ne parcoure que le voisinage.
+    """
+
+    def __init__(self, poly, pas):
+        self.pas = pas
+        self.boite = _boite_pts(poly["o"])
+        self.bandes = {}
+        for anneau in [poly["o"]] + list(poly.get("t") or ()):
+            n = len(anneau)
+            for k in range(n):
+                a = anneau[k]
+                b = anneau[(k + 1) % n]
+                y0, y1 = min(a[1], b[1]), max(a[1], b[1])
+                for j in range(int(math.floor(y0 / pas)),
+                               int(math.floor(y1 / pas)) + 1):
+                    self.bandes.setdefault(j, []).append((a, b))
+
+    def contient(self, r):
+        bg = self.boite
+        if r[0] < bg[0] or r[1] < bg[1] or r[2] > bg[2] or r[3] > bg[3]:
+            return False
+        # Aucune arete ne traverse le rectangle : il est tout dedans ou tout
+        # dehors, et son centre tranche.
+        return (not self._coupe(r)
+                and self._dedans((r[0] + r[2]) / 2.0, (r[1] + r[3]) / 2.0))
+
+    def _coupe(self, r):
+        x0, y0, x1, y1 = r
+        pas = self.pas
+        vus = set()
+        for j in range(int(math.floor(y0 / pas)), int(math.floor(y1 / pas)) + 1):
+            for seg in self.bandes.get(j, ()):
+                if id(seg) in vus:
+                    continue
+                vus.add(id(seg))
+                (ax, ay), (bx, by) = seg
+                if max(ax, bx) < x0 or min(ax, bx) > x1:
+                    continue
+                if max(ay, by) < y0 or min(ay, by) > y1:
+                    continue
+                # Le segment touche la boite du rectangle : on le decoupe
+                # (Liang-Barsky) pour savoir s'il la traverse vraiment.
+                t0, t1 = 0.0, 1.0
+                dx, dy = bx - ax, by - ay
+                ok = True
+                for p_, q_ in ((-dx, ax - x0), (dx, x1 - ax),
+                               (-dy, ay - y0), (dy, y1 - ay)):
+                    if p_ == 0:
+                        if q_ < 0:
+                            ok = False
+                            break
+                    else:
+                        t = q_ / p_
+                        if p_ < 0:
+                            t0 = max(t0, t)
+                        else:
+                            t1 = min(t1, t)
+                        if t0 > t1:
+                            ok = False
+                            break
+                if ok:
+                    return True
+        return False
+
+    def _dedans(self, x, y):
+        # Pair-impair sur tous les anneaux : la surface pleine, trous deduits.
+        dedans = False
+        for (ax, ay), (bx, by) in self.bandes.get(int(math.floor(y / self.pas)), ()):
+            if (ay > y) != (by > y):
+                xc = ax + (y - ay) * (bx - ax) / (by - ay)
+                if xc > x:
+                    dedans = not dedans
+        return dedans
+
+
+def _absorber_contenus(polys, k_mm=1.0):
+    """Retire les polygones entierement recouverts par un autre de la meme
+    couche. Rend (polygones gardes, nombre retires)."""
+    if len(polys) < 2:
+        return polys, 0
+
+    boites = [_boite_pts(p["o"]) for p in polys]
+    aires = [(b[2] - b[0]) * (b[3] - b[1]) for b in boites]
+    # Les contenants possibles : les grandes surfaces, plans et gros troncons.
+    # Les coordonnees sont encore dans l'unite du fichier : 1 mm = 1/k_mm.
+    ordre = sorted(range(len(polys)), key=lambda i: -aires[i])
+    seuil = 1.0 / (k_mm * k_mm)
+    grands = [i for i in ordre if aires[i] >= seuil][:400]
+    if not grands:
+        return polys, 0
+
+    pas = 2.0 / k_mm
+    surfaces = {}
+    garder = [True] * len(polys)
+    for i in range(len(polys)):
+        for g in grands:
+            if g == i or not garder[g] or aires[g] <= aires[i]:
+                continue
+            if g not in surfaces:
+                surfaces[g] = _Surface(polys[g], pas)
+            if surfaces[g].contient(boites[i]):
+                garder[i] = False
+                # UN MORCEAU D'ANTENNE AVALE PAR LA MASSE LA REND ANTENNE. Le
+                # contenant EST desormais ce cuivre-la : garder sa marque « m »
+                # le laisserait retirer par `_masse_cachee`, et un modele dont
+                # toute l'antenne a ete absorbee serait refuse comme « masse
+                # seule ». Il devient « mixte » : les deux a la fois, ce que
+                # le controle des ports doit savoir (voir `_cuivre_sous`).
+                if not polys[i].get("m") and polys[g].pop("m", None):
+                    polys[g]["mixte"] = True
+                break
+    gardes = [p for p, k in zip(polys, garder) if k]
+    return gardes, len(polys) - len(gardes)
+
+
+def _largeur_equivalente(pts):
+    """Largeur d'un polygone vu comme un ruban : 2 x aire / perimetre.
+
+    Exacte pour un rectangle long, et juste aussi pour un copeau en biais --
+    ce que le petit cote de la boite englobante ne sait pas voir.
+    """
+    aire = 0.0
+    perim = 0.0
+    n = len(pts)
+    for i in range(n):
+        x0, y0 = pts[i]
+        x1, y1 = pts[(i + 1) % n]
+        aire += x0 * y1 - x1 * y0
+        perim += math.hypot(x1 - x0, y1 - y0)
+    return 2.0 * abs(aire) / 2.0 / perim if perim > 0 else 0.0
 
 
 def _vias(doc, conducteurs, k_mm):
@@ -1145,6 +1493,17 @@ def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu):
     retenu. Aucune ne se voit dans le S11 : elles ressemblent toutes a des
     resultats.
     """
+    # UN PORT JAMAIS CLIQUE N'EST PAS UN PORT. Ses cotes valent (0 ; 0) et ses
+    # couches sont les valeurs par defaut : le modele se chiffrait quand meme,
+    # sur un point pris au hasard -- douze millions de cellules pour exciter
+    # le coin de la carte. `pose` absent (ancien document, banc d'essai) vaut
+    # « pose ».
+    if p.get("pose") is False:
+        raise ErreurModele(
+            "Le port %d n'est pas pose." % rang,
+            "A l'etape « Le port », cliquez « Cliquez le point d'alimentation "
+            "sur la carte », puis le pied de l'antenne : l'assistant en tire "
+            "la position, la largeur de la piste et les deux couches.")
     genre = (_texte(p.get("type"), 20) or "localise").lower()
     genre = "coaxial" if genre.startswith("coax") else "localise"
     direction = (_texte(p.get("dir"), 2) or "z").lower()
@@ -1759,6 +2118,11 @@ def _bandes_fines(cuivre, seuil):
     return {"x": _souder(bx), "y": _souder(by)}
 
 
+def _lignes_bandes(bandes, pas):
+    """Combien de lignes les bandes poseraient a ce pas, sans les poser."""
+    return sum((b - a) / pas + 1 + 2 * MARGE_BANDE for a, b in bandes)
+
+
 def _bande_lignes(a, b, pas):
     """Les lignes d'une bande fine : le cuivre en parts egales, et MARGE_BANDE
     cellules de plus de chaque cote.
@@ -2091,6 +2455,24 @@ def _maillage(modele, bande, res_air, res_die, res_fin=0.0, bandes=None):
             z_aff.append(d["z0"] + d["ep"] * i / n)
     mini_z = plancher_z if plancher_z > 0 else res_die / 4.0
     mz = _lisser(_fusionner(z, mini_z, z_obl, z_aff, res_die / 3.0), res_die)
+    # CE QUI SERRE LA GRILLE, AXE PAR AXE. Ecrit ici et nulle part ailleurs :
+    # c'est le seul endroit ou les trois listes -- obligatoires, affinage,
+    # remplissage -- existent encore separement. Une fois `mx` rendu, une
+    # ligne ne dit plus d'ou elle vient.
+    # LE PLANCHER DE CHAQUE AXE, c'est-a-dire la finesse SOUHAITEE -- celle
+    # sous laquelle `_fusionner` ne laisse passer aucune ligne ordinaire.
+    # C'est a lui, et non au pas vise, que se compare la plus petite cellule
+    # quand on veut savoir si elle est un accident ou le travail de la grille.
+    modele["maillage_detail"]["plancher"] = {
+        "x": (res_fin if res_fin > 0 else res_die) / 4.0,
+        "y": (res_fin if res_fin > 0 else res_die) / 4.0,
+        "z": plancher_z,
+    }
+    modele["maillage_detail"]["pincee"] = {
+        "x": _pincee(mx, x_obl, x_aff),
+        "y": _pincee(my, y_obl, y_aff),
+        "z": _pincee(mz, z_obl, z_aff),
+    }
     return mx, my, mz
 
 
@@ -2098,6 +2480,46 @@ def _plus_petit(lignes):
     """La plus petite cellule d'une liste de lignes."""
     return min((lignes[i + 1] - lignes[i] for i in range(len(lignes) - 1)),
                default=0.0)
+
+
+def _pincee(lignes, obligatoires=(), affinage=()):
+    """La plus petite cellule d'un axe, et CE QUI POSE SES DEUX BORDS.
+
+    POURQUOI CE N'EST PAS UN DETAIL DE PLUS. Le pas de temps est commande par
+    la plus petite cellule du domaine, et le nombre de pas suit le pas de
+    temps : une cellule deux fois trop fine coute DEUX FOIS sur la facture,
+    en cellules et en pas. C'est donc le premier chiffre a regarder quand un
+    calcul dure plus longtemps qu'annonce -- et jusqu'ici, dans le plan,
+    l'outil ne savait pas le dire. `_coupable_cellule` nommait la couche
+    fautive en z et rendait, en x et en y, une phrase qui commencait par
+    « cause probable » : elle renvoyait aux aretes de cuivre alors qu'une
+    face de port ou une primitive posee a la main font exactement la meme
+    cellule, et ne se corrigent pas du tout de la meme facon.
+
+    LES TROIS RANGS SONT CEUX DE `_fusionner`, et ils disent chacun un geste
+    different : « obligatoire » se corrige sur l'objet (elargir un port,
+    retirer une primitive), « affinage » sur la selection de cuivre,
+    « remplissage » sur le pas vise. Une ligne posee apres coup par `_lisser`
+    n'est dans aucune des deux listes : elle est du remplissage, et c'est
+    exactement ce qu'elle est.
+    """
+    if len(lignes) < 2:
+        return None
+    i = min(range(len(lignes) - 1), key=lambda k: lignes[k + 1] - lignes[k])
+    obl = set(round(v, 9) for v in obligatoires)
+    aff = set(round(v, 9) for v in affinage)
+
+    def rang(v):
+        v = round(v, 9)
+        if v in obl:
+            return "obligatoire"
+        if v in aff:
+            return "affinage"
+        return "remplissage"
+
+    a, b = lignes[i], lignes[i + 1]
+    return {"mm": b - a, "a": a, "b": b,
+            "rang_a": rang(a), "rang_b": rang(b)}
 
 
 def _coller(lignes, v):
@@ -2181,10 +2603,21 @@ def _cout(est, bande):
     annoncee parlent de la meme chose.
     """
     dt = est.get("dt_s") or 0.0
-    f0 = bande.get("f0") or bande.get("fcible") or 0.0
-    if dt <= 0 or f0 <= 0 or not est.get("cellules"):
+    # LA MEME FREQUENCE ET LE MEME NOMBRE DE PERIODES QUE `nmax`, ET C'EST
+    # TOUT LE CORRECTIF. Ce budget comptait 20 periodes autour de f0 quand le
+    # solveur en recoit NMAX_PERIODES autour de la frequence CIBLE : il
+    # chiffrait donc une simulation deux fois plus courte que celle qui part.
+    # Sur une carte relais 868 MHz, le maillage de fond etait annonce a
+    # 4,0e11 -- juste sous le plafond -- pour 8,2e11 reellement calcules, et
+    # cinq heures passees sans qu'aucun garde-fou ait eu l'occasion de parler.
+    # CELLULES_PAS_MAX ne change pas : c'est justement parce que ce chiffre
+    # est cense valoir des heures de calcul qu'il faut le nourrir avec les
+    # vrais pas.
+    f_res = bande.get("fcible") or bande.get("f0") or 0.0
+    if dt <= 0 or f_res <= 0 or not est.get("cellules"):
         return 0.0
-    return est["cellules"] * max(2000.0, 20.0 / (f0 * dt))
+    return est["cellules"] * max(float(NMAX_PLANCHER),
+                                 NMAX_PERIODES / (f_res * dt))
 
 
 def _bilan_pistes(cuivre, res_die, fin, bx, by):
@@ -2290,6 +2723,16 @@ def _mailler(modele, bande, res_air, res_die):
         by = [t for t in bandes["y"] if t[1] - t[0] >= fin]
         if not (bx or by):
             break
+        # UN ESSAI ABSURDE NE SE CONSTRUIT PAS. Sur une carte entiere, les
+        # milliers de pastilles donnent des bandes qui se soudent en travers de
+        # toute la carte, et le cuivre le plus etroit -- un copeau de quelques
+        # microns -- fixe le pas fin : le premier essai posait seize millions
+        # de lignes sur un axe, et sa seule fusion prenait une minute et
+        # demie (P01x274PCB-C.xml, 7 000 pastilles). Un tel maillage depasse
+        # le budget de tres loin ; on recule sans le batir.
+        if max(_lignes_bandes(bx, fin), _lignes_bandes(by, fin)) > LIGNES_MAX_BANDES:
+            fin *= AFFINAGE_RECUL
+            continue
         essai = _maillage(modele, bande, res_air, res_die, fin, bandes)
         cout = _cout(_estimation(essai[0], essai[1], essai[2], res_die), bande)
         if cout <= budget:
@@ -2584,7 +3027,8 @@ def normaliser(doc):
 
     (conducteurs, dielectriques, z_haut,
      supposes, revetements) = _empilage(doc, k_mm, modele_cu)
-    cuivre, boite_cu, n_polys = _cuivre(doc, conducteurs, k_mm)
+    (cuivre, boite_cu, n_polys, n_degeneres,
+     n_absorbes) = _cuivre(doc, conducteurs, k_mm)
     vias = _vias(doc, conducteurs, k_mm)
     bande = _bande(doc)
     ports = _ports(doc, conducteurs, dielectriques, k_mm, boite_cu)
@@ -2594,6 +3038,22 @@ def normaliser(doc):
     # parle de celui-la, et n'a pas eu a changer.
     port = next(p for p in ports if p["excite"])
     primitives = _primitives(doc, k_mm)
+    # LA MASSE SEULE N'EST PAS UNE ANTENNE. Si tout le cuivre recu vient du
+    # net de masse (marque « m » par la page), rien n'a ete designe comme
+    # antenne : le calcul porterait sur le plan de masse de la carte, et il
+    # durerait des heures pour ne rien dire.
+    if cuivre and all(q.get("m") for b in cuivre for q in b["polys"]) and any(
+            q.get("m") for b in cuivre for q in b["polys"]):
+        raise ErreurModele(
+            "Aucune antenne designee : seul le net de masse est retenu.",
+            "A l'etape « Le cuivre », cliquez le cuivre de l'antenne sur la "
+            "carte (Ctrl+clic pour plusieurs morceaux), puis « Prendre la "
+            "selection de la carte ».")
+    n_vias_avant = len(vias)
+    plan_ref, masse_retiree = _masse_cachee(doc, cuivre, conducteurs, vias, ports)
+    n_polys -= sum(masse_retiree.values())
+    conducteurs, dielectriques, empilage_reduit = _reduire_empilage(
+        conducteurs, dielectriques, cuivre, vias, ports)
 
     # L'EMPRISE EST L'UNION DE TOUT CE QUI EXISTE, et pas seulement du cuivre :
     # une marge d'air mesuree depuis la carte seule laisserait un boitier ou
@@ -2695,7 +3155,16 @@ def normaliser(doc):
         # l'a decide. La page en fait une ligne par couche et une case a
         # cocher ; l'avis, plus bas, nomme ceux qui sont sortis.
         "revetements": revetements,
-        "stats": {"polygones": n_polys, "vias": len(vias),
+        # Couches de cuivre inutilisees retirees de l'empilage, leurs deux
+        # dielectriques identiques fusionnes. Voir `_reduire_empilage`.
+        "empilage_reduit": empilage_reduit,
+        # La masse retiree parce que le plan de reference la cache a
+        # l'antenne. Voir `_masse_cachee`.
+        "masse_cachee": {"reference": plan_ref, "retires": masse_retiree,
+                         "vias_retires": n_vias_avant - len(vias)},
+        "stats": {"polygones": n_polys, "degeneres": n_degeneres,
+                  "absorbes": n_absorbes,
+                  "vias": len(vias),
                   "couches_cuivre": len(cuivre),
                   "primitives": len(primitives)},
     }
@@ -2746,6 +3215,12 @@ def normaliser(doc):
     else:
         modele["arret"]["nmax_auto"] = False
 
+    # LA DUREE PART AVEC LE MODELE, calculee ICI et nulle part ailleurs. La
+    # page refaisait son propre compte -- vingt periodes a f0 -- et affichait
+    # « 87 min » au-dessus d'un avis qui disait « 3 h 06 » sur le meme
+    # maillage. Un seul chiffre, celui de `duree_estimee`.
+    modele["estimation"]["duree_s"] = duree_estimee(modele)
+
     modele["dumps"] = _dumps(doc, emprise, boite, bande, mx, my, mz,
                              modele["arret"]["nmax"])
 
@@ -2775,10 +3250,21 @@ def _coupable_cellule(m):
     cotes = m["estimation"]["plus_petite_cellule_mm"]
     mm = min(cotes)
     out = {"mm": mm, "axe": "xyz"[cotes.index(mm)],
-           "quoi": "", "couche": "", "ep": 0.0, "revetement": False}
+           "quoi": "", "couche": "", "ep": 0.0, "revetement": False,
+           "pincee": None}
+    # LES DEUX LIGNES QUI LA BORNENT, SUR TOUS LES AXES. En z elles ne
+    # remplacent pas la couche nommee plus bas -- elles la confirment, et
+    # elles disent en plus si la ligne d'en face etait du remplissage.
+    out["pincee"] = ((m.get("maillage_detail") or {}).get("pincee")
+                     or {}).get(out["axe"])
     if out["axe"] != "z":
         # Une cellule mince dans le plan ne vient pas d'une couche : elle
-        # vient de deux aretes de cuivre que la grille n'a pas confondues.
+        # vient de deux lignes que la grille a gardees toutes les deux.
+        # LESQUELLES, C'EST `pincee` QUI LE DIT, et ce n'est plus une
+        # supposition : « deux aretes de cuivre presque confondues » etait
+        # faux des que la paire venait d'un port ou d'une primitive.
+        if out["pincee"]:
+            out["quoi"] = "lignes"
         return out
     noms_rev = set(r["nom"] for r in m["revetements"])
     for d in m["dielectriques"]:
@@ -2828,12 +3314,114 @@ def _cause_cellule(m):
                 "« volume » fait entrer dans le maillage. Le mode "
                 "« feuille » donne le meme resultat en une fraction du temps."
                 % (c["couche"], c["ep"]))
-    if c["axe"] == "z":
+    if c["axe"] == "z" and not c.get("pincee"):
         return ("Cause : deux lignes obligatoires voisines en z -- une "
                 "interface de l'empilage, une face de port, un objet ajoute "
                 "a la main -- posees a cette distance l'une de l'autre.")
-    return ("Cause probable : deux aretes de cuivre presque confondues dans "
-            "le plan, que la tolerance de regroupement n'a pas rapprochees.")
+    p = c.get("pincee")
+    if not p:
+        return ("Cause probable : deux aretes de cuivre presque confondues "
+                "dans le plan, que la tolerance de regroupement n'a pas "
+                "rapprochees.")
+    # CHAQUE RANG SE CORRIGE AILLEURS, et c'est tout l'interet de le nommer.
+    gestes = {
+        "obligatoire": "une ligne qu'on ne peut pas deplacer sans deplacer "
+                       "l'objet : une face de port, une arete de primitive. "
+                       "Elargissez l'objet jusqu'au pas vise, ou retirez-le",
+        "affinage": "une ligne de la regle du tiers, posee autour d'une "
+                    "arete de cuivre. Retirez de la selection le cuivre qui "
+                    "ne rayonne pas",
+        "remplissage": "une ligne reguliere de la grille. Le pas vise la "
+                       "commande",
+    }
+    rangs = sorted(set([p["rang_a"], p["rang_b"]]))
+    return ("Cause : les lignes %s = %.4f et %s = %.4f mm, distantes de "
+            "%.4f mm. La premiere est %s, la seconde %s -- %s."
+            % (c["axe"], p["a"], c["axe"], p["b"], p["mm"],
+               p["rang_a"], p["rang_b"],
+               " ; ".join(gestes[r] for r in rangs)))
+
+
+def _point_dans_anneau(pts, x, y):
+    """Pair-impair sur un seul anneau."""
+    dedans = False
+    n = len(pts)
+    for k in range(n):
+        ax, ay = pts[k]
+        bx, by = pts[(k + 1) % n]
+        if (ay > y) != (by > y):
+            if x < ax + (y - ay) * (bx - ax) / (by - ay):
+                dedans = not dedans
+    return dedans
+
+
+def _cuivre_sous(m, couche, x, y):
+    """Ce qu'il y a de cuivre en (x, y) sur cette couche : un ensemble de
+    « antenne » / « masse », vide s'il n'y a rien."""
+    vu = set()
+    for b in m["cuivre"]:
+        if b["couche"] != couche:
+            continue
+        for q in b["polys"]:
+            o = q["o"]
+            bx = _boite_pts(o)
+            if x < bx[0] or x > bx[2] or y < bx[1] or y > bx[3]:
+                continue
+            if not _point_dans_anneau(o, x, y):
+                continue
+            if any(_point_dans_anneau(t, x, y) for t in q.get("t") or ()):
+                continue
+            if q.get("mixte"):
+                vu.update(("masse", "antenne"))
+            else:
+                vu.add("masse" if q.get("m") else "antenne")
+    return vu
+
+
+# UN PORT DONT LES DEUX BORNES SONT LE MEME CONDUCTEUR NE MESURE RIEN. Il est
+# court-circuite par le cuivre lui-meme : le solveur calcule jusqu'au bout et
+# rend un S11 propre -- proche de -0 dB, ou une resonance qui n'est pas celle
+# de l'antenne --, que rien ne distingue d'un vrai resultat. Le cas vu sur
+# P01x274PCB-C.xml : une pastille fantome du net d'antenne recopiee sur la
+# couche de masse, juste sous le port. On ne peut trancher que si la masse
+# est connue (cuivre marque « m ») : sur un fichier sans connectivite, tout
+# le cuivre est dans le meme sac et la question n'a pas de reponse -- on se
+# tait plutot que de crier au loup.
+def _avis_ports_court_circuit(m):
+    out = []
+    if not any(q.get("m") or q.get("mixte")
+               for b in m["cuivre"] for q in b["polys"]):
+        return out
+    for p in m["ports"]:
+        if p.get("coax") or p.get("dir") != "z" or not p.get("de") \
+                or not p.get("a") or p["de"] == p["a"]:
+            continue
+        x = (p["x1"] + p["x2"]) / 2.0
+        y = (p["y1"] + p["y2"]) / 2.0
+        de = _cuivre_sous(m, p["de"], x, y)
+        a = _cuivre_sous(m, p["a"], x, y)
+        for nature in ("antenne", "masse"):
+            if de == {nature} and a == {nature}:
+                out.append({
+                    "rang": "grave",
+                    "titre": "Le port %d relie %s a elle-meme"
+                             % (p["n"], "l'antenne" if nature == "antenne"
+                                else "la masse"),
+                    "texte": "En (%.3f ; %.3f) mm, il y a du cuivre %s sur "
+                             "« %s » ET sur « %s » -- les deux bornes du "
+                             "port. Il est court-circuite par ce cuivre : le "
+                             "calcul ira au bout et rendra un S11 qui a l'air "
+                             "d'un resultat, sans rien dire de l'antenne. "
+                             "Deplacez le port la ou une borne touche "
+                             "l'antenne et l'autre la masse, ou changez la "
+                             "couche « vers » du port ; si ce cuivre ne "
+                             "devrait pas etre la (une pastille sur une couche "
+                             "ou le fichier n'en met pas), verifiez-le a "
+                             "l'etape « Le cuivre »."
+                             % (x, y, "de l'" + nature if nature == "antenne"
+                                else "de la " + nature, p["de"], p["a"]),
+                })
+    return out
 
 
 def _avis(m):
@@ -2884,22 +3472,54 @@ def _avis(m):
         out.append({
             "rang": "attention",
             "titre": "Maillage lourd",
-            "texte": "%.1f millions de cellules, environ %.0f Mo. Le calcul "
-                     "se comptera en dizaines de minutes."
+            # PLUS DE DUREE ANNONCEE ICI. Le nombre de cellules ne suffit pas
+            # a la deduire -- il y manque le pas de temps, donc le nombre de
+            # pas -- et « dizaines de minutes » se lisait juste au-dessus d'un
+            # avis qui disait 3 h 26 sur le meme maillage. C'est l'avis de
+            # duree qui repond a cette question, et lui seul.
+            "texte": "%.1f millions de cellules, environ %.0f Mo."
                      % (est["cellules"] / 1e6, est["memoire_Mo"]),
         })
 
+    # LA DUREE, ENFIN DITE POUR UN CALCUL SEUL -- voir DUREE_AVIS_S.
+    secondes = duree_estimee(m)
+    if secondes >= DUREE_AVIS_S:
+        out.append({
+            "rang": "attention" if secondes >= 4 * DUREE_AVIS_S else "info",
+            "titre": ("Ce calcul se comptera en heures" if secondes >= 3600
+                      else "Ce calcul prendra un moment"),
+            "texte": "Environ %s : %.1f million(s) de cellules x %s pas de "
+                     "temps, au debit %s de %.0f MC/s. LES DEUX FACTEURS SE "
+                     "MULTIPLIENT -- une cellule deux fois plus fine, c'est "
+                     "deux fois plus de cellules ET deux fois plus de pas, "
+                     "parce que le nombre de pas suit le pas de temps."
+                     % (_duree_texte(secondes), est["cellules"] / 1e6,
+                        "{:,}".format(m["arret"]["nmax"]).replace(",", " "),
+                        "mesure sur ce poste" if est.get("mcps_mesure")
+                        else "suppose", est.get("mcps_suppose") or MCPS),
+        })
+
     petite = est["cellule"]["mm"]
-    if petite < m["resolution"]["die"] / 20.0:
+    axe = est["cellule"]["axe"]
+    plancher = ((m.get("maillage_detail") or {}).get("plancher")
+                or {}).get(axe) or 0.0
+    # Un modele d'avant `maillage_detail["plancher"]` -- un projet relu, par
+    # exemple -- retombe sur l'ancien repere plutot que de ne rien dire.
+    sous = (petite < plancher * CELLULE_AVIS_MARGE) if plancher > 0         else (petite < m["resolution"]["die"] / 20.0)
+    if sous:
         out.append({
             "rang": "attention",
             "titre": "Une cellule minuscule ralentit tout",
             "texte": "La plus petite cellule fait %.4f mm en %s, soit %.0f "
-                     "fois moins que le pas vise. Le pas de temps FDTD est "
-                     "commande par elle SEULE : cette cellule-la ralentit la "
-                     "simulation entiere. %s"
-                     % (petite, est["cellule"]["axe"],
+                     "fois moins que le pas vise%s. Le pas de temps FDTD est "
+                     "commande par elle SEULE, et le nombre de pas suit le "
+                     "pas de temps : elle se paie DEUX FOIS. %s"
+                     % (petite, axe,
                         m["resolution"]["die"] / max(petite, 1e-9),
+                        (" et %.0f fois sous le plancher que la grille "
+                         "s'est donne sur cet axe (%.4f mm)"
+                         % (plancher / max(petite, 1e-9), plancher))
+                        if plancher > 0 else "",
                         _cause_cellule(m)),
         })
 
@@ -3058,6 +3678,8 @@ def _avis(m):
                          "connecteur qui traverse la carte.",
             })
 
+    out.extend(_avis_ports_court_circuit(m))
+
     # -- les pertes dielectriques -----------------------------------------
     p = m["pertes"]
     if p["mode"] == "kappa" and p["ecart_kappa_pc"] > 8.0:
@@ -3126,6 +3748,58 @@ def _avis(m):
                          "echantillonnage : un champ vu une cellule sur deux "
                          "se lit aussi bien et pese huit fois moins.",
             })
+
+    # -- ce qui a ete simplifie sans rien changer a la physique ------------
+    n_abs = (m.get("stats") or {}).get("absorbes") or 0
+    if n_abs:
+        out.append({
+            "rang": "info",
+            "titre": "%d polygone(s) recouvert(s) retire(s)" % n_abs,
+            "texte": ("Pastilles et pistes posees DANS un plan de la meme "
+                      "couche : le metal est le meme avec ou sans elles, "
+                      "mais leurs aretes posaient des lignes de maillage qui "
+                      "ne decrivaient rien."),
+        })
+    mc = m.get("masse_cachee") or {}
+    if mc.get("retires"):
+        out.append({
+            "rang": "info",
+            "titre": "Masse cachee par « %s » retiree" % mc["reference"],
+            "texte": ("%s : cuivre de masse entierement derriere le plan de "
+                      "reference, que l'antenne ne voit pas -- un plan de "
+                      "cuivre plein est opaque a ces frequences. Ce qui "
+                      "deborde du plan est garde. Les vias de couture "
+                      "s'arretent a la derniere couche gardee ; %d, qui ne "
+                      "reliaient plus deux couches gardees, sont retires. "
+                      "Ecart attendu : faible, par les seuls trous du plan. "
+                      "Cochez « Garder toute la masse » a l'etape « Le "
+                      "cuivre » pour comparer."
+                      % (", ".join("« %s » (%d polygone(s))" % (c, n)
+                                   for c, n in sorted(mc["retires"].items())),
+                         mc.get("vias_retires", 0))),
+        })
+    if m.get("empilage_reduit"):
+        out.append({
+            "rang": "info",
+            "titre": "Empilage simplifie",
+            "texte": ("%s : aucun cuivre, via ni port retenu, entre deux "
+                      "dielectriques identiques. Les deux sont fusionnes en "
+                      "un seul -- meme epaisseur totale, meme Dk, meme Df --, "
+                      "et le maillage en z s'allege d'autant."
+                      % ", ".join("« %s »" % n for n in m["empilage_reduit"])),
+        })
+
+    # -- les polygones degeneres, ecartes a l'entree -----------------------
+    n_deg = (m.get("stats") or {}).get("degeneres") or 0
+    if n_deg:
+        out.append({
+            "rang": "info",
+            "titre": "%d polygone(s) degenere(s) ecarte(s)" % n_deg,
+            "texte": ("Moins de %.0f micron de large : des restes d'export "
+                      "(rayons de pastilles thermiques, contours aplatis), "
+                      "pas du cuivre. openEMS les aurait ignores ; ils ne "
+                      "faussent plus le maillage." % (LARGEUR_DEGENEREE_MM * 1000)),
+        })
 
     # -- le cuivre trop fin pour le maillage -------------------------------
     # UN POLYGONE PLUS PETIT QU'UNE CELLULE NE DISPARAIT PAS AVEC FRACAS : il
@@ -3348,10 +4022,28 @@ def duree_estimee(m):
     points : c'est la que l'ordre de grandeur compte vraiment, parce que c'est
     la qu'on lance une nuit de calcul sans la voir venir.
     """
+    # LE GARDE-FOU, ET NON UNE MOITIE DE GARDE-FOU. Cette fonction recalculait
+    # son propre nombre de pas -- 20 periodes autour de f0 -- et rendait le
+    # plus petit des deux, si bien qu'elle annoncait systematiquement la
+    # moitie de ce que `nmax` autorise. L'energie arrete presque toujours la
+    # simulation avant ; PRESQUE, et c'est le mot qui coute : une antenne qui
+    # ne s'eteint pas va jusqu'au bout, et c'est precisement le cas ou l'on
+    # aurait voulu etre prevenu.
     e = m["estimation"]
-    pas = min(m["arret"]["nmax"],
-              max(2000, round(20.0 / (m["bande"]["f0"] * e["dt_s"]))))
-    return e["cellules"] * pas / (e["mcps_suppose"] * 1e6)
+    return e["cellules"] * m["arret"]["nmax"] / (e["mcps_suppose"] * 1e6)
+
+
+def _duree_texte(s):
+    """Une duree en toutes lettres, a la precision qu'elle merite."""
+    if s < 90:
+        return "%d s" % int(round(s))
+    if s < 5400:
+        return "%d min" % int(round(s / 60.0))
+    h = int(s // 3600)
+    m = int(round((s - 3600 * h) / 60.0))
+    if m == 60:
+        h, m = h + 1, 0
+    return "%d h %02d" % (h, m)
 
 
 # ==========================================================================
