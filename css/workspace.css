@@ -59,8 +59,12 @@
 }
 .pnl-btn:hover{border-color:var(--border2);color:#fff;background:#22252b}
 .pnl.collapsed .pnl-btn[data-act=collapse]{transform:rotate(-90deg)}
-.pnl-btn[data-act=maximize]{display:none}
-.pnl.floating .pnl-btn[data-act=maximize]{display:inline-flex}
+/* le plein écran est offert partout : un panneau docké y passe aussi, et
+   revient à sa place en sortant (workspace.js, wsToggleMaximize) */
+
+/* un panneau qui vient d'avoir quelque chose à dire (wsReveler) */
+.pnl.ws-signal > .pnl-head{animation:wsSignal 1.8s ease-out}
+@keyframes wsSignal{0%,35%{background:#1e4a73;color:#fff}100%{}}
 
 .pnl-body{flex:1;min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .pnl-bar{

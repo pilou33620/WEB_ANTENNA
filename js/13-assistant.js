@@ -1457,6 +1457,7 @@ async function antLancer(){
   antJournalRendre();
   antBoutonsEtat();
   antResultatsRendre();
+  antResultatsReveler();
   antAssistantRendre();
   antBoutonsEtat();
   if(ANT.tache&&ANT.tache.etat==="arrete"){

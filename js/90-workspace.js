@@ -121,6 +121,9 @@ function wsLoad(){
     if(isFinite(s.grow)&&s.grow>0)t.grow=+s.grow;
     t.collapsed=!!s.collapsed;
     t.maximized=!!s.maximized;
+    /* un plein écran pris depuis un dock garde l'adresse de son retour */
+    t.retour=!!s.retour;
+    if(isFinite(s.retourIdx))t.retourIdx=+s.retourIdx;
     for(const pair of [["x",-100000],["y",0],["w",WS_MIN_FW],["h",WS_MIN_FH]])
       if(isFinite(s[pair[0]]))t[pair[0]]=Math.max(pair[1],+s[pair[0]]);
     if(WS_DOCKS.indexOf(s.last)>=0)t.last=s.last;
@@ -221,7 +224,7 @@ function wsApply(save){
       el.style.height=p.collapsed?"":Math.round(ws.height)+"px";
       el.style.zIndex=String(25+i);
       wsHandles(el,false);
-      if(bMax){bMax.textContent="⧉";bMax.title="Restaurer";}
+      if(bMax){bMax.textContent="⧉";bMax.title="Restaurer (Échap)";}
     }else{
       el.classList.remove("maximized");
       p.x=Math.min(Math.max(0,p.x),Math.max(0,innerWidth-120));
@@ -304,7 +307,9 @@ function wsHeadMove(e){
   if(wsPlaceOf(id)==="float"){
     const p=WS.panels[id];
     if(p.maximized){
-      p.maximized=false;
+      /* arraché au plein écran, il devient un vrai panneau flottant : il n'a
+         plus de place de dock à retrouver */
+      p.maximized=false;p.retour=false;
       wsEl[id].classList.remove("maximized");
       wsHandles(wsEl[id],true);
       const bMax=wsEl[id].querySelector('.pnl-btn[data-act="maximize"]');
@@ -530,19 +535,45 @@ function wsToggleCollapse(id){
   WS.panels[id].collapsed=!WS.panels[id].collapsed;
   wsApply();
 }
+/* PLEIN ÉCRAN DEPUIS N'IMPORTE OÙ. Un panneau docké y passe aussi : il est
+   détaché le temps du plein écran, et restaurer le remet à la place exacte
+   qu'il occupait — même dock, même rang. `retour` le distingue d'un panneau
+   qui flottait déjà, et qui redevient simplement flottant. Le dock quitté est
+   `last`, que wsPluck vient de noter. */
 function wsToggleMaximize(id){
-  if(wsPlaceOf(id)!=="float")return;
-  const p=WS.panels[id];
-  p.maximized=!p.maximized;
-  wsApply();
-  if(p.maximized)wsHint("Panneau « "+wsEl[id].dataset.title+" » en plein écran.");
+  const place=wsPlaceOf(id), p=WS.panels[id];
+  if(place==="hidden")return;
+  if(place!=="float"){
+    p.retour=true;
+    p.retourIdx=WS.order[place].indexOf(id);
+    p.maximized=true;
+    wsMove(id,"float");
+  }else if(p.maximized){
+    p.maximized=false;
+    if(p.retour){
+      const dock=WS_DOCKS.indexOf(p.last)>=0?p.last:"dockR", idx=p.retourIdx;
+      p.retour=false;delete p.retourIdx;
+      wsMove(id,dock,idx);
+    }else wsApply();
+  }else{
+    p.maximized=true;
+    wsApply();
+  }
+  if(p.maximized)wsHint("Panneau « "+wsEl[id].dataset.title+" » en plein écran — Échap ou ⧉ pour revenir.");
   else wsHint("Panneau « "+wsEl[id].dataset.title+" » restauré.");
+}
+/* le panneau en plein écran le plus haut, s'il y en a un */
+function wsMaximise(){
+  for(let i=WS.floats.length-1;i>=0;i--)
+    if(WS.panels[WS.floats[i]].maximized)return WS.floats[i];
+  return null;
 }
 function wsToggleFloat(id){
   if(wsPlaceOf(id)==="float"){
-    WS.panels[id].maximized=false;
-    const t=WS_DOCKS.indexOf(WS.panels[id].last)>=0?WS.panels[id].last:"dockR";
-    wsMove(id,t);
+    const p=WS.panels[id], idx=p.retour?p.retourIdx:undefined;
+    p.maximized=false;p.retour=false;delete p.retourIdx;
+    const t=WS_DOCKS.indexOf(p.last)>=0?p.last:"dockR";
+    wsMove(id,t,idx);
     wsHint("Panneau « "+wsEl[id].dataset.title+" » rattaché à "+wsLabel(id)+".");
   }else{
     const r=wsEl[id].getBoundingClientRect(), p=WS.panels[id];
@@ -557,13 +588,28 @@ function wsToggleFloat(id){
   }
 }
 function wsClose(id){
-  WS.panels[id].maximized=false;
+  WS.panels[id].maximized=false;WS.panels[id].retour=false;
   wsMove(id,"hidden");
   wsHint("Panneau « "+wsEl[id].dataset.title+" » fermé — le menu « Espace de travail » le rouvre.");
 }
 function wsShow(id){
   const t=WS_DOCKS.indexOf(WS.panels[id].last)>=0?WS.panels[id].last:"dockR";
   wsMove(id,t);
+}
+/* UN PANNEAU QUI A QUELQUE CHOSE À DIRE — typiquement, un calcul vient de se
+   terminer. Il reparaît s'il était fermé, se déplie s'il était replié, passe
+   devant s'il flotte, et son en-tête s'allume un instant. Il NE CHANGE PAS DE
+   PLACE : c'est l'utilisateur qui l'a mis là. */
+function wsReveler(id){
+  const el=wsEl[id], p=WS.panels[id];
+  if(!el||!p)return false;
+  if(wsPlaceOf(id)==="hidden")wsShow(id);
+  if(p.collapsed){p.collapsed=false;wsApply();}
+  if(wsPlaceOf(id)==="float")wsRaise(id);
+  el.classList.remove("ws-signal");
+  void el.offsetWidth;                 /* relance l'animation */
+  el.classList.add("ws-signal");
+  return true;
 }
 
 /* ==========================================================================
@@ -686,7 +732,14 @@ function wsMenuOpen(){
   document.addEventListener("keydown",function(e){
     if(e.key!=="Escape")return;
     const m=wsQ("wsMenu");
-    if(m&&m.classList.contains("on")){wsMenuClose();e.stopPropagation();}
+    if(m&&m.classList.contains("on")){wsMenuClose();e.stopPropagation();return;}
+    /* Échap sort du plein écran — sauf dans un champ, où il appartient à la
+       saisie. Arrêté ici, en capture : le canevas est caché, l'éditeur n'a pas
+       à interpréter la touche en plus. */
+    const t=e.target;
+    if(t&&t.closest&&t.closest("input,textarea,select,[contenteditable]"))return;
+    const id=wsMaximise();
+    if(id){wsToggleMaximize(id);e.stopPropagation();e.preventDefault();}
   },true);
   window.addEventListener("resize",function(){if(WS.floats.length)wsApply(false);});
 

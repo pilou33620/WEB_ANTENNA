@@ -224,6 +224,14 @@ function antResultatsRendre(){
   antCourbeBarreMettreAJour();
 }
 
+/* LA FIN D'UN CALCUL SE VOIT. La section « Résultats » reparaît si elle était
+   fermée, se déplie si elle était repliée, et s'allume un instant — sans
+   changer de place (wsReveler, js/90-workspace.js). Rien quand le calcul n'a
+   rien rendu : c'est alors le journal qui a quelque chose à dire. */
+function antResultatsReveler(){
+  if(ANT.resultat&&typeof wsReveler==="function")wsReveler("resultats");
+}
+
 /* Une fois : la première fois qu'un balayage arrive, on montre la famille de
    courbes plutôt que le S₁₁ d'un point isolé. Ensuite l'onglet choisi reste
    celui qu'on a choisi. */
