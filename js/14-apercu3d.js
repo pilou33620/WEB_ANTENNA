@@ -56,8 +56,16 @@ function ant3dInit(){
   const d2=new THREE.DirectionalLight(0x88bbff,0.35); d2.position.set(-2,-1,0.5);
   ANT3D.scene.add(d1); ANT3D.scene.add(d2);
 
+  /* DEUX GROUPES, DEUX REPÈRES. `monde` est l'assemblage : les pièces y sont
+     dessinées là où on les a posées. `racine` est la CARTE et tout ce qui
+     part au solveur avec elle — substrat, cuivre, ports, boîte d'air,
+     grille : il porte la position et la rotation de la carte dans
+     l'assemblage (`ANT.carte3d`, voir 33-pieces.js). La grille FDTD est
+     toujours alignée sur la carte ; c'est l'assemblage qui tourne autour. */
+  ANT3D.monde=new THREE.Group();
+  ANT3D.scene.add(ANT3D.monde);
   ANT3D.racine=new THREE.Group();
-  ANT3D.scene.add(ANT3D.racine);
+  ANT3D.monde.add(ANT3D.racine);
 
   ant3dSouris(cv);
   ANT3D.pret=true;
@@ -65,46 +73,266 @@ function ant3dInit(){
 }
 
 /* --------------------------------------------------------------------------
-   La caméra : orbite, molette, déplacement
-   Écrite ici plutôt que prise dans OrbitControls : ce sont quarante lignes,
-   et OrbitControls est un fichier de plus à poser dans le dépôt et à garder
-   en phase avec la version de three.js.
+   La caméra : la navigation de WEB_3D
+   --------------------------------------------------------------------------
+   LES MÊMES GESTES QUE LA VISIONNEUSE WEB_3D (son préréglage par défaut,
+   celui d'Onshape), pour qu'on n'ait pas à changer de mains en passant d'un
+   outil à l'autre :
+
+     clic droit glissé          tourner
+     bouton du milieu glissé    déplacer        (aussi Ctrl + clic droit)
+     Maj + clic droit glissé    zoomer
+     molette                    zoomer VERS LE CURSEUR
+     double-clic                le point visé devient le centre de rotation ;
+                                dans le vide, la vue se recadre
+     tactile                    un doigt tourne, deux doigts déplacent et pincent
+
+   Et, parce qu'ici le clic gauche ne sert pas à tracer un rectangle de
+   sélection : le glisser GAUCHE tourne aussi, Maj + gauche déplace. Un clic
+   gauche sans glisser reste un clic — il choisit une pièce (34-placement.js).
+
+   L'ORBITE GARDE Z EN HAUT — l'orbite « contrainte » de WEB_3D. Une carte a
+   un dessus et un dessous, et c'est par eux qu'on la lit : la retourner sans
+   le vouloir fait perdre le sens de l'empilage.
+
+   CE QUI N'ALLAIT PAS AVANT, et que le panoramique de WEB_3D règle : le
+   glisser horizontal poussait le centre le long de la direction du REGARD
+   (cos θ, sin θ) au lieu de la droite de l'écran, et le glisser vertical ne
+   montait qu'en z quel que soit l'angle de vue. On croyait se déplacer, on
+   s'enfonçait. Ici un pixel de souris vaut un pixel de modèle, le long des
+   axes de l'écran. Et le clic droit n'ouvre plus le menu du navigateur.
    -------------------------------------------------------------------------- */
-function ant3dSouris(cv){
-  let bouton=0, x0=0, y0=0, actif=false;
-  cv.addEventListener("pointerdown",function(e){
-    actif=true; bouton=e.button; x0=e.clientX; y0=e.clientY;
-    cv.setPointerCapture(e.pointerId);
-  });
-  cv.addEventListener("pointerup",function(e){
-    actif=false;
-    try{cv.releasePointerCapture(e.pointerId);}catch(err){}
-  });
-  cv.addEventListener("pointermove",function(e){
-    if(!actif)return;
-    const dx=e.clientX-x0, dy=e.clientY-y0;
-    x0=e.clientX; y0=e.clientY;
-    const o=ANT3D.orbite;
-    if(bouton===0){
-      o.theta-=dx*0.008;
-      /* La colatitude est bornée : passer par le pôle retourne l'image et
-         l'on ne sait plus où est le dessus de la carte. */
-      o.phi=Math.max(0.02,Math.min(Math.PI-0.02,o.phi-dy*0.008));
-    }else{
-      const k=ANT3D.rayon*o.dist*0.0022;
-      const s=Math.sin(o.theta), c=Math.cos(o.theta);
-      o.cx-= (dx*c)*k; o.cy-= (dx*s)*k;
-      o.cz+= dy*k;
+const ANT3D_NAV={geste:null, x:0, y:0, xd:0, yd:0, t0:0, pris:false,
+                 pointeurs:new Map(), pince:null, vO:{x:0,y:0}, vP:{x:0,y:0},
+                 anim:null, boucle:0};
+
+function ant3dGeste(e){
+  const b=e.button;
+  if(b===1)return (e.shiftKey)?"orbite":"pano";
+  if(b===2){
+    if(e.ctrlKey||e.metaKey)return "pano";
+    if(e.shiftKey)return "zoom";
+    return "orbite";
+  }
+  if(b===0)return (e.shiftKey||e.ctrlKey||e.metaKey)?"pano":"orbite";
+  return null;
+}
+
+/* Tourner autour du centre, Z en haut. */
+function ant3dOrbiter(dx,dy){
+  const o=ANT3D.orbite;
+  o.theta-=dx*0.006;
+  /* Le pôle est interdit d'un cheveu : à l'aplomb exact, la vue se
+     retournerait et l'on ne saurait plus où est le dessus de la carte. */
+  o.phi=Math.max(1e-3,Math.min(Math.PI-1e-3,o.phi-dy*0.006));
+  ant3dPoserCamera();
+}
+
+/* Déplacer le long des axes DE L'ÉCRAN : un pixel de souris vaut un pixel de
+   modèle à la distance du centre visé. */
+function ant3dDeplacer(dx,dy){
+  const cv=document.getElementById("vue3d");
+  const h=(cv&&cv.clientHeight)||1;
+  const o=ANT3D.orbite, cam=ANT3D.cam;
+  cam.updateMatrixWorld();
+  const k=2*Math.tan(cam.fov*Math.PI/360)*ANT3D.rayon*o.dist/h;
+  const e=cam.matrixWorld.elements;
+  const droite=[e[0],e[1],e[2]], haut=[e[4],e[5],e[6]];
+  o.cx+=-dx*k*droite[0]+dy*k*haut[0];
+  o.cy+=-dx*k*droite[1]+dy*k*haut[1];
+  o.cz+=-dx*k*droite[2]+dy*k*haut[2];
+  ant3dPoserCamera();
+}
+
+/* Le point de la scène sous le curseur : ce que le rayon touche, sinon le
+   plan face à l'écran qui passe par le centre visé. */
+function ant3dSousCurseur(e){
+  const cv=document.getElementById("vue3d");
+  const r=cv.getBoundingClientRect();
+  const ndc={x:((e.clientX-r.left)/r.width)*2-1, y:-((e.clientY-r.top)/r.height)*2+1};
+  const rc=ANT3D.rayonNav||(ANT3D.rayonNav=new THREE.Raycaster());
+  ANT3D.cam.updateMatrixWorld();
+  rc.setFromCamera(ndc,ANT3D.cam);
+  const cibles=[];
+  (ANT3D.monde||ANT3D.racine).traverse(function(o){ if(o.isMesh&&o.visible)cibles.push(o); });
+  const plan=(typeof PL!=="undefined")?PL.plan:null;
+  const hits=rc.intersectObjects(cibles,false).filter(h=>!plan||plan.distanceToPoint(h.point)>=0);
+  if(hits.length)return hits[0].point.clone();
+  const o=ANT3D.orbite, n=new THREE.Vector3();
+  ANT3D.cam.getWorldDirection(n);
+  const p=new THREE.Vector3();
+  const pl=new THREE.Plane().setFromNormalAndCoplanarPoint(n,new THREE.Vector3(o.cx,o.cy,o.cz));
+  return rc.ray.intersectPlane(pl,p)?p:null;
+}
+
+/* Zoomer ; avec un évènement, VERS LE CURSEUR : le centre glisse vers ce qui
+   est sous la souris, et c'est ainsi qu'on plonge dans un détail — une
+   pastille, un bossage — sans recadrer à la main. */
+function ant3dZoomer(f,e){
+  const o=ANT3D.orbite;
+  const d=Math.max(0.002,Math.min(200,o.dist*f));
+  const reel=d/o.dist;
+  if(e){
+    const p=ant3dSousCurseur(e);
+    if(p){
+      o.cx+=(p.x-o.cx)*(1-reel);
+      o.cy+=(p.y-o.cy)*(1-reel);
+      o.cz+=(p.z-o.cz)*(1-reel);
     }
-    ant3dPoserCamera();
+  }
+  o.dist=d;
+  ant3dPoserCamera();
+}
+
+/* L'inertie et les animations : une seule boucle, qui s'arrête d'elle-même
+   quand plus rien ne bouge. */
+function ant3dAnimer(){
+  if(ANT3D_NAV.boucle)return;
+  let avant=performance.now();
+  const pas=function(t){
+    const dt=Math.min(0.05,(t-avant)/1000); avant=t;
+    const N=ANT3D_NAV;
+    let encore=false;
+    if(N.anim){
+      const a=N.anim;
+      a.t=Math.min(1,a.t+dt/a.duree);
+      const k=a.t<0.5?4*a.t*a.t*a.t:1-Math.pow(-2*a.t+2,3)/2;
+      const o=ANT3D.orbite;
+      o.cx=a.de[0]+(a.a[0]-a.de[0])*k;
+      o.cy=a.de[1]+(a.a[1]-a.de[1])*k;
+      o.cz=a.de[2]+(a.a[2]-a.de[2])*k;
+      /* La caméra NE BOUGE PAS : c'est le regard qui tourne vers le nouveau
+         centre. Angles et distance se recalculent depuis sa place. */
+      const dx=a.cam[0]-o.cx, dy=a.cam[1]-o.cy, dz=a.cam[2]-o.cz;
+      const L=Math.max(1e-9,Math.hypot(dx,dy,dz));
+      o.theta=Math.atan2(dy,dx);
+      o.phi=Math.max(1e-3,Math.min(Math.PI-1e-3,Math.acos(Math.max(-1,Math.min(1,dz/L)))));
+      o.dist=L/Math.max(1e-9,ANT3D.rayon);
+      ant3dPoserCamera();
+      if(a.t>=1)N.anim=null; else encore=true;
+    }
+    if(!N.geste){
+      const frein=Math.pow(0.0025,dt);
+      if(Math.hypot(N.vO.x,N.vO.y)>0.15){
+        N.vO.x*=frein; N.vO.y*=frein;
+        ant3dOrbiter(N.vO.x*dt*12,N.vO.y*dt*12); encore=true;
+      }else N.vO.x=N.vO.y=0;
+      if(Math.hypot(N.vP.x,N.vP.y)>0.15){
+        N.vP.x*=frein; N.vP.y*=frein;
+        ant3dDeplacer(N.vP.x*dt*12,N.vP.y*dt*12); encore=true;
+      }else N.vP.x=N.vP.y=0;
+    }
+    N.boucle=encore?requestAnimationFrame(pas):0;
+  };
+  ANT3D_NAV.boucle=requestAnimationFrame(pas);
+}
+
+/* Le point visé devient le centre de rotation, sans que la caméra change de
+   place : c'est le geste qui évite de tourner autour du vide. */
+function ant3dPivoter(p){
+  const o=ANT3D.orbite, c=ANT3D.cam.position;
+  ANT3D_NAV.anim={t:0, duree:0.35, de:[o.cx,o.cy,o.cz], a:[p.x,p.y,p.z],
+                  cam:[c.x,c.y,c.z]};
+  ant3dAnimer();
+}
+
+function ant3dPince(){
+  const [a,b]=[...ANT3D_NAV.pointeurs.values()];
+  return {d:Math.hypot(a.x-b.x,a.y-b.y), cx:(a.x+b.x)/2, cy:(a.y+b.y)/2};
+}
+
+/* LES PIÈCES PASSENT D'ABORD (34-placement.js). Un geste qu'elles prennent —
+   saisir la pièce choisie pour la déplacer, cliquer un point à accrocher —
+   n'arrive pas à la caméra ; tous les autres, si. Et un clic gauche sans
+   glisser leur est rendu : c'est ainsi qu'on choisit une pièce. */
+function ant3dPlace(quoi,e){
+  return typeof antPlacePointeur==="function"&&antPlacePointeur(quoi,e);
+}
+
+function ant3dSouris(cv){
+  const N=ANT3D_NAV;
+  /* Sans cela, le clic droit ouvre le menu du navigateur au milieu du geste,
+     et le bouton du milieu lance son défilement automatique. */
+  cv.addEventListener("contextmenu",function(e){ e.preventDefault(); });
+  cv.addEventListener("pointerdown",function(e){
+    try{ cv.setPointerCapture(e.pointerId); }catch(err){}
+    N.pointeurs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    N.xd=e.clientX; N.yd=e.clientY; N.t0=performance.now();
+    N.x=e.clientX; N.y=e.clientY;
+    N.anim=null; N.vO.x=N.vO.y=N.vP.x=N.vP.y=0;
+    if(e.pointerType==="touch"&&N.pointeurs.size===2){
+      N.geste=null; N.pris=false; N.pince=ant3dPince();
+      return;
+    }
+    N.pris=ant3dPlace("down",e);
+    if(N.pris){ N.geste=null; return; }
+    N.geste=(e.pointerType==="touch")?"orbite":ant3dGeste(e);
+    N.bouton=e.button;
+    if(e.button===1||e.button===2)e.preventDefault();
+    if(N.geste)cv.classList.add(N.geste==="pano"?"pano":"orbite");
+  });
+  const finir=function(e){
+    try{ cv.releasePointerCapture(e.pointerId); }catch(err){}
+    N.pointeurs.delete(e.pointerId);
+    if(N.pointeurs.size<2)N.pince=null;
+    cv.classList.remove("pano","orbite");
+    if(N.pris){ N.pris=false; ant3dPlace("up",e); return; }
+    const clic=N.geste&&N.bouton===0&&e.type==="pointerup"&&
+               Math.hypot(e.clientX-N.xd,e.clientY-N.yd)<4&&performance.now()-N.t0<600;
+    N.geste=null;
+    /* LE SECOND CLIC D'UN DOUBLE-CLIC N'EST PAS UN CLIC. Il servait deux fois :
+       au placement, qui prenait alors la pièce DERRIÈRE — ou exécutait une
+       accroche en mode Accrocher, sur ce qui était dessous —, et au
+       double-clic, qui pose le centre de rotation. Un clic qui suit le
+       précédent de moins de 350 ms, au même endroit, appartient au
+       double-clic : il ne va qu'à lui. */
+    if(clic){
+      const t=performance.now(), d=N.dernier;
+      const double=d&&t-d.t<350&&Math.hypot(e.clientX-d.x,e.clientY-d.y)<6;
+      N.dernier=double?null:{t:t, x:e.clientX, y:e.clientY};
+      if(!double)ant3dPlace("clic",e);
+    }
+    else ant3dAnimer();                 // l'inertie prend le relais
+  };
+  cv.addEventListener("pointerup",finir);
+  cv.addEventListener("pointercancel",finir);
+  cv.addEventListener("pointermove",function(e){
+    const p=N.pointeurs.get(e.pointerId);
+    if(p){ p.x=e.clientX; p.y=e.clientY; }
+    if(N.pince&&N.pointeurs.size===2){
+      const q=ant3dPince(), a=N.pince;
+      if(a.d>1&&q.d>1)ant3dZoomer(a.d/q.d,null);
+      ant3dDeplacer(q.cx-a.cx,q.cy-a.cy);
+      N.pince=q;
+      return;
+    }
+    if(N.pris){ ant3dPlace("glisse",e); return; }
+    if(!N.geste){ ant3dPlace("survol",e); return; }
+    const dx=e.clientX-N.x, dy=e.clientY-N.y;
+    N.x=e.clientX; N.y=e.clientY;
+    if(N.geste==="orbite"){ ant3dOrbiter(dx,dy); N.vO.x=dx; N.vO.y=dy; }
+    else if(N.geste==="pano"){ ant3dDeplacer(dx,dy); N.vP.x=dx; N.vP.y=dy; }
+    else if(N.geste==="zoom")ant3dZoomer(Math.pow(1.005,dy),null);
   });
   cv.addEventListener("wheel",function(e){
     e.preventDefault();
-    ANT3D.orbite.dist=Math.max(0.25,Math.min(40,
-      ANT3D.orbite.dist*(e.deltaY>0?1.12:1/1.12)));
-    ant3dPoserCamera();
+    let d=e.deltaY;
+    if(e.deltaMode===1)d*=16; else if(e.deltaMode===2)d*=100;
+    /* Le pincement d'un pavé tactile arrive en molette + Ctrl, à petits pas :
+       on le rend plus vif pour qu'il suive les doigts. */
+    const pince=e.ctrlKey&&e.deltaMode===0&&Math.abs(e.deltaY)<50;
+    ant3dZoomer(Math.pow(0.9988,-d*(pince?2.2:1)),e);
   },{passive:false});
-  cv.addEventListener("dblclick",function(){ ant3dCadrer(); });
+  cv.addEventListener("dblclick",function(e){
+    const p=ant3dSousCurseur(e);
+    /* Sur la géométrie, le point devient le centre ; dans le vide, on
+       recadre tout. */
+    const cibles=[];
+    (ANT3D.monde||ANT3D.racine).traverse(function(o){ if(o.isMesh&&o.visible)cibles.push(o); });
+    const rc=ANT3D.rayonNav;
+    if(p&&rc&&rc.intersectObjects(cibles,false).length)ant3dPivoter(p);
+    else ant3dCadrer();
+  });
 }
 
 function ant3dPoserCamera(){
@@ -150,15 +378,20 @@ function ant3dDessiner(){
 function ant3dClef(m){
   return [m.cuivre.length, m.stats.polygones, m.vias.length,
           m.modele_cuivre, m.z_haut, !!ANT.vueMaillage,
-          JSON.stringify(m.primitives),
+          JSON.stringify(m.primitives), JSON.stringify(m.pieces||[]),
           m.boite.x1,m.boite.x2,m.boite.y1,m.boite.y2,m.boite.z1,m.boite.z2,
-          JSON.stringify(m.ports||[m.port])
+          JSON.stringify(m.ports||[m.port]), JSON.stringify(ANT.carte3d||null)
          ].join("|");
 }
 
 function ant3dMaj(){
   if(!ant3dInit())return;
-  const m=ANT.modele;
+  /* SANS MODÈLE, LES PIÈCES SE DESSINENT QUAND MÊME. Un modèle refusé — le
+     port n'est pas encore posé, la bande est vide — ne doit pas empêcher de
+     placer un boîtier : c'est souvent la première chose qu'on fait. La page
+     dresse alors un modèle d'aperçu, la carte en simple plaque (voir
+     `antPlaceModeleLocal`), et l'étiquette de la vue le dit. */
+  const m=ANT.modele||((typeof antPlaceModeleLocal==="function")?antPlaceModeleLocal():null);
   if(!m){ ant3dVider(); ant3dDessiner(); return; }
   const clef=ant3dClef(m);
   if(clef===ANT3D.clef){ ant3dDessiner(); return; }
@@ -178,13 +411,31 @@ function ant3dMaj(){
   const T=function(x,y,z){ return [x-cx,y-cy,z-cz]; };
 
   ant3dSubstrat(m,T);
+  if(typeof antCarte3d==="function")antCarte3d(m,ANT3D.racine,T);
   ant3dCuivre(m,T);
   ant3dVias(m,T);
   ant3dObjets(m,T);
   ant3dPorts(m,T);
-  ant3dBoites(m,T);
+  if(!m.local)ant3dBoites(m,T);
   ant3dMaillage(m,T);
   ant3dRepere(m,T);
+
+  /* La carte se désigne d'un clic comme une pièce : tout ce qui est dans son
+     groupe la représente — sauf les flèches, qui ne sont que des repères. */
+  ANT3D.racine.traverse(function(o){
+    if(o.isMesh&&!o.userData.carte&&!(o.parent&&o.parent.type==="ArrowHelper"))
+      o.userData.carte="modele";
+  });
+  /* T(−C)·B·T(C) : la carte placée dans l'assemblage, vue depuis le centre
+     de la scène. */
+  if(typeof antCarteMatrice==="function"){
+    const B=new THREE.Matrix4().fromArray(antCarteMatrice());
+    ANT3D.racine.matrixAutoUpdate=false;
+    ANT3D.racine.matrix.makeTranslation(-cx,-cy,-cz).multiply(B)
+      .multiply(new THREE.Matrix4().makeTranslation(cx,cy,cz));
+  }
+  if(typeof antPieces3d==="function")antPieces3d(m,ANT3D.monde,cx,cy,cz);
+  if(typeof antPlaceApres==="function")antPlaceApres(m);
 
   ant3dPoserCamera();
 }
@@ -202,7 +453,7 @@ function ant3dMaj(){
    par via redéclencherait autant de fois l'événement que le moteur de rendu
    écoute. Un ensemble de ce qu'on a déjà vu suffit. */
 function ant3dVider(){
-  const r=ANT3D.racine;
+  const r=ANT3D.monde;
   if(!r)return;
   const vus=new Set();
   const rendre=function(o){
@@ -218,6 +469,9 @@ function ant3dVider(){
     if(typeof o.traverse==="function")o.traverse(rendre);
     else rendre(o);
   }
+  /* Un groupe neuf pour la carte, à la place de l'ancien. */
+  ANT3D.racine=new THREE.Group();
+  r.add(ANT3D.racine);
 }
 
 /* Un polygone plat (tableau [[x,y],…]) -> une THREE.Shape, trous compris. */
@@ -258,6 +512,23 @@ function ant3dCuivre(m,T){
 
 function ant3dSubstrat(m,T){
   const b=m.boite_cuivre;
+  /* LE SUBSTRAT DE LA CARTE ENTIÈRE, quand il est demandé : le contour
+     exact, extrudé, et non la boîte du cuivre. C'est ce qui part au solveur. */
+  if(m.carte&&m.carte.contour&&m.carte.contour.length>=3){
+    const f=new THREE.Shape();
+    m.carte.contour.forEach((p,i)=>i?f.lineTo(p[0],p[1]):f.moveTo(p[0],p[1]));
+    f.closePath();
+    for(const d of m.dielectriques){
+      const mesh=new THREE.Mesh(
+        new THREE.ExtrudeGeometry(f,{depth:Math.max(1e-4,d.z1-d.z0),bevelEnabled:false}),
+        new THREE.MeshLambertMaterial({color:0x2d7a4a, transparent:true, opacity:0.22,
+                                       depthWrite:false, side:THREE.DoubleSide}));
+      const p=T(0,0,d.z0);
+      mesh.position.set(p[0],p[1],p[2]);
+      ANT3D.racine.add(mesh);
+    }
+    return;
+  }
   for(const d of m.dielectriques){
     const geo=new THREE.BoxGeometry(b[2]-b[0], b[3]-b[1], d.ep);
     /* Translucide : le cuivre des couches internes doit se deviner au
@@ -497,7 +768,7 @@ function antVuePoser(quoi){
 
   const h=document.getElementById("vueHint");
   if(h)h.textContent=(ANT.vue==="3d")
-    ? "glisser : tourner · clic droit : déplacer · molette : zoom · double-clic : cadrer"
+    ? "clic droit (ou gauche) glissé : tourner · milieu, Ctrl+droit ou Maj+gauche : déplacer · molette : zoom vers le curseur · double-clic : centre de rotation"
     : "clic : désigner du cuivre · Ctrl+clic : en ajouter · molette : zoom";
 
   if(ANT.vue==="3d"){
@@ -506,6 +777,7 @@ function antVuePoser(quoi){
   }else{
     resize();
   }
+  if(typeof antPlaceBarre==="function")antPlaceBarre();
 }
 
 if(window.ResizeObserver){

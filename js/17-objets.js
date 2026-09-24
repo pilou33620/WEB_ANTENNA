@@ -139,7 +139,12 @@ ANT_CORPS.objets=function(){
     'résonance de plusieurs pour cent et lui coupe une bonne part de son '+
     'rayonnement arrière — et rien dans le S<sub>11</sub> ne dira que l\'objet '+
     'manquait.</p>'+
-    '<div class="champ"><label>Ajouter</label>'+
+    /* LES PIÈCES D'ABORD : un boîtier réel, des piles, ce que la mécanique a
+       dessiné (33-pieces.js). Les formes simples viennent ensuite — une vis,
+       un fil, un réflecteur saisis en coordonnées. */
+    ((typeof antPiecesHtml==="function")
+      ? '<div class="champ pieces" id="antPieces">'+antPiecesHtml()+'</div>' : "")+
+    '<div class="champ"><label>Formes simples <small>fil, cylindre, boîte, sphère — en coordonnées</small></label>'+
     '<div class="raccourcis">'+boutons+'</div>'+
     '<p class="note">Le métal est un <b>conducteur parfait</b>. Un boîtier en '+
     'volume à conductivité finie demanderait de mailler l\'épaisseur de peau — '+
@@ -149,6 +154,7 @@ ANT_CORPS.objets=function(){
 };
 
 ANT_LIER.objets=function(box){
+  if(typeof antPiecesLier==="function")antPiecesLier(box.querySelector("#antPieces"));
   box.querySelectorAll("[data-forme]").forEach(function(b){
     b.onclick=function(){
       ANT.primitives.push(antObjetNeuf(b.dataset.forme));

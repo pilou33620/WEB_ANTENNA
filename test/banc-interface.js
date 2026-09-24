@@ -2359,6 +2359,298 @@ antChampsFideles({});
 verifie("une racine absente ou sans champs ne fait rien exploser", true);
 
 console.log("");
+console.log("23. Les pieces importees : recoller, verifier, placer");
+/* CE QUI S'EPROUVE ICI EST CE QUE CSXCAD NE DIRAIT PAS. Un polyedre dont les
+   sommets ne sont pas recolles, ou dont une face manque, y est vu VIDE, sans
+   un avertissement : le boitier partirait au solveur et n'y existerait pas.
+   La page recolle et compte les bords avant d'envoyer quoi que ce soit ; le
+   serveur refait la meme verification (banc Python, section 23). */
+charger("17-objets.js");
+charger("33-pieces.js");
+V.bbox={x1:0, y1:0, x2:40, y2:20};
+LT.pile=[{cuivre:true, ep:0.035},{cuivre:false, ep:1.6},{cuivre:true, ep:0.035}];
+ANT.modele=null;
+
+/* Un cube a sommets dupliques par face, comme OpenCascade les rend. */
+function cubeDuplique(ouvert){
+  const Q=[[[0,0,0],[0,1,0],[1,1,0],[1,0,0]],[[0,0,1],[1,0,1],[1,1,1],[0,1,1]],
+           [[0,0,0],[1,0,0],[1,0,1],[0,0,1]],[[0,1,0],[0,1,1],[1,1,1],[1,1,0]],
+           [[0,0,0],[0,0,1],[0,1,1],[0,1,0]],[[1,0,0],[1,1,0],[1,1,1],[1,0,1]]];
+  const P=[], T=[];
+  (ouvert?Q.slice(0,5):Q).forEach(function(q){
+    const n=P.length/3;
+    q.forEach(p=>P.push(p[0]*10,p[1]*2,p[2]*2));
+    T.push(n,n+1,n+2, n,n+2,n+3);
+  });
+  return {pos:new Float32Array(P), idx:new Uint32Array(T)};
+}
+const cd=cubeDuplique(false);
+const cs=antSouder(cd.pos,cd.idx);
+verifie("les sommets dupliques par face sont recolles : 24 -> 8",
+        cs.pos.length/3===8&&cs.idx.length/3===12, (cs.pos.length/3)+" / "+(cs.idx.length/3));
+verifie("un cube recolle est ferme", antBords(cs.idx)===0);
+verifie("le meme cube NON recolle ne l'est pas (CSXCAD le verrait vide)",
+        antBords(cd.idx)>0);
+const co=cubeDuplique(true);
+const corpsOuvert=antCorpsNeuf("Coque",co.pos,co.idx);
+verifie("un corps ouvert nait ignore, et dit combien d'aretes le trahissent",
+        corpsOuvert.matiere==="ignore"&&corpsOuvert.bords===4, JSON.stringify([corpsOuvert.matiere,corpsOuvert.bords]));
+
+const f32=new Float32Array([1.5,-2.25,3e-4,1e6]);
+const rf=antDeB64(antB64(f32),Float32Array);
+verifie("le base64 rend les flottants au bit pres",
+        rf.length===4&&rf.every((v,i)=>v===f32[i]));
+
+verifie("le cylindre d'une pile est ferme",
+        antBords(antMaillageCylindre(5,10,"x").idx)===0);
+const coquePc=antMaillageJoindre(antMaillageBoite(0,0,0,10,10,10),antMaillageBoite(2,2,2,8,8,8,true));
+verifie("une coque (dehors + cavite) est fermee", antBords(coquePc.idx)===0);
+verifie("toutes les piles du catalogue sont metalliques",
+        Object.keys(ANT_PILES).every(t=>antPiecePile(t).corps[0].matiere==="metal"));
+
+verifie("la carte d'un export mecanique est ignoree d'office",
+        antMatiereDevinee("PCB_main")==="ignore"&&antMatiereDevinee("Carte principale")==="ignore");
+verifie("une pile, une vis, un blindage sont du metal",
+        ["Battery CR2032","Vis M2x6","Shield can"].every(n=>antMatiereDevinee(n)==="metal"));
+verifie("un corps sans nom parlant est de l'ABS", antMatiereDevinee("Coque_haut")==="abs");
+
+/* LA ROTATION DE LA PAGE EST CELLE DU SERVEUR. Les boutons de pose la
+   calculent ici ; le dessin prend celle que le serveur rend. Si les deux
+   divergeaient, « poser dessus » poserait une piece a cote de l'endroit ou
+   elle est simulee. Les valeurs attendues sont celles d'openems_pieces. */
+const Rref=[[0.353553390593,-0.573223304703,0.73919891974],
+            [0.612372435696,0.73919891974,0.28033008589],
+            [-0.707106781187,0.353553390593,0.612372435696]];
+const Rp=antRotation([30,45,60]);
+verifie("R = Rz.Ry.Rx, comme openems_pieces._rotation",
+        Rp.every((l,i)=>l.every((v,j)=>Math.abs(v-Rref[i][j])<1e-9)));
+
+const barre=antPieceNeuve("barre","barre.stl",[antCorpsNeuf("barre",cd.pos,cd.idx,"metal")]);
+barre.rotation=[0,0,90];
+let e=antPieceEmprise(barre);
+verifie("un quart de tour en Z couche la barre de 10 mm selon Y, sur place",
+        Math.abs((e[3]-e[0])-2)<1e-5&&Math.abs((e[4]-e[1])-10)<1e-5&&
+        Math.abs((e[0]+e[3])/2-5)<1e-5, JSON.stringify(e));
+antPiecePoser(barre,"centrer"); antPiecePoser(barre,"dessus");
+e=antPieceEmprise(barre);
+verifie("« centrer » puis « poser dessus » : au milieu de la carte, sur sa face",
+        Math.abs((e[0]+e[3])/2-20)<1e-4&&Math.abs((e[1]+e[4])/2-10)<1e-4&&
+        Math.abs(e[2]-1.6)<1e-4, JSON.stringify(e));
+antPiecePoser(barre,"dessous");
+e=antPieceEmprise(barre);
+verifie("« poser dessous » : le dessus de la piece sous la carte", Math.abs(e[5])<1e-4);
+
+const tete=antPieceNeuve("assemblage","a.step",[
+  antCorpsNeuf("coque",cs.pos,cs.idx,"abs"),
+  antCorpsNeuf("PCB",cs.pos,cs.idx)]);
+ANT.pieces=[tete];
+const dp=antPiecesDoc()[0];
+verifie("un corps ignore voyage SANS ses triangles",
+        dp.corps[1].materiau==="ignore"&&dp.corps[1].sommets===undefined);
+verifie("un dielectrique voyage avec εr et tan δ",
+        dp.corps[0].materiau==="dielectrique"&&dp.corps[0].er===2.8&&dp.corps[0].df===0.006&&
+        typeof dp.corps[0].sommets==="string");
+verifie("le centre de rotation part avec la piece, corps ignores compris",
+        Array.isArray(dp.centre)&&Math.abs(dp.centre[0]-5)<1e-6);
+/* Une section plus haut a remplace `antDocument` par un appui : on recharge
+   le vrai, qui remet aussi `ANT` a neuf. */
+charger("10-etat.js");
+ANT.pieces=[tete];
+let docSim=null;
+try{ docSim=antDocument(); }catch(err){ docSim={erreur:String(err)}; }
+verifie("le document de simulation porte les pieces",
+        Array.isArray(docSim.pieces)&&docSim.pieces.length===1, JSON.stringify(docSim).slice(0,200));
+
+const relu=antPiecesRelire(JSON.parse(JSON.stringify(ANT.pieces)));
+verifie("un projet relu rend la piece, triangles compris",
+        relu.length===1&&relu[0].corps.length===2&&
+        antCorpsTab(relu[0].corps[0]).pos.length===cs.pos.length);
+verifie("une piece sans triangles ne survit pas a la relecture",
+        antPiecesRelire([{nom:"x",corps:[{nom:"y"}]}]).length===0);
+const bt=antPieceBoitier();
+verifie("le boitier autour de la carte est ferme, et l'entoure",
+        bt.corps[0].bords===0&&bt.corps[0].boite[0]<0&&bt.corps[0].boite[3]>40&&
+        bt.corps[0].boite[2]<0&&bt.corps[0].boite[5]>1.6, JSON.stringify(bt.corps[0].boite));
+bt.gen.ep=3; antPieceRegenerer(bt);
+verifie("changer la paroi regenere la coque, matiere gardee",
+        bt.corps[0].matiere==="abs"&&Math.abs(bt.corps[0].boite[0]-(-5))<1e-5);
+ANT.pieces=[];
+
+console.log("");
+console.log("23bis. Fermer un corps que l'export a laisse ouvert");
+/* Trois defauts d'un STEP mal cousu, et un corps VRAIMENT ouvert qu'il ne
+   faut pas « reparer » en inventant de la matiere. */
+function paveTri(x1,y1,z1,x2,y2,z2){ const g=antMaillageBoite(x1,y1,z1,x2,y2,z2); return {pos:Array.from(g.pos), idx:Array.from(g.idx)}; }
+// 1. une jonction en T : la face du dessus coupee en deux par un sommet
+//    au milieu d'une arete, que la face voisine ne partage pas.
+(function(){
+  const P=[0,0,0, 10,0,0, 10,10,0, 0,10,0, 0,0,10, 10,0,10, 10,10,10, 0,10,10, 5,0,10];
+  const T=[0,2,1, 0,3,2,  4,8,6, 8,5,6, 4,6,7,  0,1,5, 0,5,4,  1,2,6, 1,6,5, 2,3,7, 2,7,6, 3,0,4, 3,4,7];
+  verifie("une jonction en T laisse le corps ouvert tel quel", antBords(new Uint32Array(T))>0);
+  const r=antFermer(new Float32Array(P),new Uint32Array(T));
+  verifie("... et la reparation le ferme en coupant l'arete", r.bords===0&&/jonction/.test(r.repare), JSON.stringify([r.bords,r.repare]));
+})();
+// 2. une fente de 0,03 mm : une face cousue a trois centiemes pres.
+(function(){
+  const g=cubeDuplique(false);
+  g.pos[0]+=0.03;                            // la copie d'un coin, sur UNE face
+  verifie("un coin decale de 0,03 mm ouvre le corps au micron",
+          antBords(antSouder(g.pos,g.idx).idx)>0);
+  const r=antFermer(g.pos,g.idx);
+  verifie("... et le recollage progressif le referme",
+          r.bords===0&&/recoll/.test(r.repare), JSON.stringify([r.bords,r.repare]));
+})();
+// 3. une vraie ouverture : une boite sans couvercle ne se bouche pas.
+(function(){
+  const g=antMaillageBoite(0,0,0,60,90,30);
+  const T=Array.from(g.idx); T.splice(6,6);  // le dessus, 60 x 90 mm, retire
+  const r=antFermer(g.pos,new Uint32Array(T));
+  verifie("un couvercle absent reste absent : l'outil n'invente pas de matiere", r.bords>0);
+  const c=antCorpsNeuf("coque",g.pos,new Uint32Array(T));
+  verifie("... et le corps reste ignore", c.matiere==="ignore");
+})();
+// 4. un petit trou (une facette oubliee) se bouche.
+(function(){
+  const g=antMaillageCylindre(1,2,"z",12);
+  const T=Array.from(g.idx); T.splice(0,3);  // une facette du fond
+  const r=antFermer(g.pos,new Uint32Array(T));
+  verifie("une facette oubliee de 0,3 mm2 est bouchee", r.bords===0&&/bouch/.test(r.repare), JSON.stringify([r.bords,r.repare]));
+})();
+
+console.log("");
+console.log("24. L'accroche a la souris : la geometrie derriere le clic");
+/* La souris ne s'eprouve pas ici, la geometrie si : ce qu'une accroche ECRIT
+   dans la position et la rotation de la piece. Une face posee contre la
+   carte doit la toucher, a plat, et au bon endroit — sinon le boitier
+   « accroche » flotte d'un demi-millimetre, et rien ne le montre. */
+(0,eval)(fs.readFileSync(path.join(JS,"vendor","three.min.js"),"utf8"));
+global.ANT3D={pret:false, centre:{x:0,y:0,z:0}};
+charger("34-placement.js");
+verifie("les angles relus d'une rotation sont ceux qui l'ont faite",
+        plAngles(antRotation([30,45,60])).every((v,i)=>Math.abs(v-[30,45,60][i])<1e-6));
+verifie("un quart de tour sort rond", JSON.stringify(plAngles(antRotation([90,0,0])))==="[90,0,0]");
+
+const V3=(x,y,z)=>new THREE.Vector3(x,y,z);
+const barre2=antPieceNeuve("barre","b.stl",[antCorpsNeuf("barre",cs.pos,cs.idx,"metal")]);
+antPlaceAccrocher(barre2,{p:V3(10,2,2),n:V3(1,0,0)},{p:V3(20,20,5),n:V3(0,0,1)},"pp");
+let eb=antPieceEmprise(barre2);
+verifie("point -> point : le coin de la barre tombe sur le point vise",
+        Math.abs(eb[3]-20)<1e-6&&Math.abs(eb[4]-20)<1e-6&&Math.abs(eb[5]-5)<1e-6, JSON.stringify(eb));
+
+const barre3=antPieceNeuve("barre","b.stl",[antCorpsNeuf("barre",cs.pos,cs.idx,"metal")]);
+antPlaceAccrocher(barre3,{p:V3(10,1,1),n:V3(1,0,0)},{p:V3(20,10,1.6),n:V3(0,0,1)},"ff",true,false);
+eb=antPieceEmprise(barre3);
+verifie("face -> face : le bout de la barre se pose A PLAT sur la carte, debout",
+        Math.abs(eb[2]-1.6)<1e-6&&Math.abs(eb[5]-11.6)<1e-6, JSON.stringify(eb));
+verifie("et sans « centrer », elle reste la ou etait sa face",
+        Math.abs((eb[0]+eb[3])/2-10)<1e-6&&Math.abs((eb[1]+eb[4])/2-1)<1e-6, JSON.stringify(eb));
+verifie("la rotation ecrite est un quart de tour propre",
+        barre3.rotation.every(v=>Math.abs(v-Math.round(v))<1e-9)&&
+        barre3.rotation.some(v=>Math.abs(Math.abs(v)-90)<1e-9), JSON.stringify(barre3.rotation));
+
+const barre4=antPieceNeuve("barre","b.stl",[antCorpsNeuf("barre",cs.pos,cs.idx,"metal")]);
+antPlaceAccrocher(barre4,{p:V3(5,1,0),n:V3(0,0,-1)},{p:V3(20,10,1.6),n:V3(0,0,1)},"ff",true,true);
+eb=antPieceEmprise(barre4);
+verifie("face -> face « centrer » : couchee sur la carte, centree sur le point",
+        Math.abs(eb[2]-1.6)<1e-6&&Math.abs((eb[0]+eb[3])/2-20)<1e-6&&
+        Math.abs((eb[1]+eb[4])/2-10)<1e-6&&barre4.rotation.every(v=>v===0), JSON.stringify([eb,barre4.rotation]));
+
+const barre5=antPieceNeuve("barre","b.stl",[antCorpsNeuf("barre",cs.pos,cs.idx,"metal")]);
+antPlaceAccrocher(barre5,{p:V3(3,1,0),n:V3(0,0,-1)},{p:V3(30,30,1.6),n:V3(0,0,1)},"pf");
+eb=antPieceEmprise(barre5);
+verifie("point -> face : la barre descend sur le plan sans bouger en x ni en y",
+        Math.abs(eb[2]-1.6)<1e-6&&Math.abs(eb[0])<1e-6&&Math.abs(eb[1])<1e-6, JSON.stringify(eb));
+console.log("");
+console.log("24bis. La carte se deplace comme une piece, et le calcul reste juste");
+/* La grille du solveur est alignee sur la carte : deplacer la carte dans
+   l'assemblage, c'est envoyer au serveur les pieces deplacees en sens
+   inverse. Si la composition etait fausse, le boitier « bougerait » dans la
+   simulation sans avoir bouge a l'ecran — et rien ne le montrerait. */
+(function(){
+  const pc=antPieceNeuve("barre","b.stl",[antCorpsNeuf("barre",cs.pos,cs.idx,"metal")]);
+  pc.position=[3,-2,5]; pc.rotation=[0,30,0];
+  const W=antPieceMatrice(pc);                 // la piece dans l'assemblage
+  ANT.carte3d={position:[0,0,0],rotation:[0,0,0]};
+  const r0=antPieceRelative(pc);
+  verifie("carte a l'origine : la piece part telle quelle",
+          JSON.stringify(r0.position)===JSON.stringify(pc.position)&&JSON.stringify(r0.rotation)===JSON.stringify(pc.rotation));
+  ANT.carte3d={position:[12,-7,4],rotation:[0,0,90]};
+  const B=new THREE.Matrix4().fromArray(antCarteMatrice());
+  const Mrel=new THREE.Matrix4().fromArray(antPieceMatriceCarte(pc));
+  const compose=B.clone().multiply(Mrel).elements;
+  verifie("carte deplacee et tournee : B · (piece vue de la carte) = piece dans l'assemblage",
+          compose.every((v,i)=>Math.abs(v-W[i])<1e-6), JSON.stringify([compose.map(v=>+v.toFixed(3)),W.map(v=>+v.toFixed(3))]));
+  const avant=antPieceEmprise(pc);
+  antPiecePoser(pc,"dessus");
+  const apres=antPieceEmprise(pc), cm=antCarteMonde();
+  verifie("« poser dessus » vise la carte LA OU ELLE EST",
+          Math.abs(apres[2]-cm.z2)<1e-4&&Math.abs(cm.z2-(4+1.6))<1e-4, JSON.stringify([apres,cm]));
+  /* L'accroche deplace la carte comme une piece : sa face du dessus contre
+     un point a z = 30 — la carte monte, elle ne tourne pas. */
+  ANT.carte3d={position:[0,0,0],rotation:[0,0,0]};
+  antPlaceAccrocher(ANT_CARTE_PIECE,{p:V3(20,10,1.6),n:V3(0,0,1)},{p:V3(20,10,30),n:V3(0,0,1)},"pf");
+  verifie("la carte s'accroche comme une piece (point -> face)",
+          Math.abs(ANT.carte3d.position[2]-28.4)<1e-6&&ANT.carte3d.rotation.every(v=>v===0), JSON.stringify(ANT.carte3d));
+  ANT.carte3d={position:[0,0,0],rotation:[0,0,0]};
+})();
+
+console.log("");
+console.log("24ter. Les corrections de la revue");
+verifie("la matiere se devine sur des MOTS : Valuation, Scan_window, Devis ne sont pas du metal",
+        ["Valuation","Scan_window","Devis","Calumet"].every(n=>antMatiereDevinee(n)==="abs"),
+        JSON.stringify(["Valuation","Scan_window","Devis","Calumet"].map(antMatiereDevinee)));
+verifie("... et capot_alu, Batt1, Battery, Vis_M2, Evaluation_board sont reconnus",
+        antMatiereDevinee("capot_alu")==="metal"&&antMatiereDevinee("Batt1")==="metal"&&
+        antMatiereDevinee("Battery")==="metal"&&antMatiereDevinee("Vis_M2")==="metal"&&
+        antMatiereDevinee("Evaluation_board")==="ignore");
+(function(){
+  const sauve=ANT.modele;
+  ANT.modele=null; const c1=antCarteCentre();
+  ANT.modele={z_haut:7.3}; const c2=antCarteCentre();
+  ANT.modele=sauve;
+  verifie("le pivot de la carte ne depend pas de la derniere reponse du serveur",
+          JSON.stringify(c1)===JSON.stringify(c2), JSON.stringify([c1,c2]));
+})();
+(function(){
+  ANT.carte3d={position:[100,0,0],rotation:[0,0,0]};
+  ANT.pieces=[];
+  const b=plBoiteAssemblage();
+  ANT.carte3d={position:[0,0,0],rotation:[0,0,0]};
+  verifie("la coupe balaie l'assemblage : la carte deplacee de 100 mm y est",
+          Math.abs(b.x1-100)<1e-9&&Math.abs(b.x2-140)<1e-9, JSON.stringify(b));
+})();
+(function(){
+  /* Le double-clic, sur un canevas en trompe-l'oeil : deux clics rapides au
+     meme endroit ne doivent donner qu'UN clic au placement. */
+  global.window.ResizeObserver=undefined;
+  charger("14-apercu3d.js");
+  const h={};
+  const cv={addEventListener(t,f){ h[t]=f; }, setPointerCapture(){}, releasePointerCapture(){},
+            classList:{add(){},remove(){}}};
+  const recus=[];
+  global.antPlacePointeur=function(q){ if(q==="clic")recus.push(q); return false; };
+  ant3dSouris(cv);
+  const ev=(t,x)=>Object.assign({type:t, clientX:x, clientY:50, button:0, pointerId:1,
+                                  pointerType:"mouse", shiftKey:false, ctrlKey:false, metaKey:false,
+                                  preventDefault(){}});
+  h.pointerdown(ev("pointerdown",100)); h.pointerup(ev("pointerup",100));
+  h.pointerdown(ev("pointerdown",101)); h.pointerup(ev("pointerup",101));
+  verifie("un double-clic ne donne qu'UN clic au placement", recus.length===1, recus.length);
+  const t0=performance.now(); while(performance.now()-t0<380){}
+  h.pointerdown(ev("pointerdown",101)); h.pointerup(ev("pointerup",101));
+  verifie("... un clic plus lent reste un clic (la piece derriere)", recus.length===2, recus.length);
+  delete global.antPlacePointeur;
+})();
+
+ANT.pieces=[barre3];
+V.modele={};
+const ml=antPlaceModeleLocal();
+verifie("sans modele du serveur, l'apercu 3D dessine quand meme carte et pieces",
+        ml&&ml.local&&ml.pieces.length===1&&ml.pieces[0].matrice.length===16&&
+        ml.boite.z2>11.6, JSON.stringify(ml&&ml.boite));
+ANT.pieces=[];
+
+console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")
                                             :"toutes passees."));
 process.exit(ko.length?1:0);

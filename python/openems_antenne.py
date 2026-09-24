@@ -28,6 +28,7 @@
 """Porte d'entree de l'outil antenne : preparation, script, execution."""
 
 import openems_modele
+import openems_pieces
 from openems_modele import ErreurModele          # noqa: F401  (re-export)
 
 MAX_CORPS = openems_modele.MAX_CORPS
@@ -92,8 +93,11 @@ def etat():
 
 def preparer(doc):
     """Verifie et complete le document. C'est l'appel de l'assistant : il a
-    lieu a chaque modification d'un champ, et il ne calcule rien de lourd."""
-    return openems_modele.normaliser(doc)
+    lieu a chaque modification d'un champ, et il ne calcule rien de lourd.
+
+    Les triangles des pieces importees ne remontent pas : la page les a deja,
+    c'est elle qui les a envoyes. Voir openems_pieces.sans_geometrie."""
+    return openems_pieces.sans_geometrie(openems_modele.normaliser(doc))
 
 
 def script(doc):

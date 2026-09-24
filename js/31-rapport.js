@@ -170,6 +170,18 @@ function rapCollecterDonnees(){
   if(typeof ANT !== "undefined" && ANT.primitives){
     d.geometrie.stats.primitives = ANT.primitives.length;
   }
+  /* Les pièces importées, corps par corps, avec la matière qui est PARTIE :
+     un rapport qui dirait « boîtier » sans dire en quoi ne permettrait pas de
+     refaire le calcul, ni de comprendre pourquoi la résonance a bougé. */
+  d.geometrie.pieces = [];
+  if(typeof ANT !== "undefined" && ANT.modele && ANT.modele.pieces){
+    ANT.modele.pieces.forEach(function(p){
+      p.corps.forEach(function(c){
+        d.geometrie.pieces.push({piece: p.nom, corps: c.nom, materiau: c.materiau,
+          matiere: c.matiere || "", er: c.er, df: c.df, triangles: c.triangles || 0});
+      });
+    });
+  }
 
   // Empilage PCB (Stackup)
   if(typeof antEmpilage === "function"){
@@ -634,6 +646,14 @@ function rapGenererHtml(d, diags){
   if(d.geometrie.stats.primitives > 0){
     h += '        <tr><td>Objets 3D externes</td><td class="mono">' + d.geometrie.stats.primitives + ' primitive(s) (fil, radôme, boîtier)</td></tr>';
   }
+  (d.geometrie.pieces || []).forEach(function(c){
+    const quoi = (c.materiau === "metal") ? "métal (conducteur parfait)"
+      : (c.materiau === "dielectrique")
+        ? rapEscHtml(c.matiere) + ' — ε<sub>r</sub> ' + rapNb(c.er, 2) + ', tan δ ' + rapNb(c.df, 4)
+        : 'ignoré (hors simulation)';
+    h += '        <tr><td>Pièce ' + rapEscHtml(c.piece) + ' / ' + rapEscHtml(c.corps) + '</td><td class="mono">' + quoi +
+         (c.triangles ? ' · ' + c.triangles + ' triangles' : '') + '</td></tr>';
+  });
   h += '        </tbody>';
   h += '      </table>';
   h += '    </div>';

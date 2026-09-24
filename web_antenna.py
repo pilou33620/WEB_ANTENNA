@@ -149,6 +149,10 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         ".svg": "image/svg+xml",
         ".png": "image/png",
         ".ico": "image/x-icon",
+        # Le noyau OpenCascade des pieces STEP (js/vendor/occt/). Sans ce
+        # type, le navigateur refuse la compilation en flux et retombe sur
+        # une compilation plus lente, en le signalant dans la console.
+        ".wasm": "application/wasm",
     }
 
     def __init__(self, *a, **kw):

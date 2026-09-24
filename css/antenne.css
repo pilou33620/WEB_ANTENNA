@@ -23,6 +23,8 @@
 .vhint{font-size:10.5px;color:var(--txt-dim);font-family:var(--mono)}
 #vue3d{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 #vue3d:active{cursor:grabbing}
+#vue3d.pano{cursor:move}
+#vue3d.orbite{cursor:grabbing}
 #vue3d[hidden]{display:none}
 #carte[hidden]{display:none}
 
@@ -775,3 +777,81 @@ svg.apm .apm-cote.on text{fill:var(--yellow);font-weight:600}
 .chp-accueil b{font-size:13px;color:var(--txt)}
 .chp-accueil p{margin:0;font-size:12px;line-height:1.6;color:var(--txt-dim)}
 .chp-accueil p.alerte,.chp-accueil .note.alerte{color:var(--yellow)}
+
+/* =============================================================================
+   LES PIÈCES IMPORTÉES (étape « La boîte », 33-pieces.js)
+   Mêmes fiches « objet » que l'étape « Autour » ; ce qui s'ajoute est le
+   tableau des corps — une ligne par solide du fichier, sa matière à côté.
+   ============================================================================= */
+.champ.pieces{
+  border:1px solid var(--border2);border-radius:6px;padding:10px 12px;
+  background:var(--panel2);margin-bottom:12px;
+}
+.champ.pieces.depot{border-color:var(--blue);box-shadow:inset 0 0 0 1px var(--blue)}
+.champ.pieces .raccourcis{margin-bottom:6px}
+.raccourcis.piles{align-items:center}
+.raccourcis.piles>span{
+  font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt-dim);
+  margin-right:2px;
+}
+.objet.piece{background:var(--panel);border-left:3px solid var(--cyan)}
+.objet.piece .ligne{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:6px}
+.objet.piece .ligne>span{display:flex;flex-direction:column;gap:3px;flex:1 1 60px;min-width:0}
+.objet.piece .ligne label{font-size:10px;letter-spacing:.04em;color:var(--txt-dim)}
+.objet.piece .ligne .unite{flex:0 0 auto;padding-bottom:6px;font-family:var(--mono);
+  font-size:10px;color:var(--txt-dim)}
+.piece-compte{font-family:var(--mono);font-size:10px;color:var(--txt-dim);flex:none}
+.piece-pose{display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 7px}
+.piece-corps{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:4px}
+.piece-corps table{width:100%;border-collapse:collapse;font-size:11px}
+.piece-corps th{
+  position:sticky;top:0;background:var(--panel2);text-align:left;font-weight:normal;
+  font-size:9.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--txt-dim);
+  padding:4px 5px;border-bottom:1px solid var(--border);
+}
+.piece-corps td{padding:3px 5px;border-bottom:1px solid var(--border);vertical-align:middle}
+.piece-corps tr:last-child td{border-bottom:none}
+.piece-corps td.nom{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.piece-corps select{width:100%;min-width:110px;font-size:11px}
+.piece-corps input{width:52px;font-size:11px}
+.piece-corps tr.metal td.nom{box-shadow:inset 3px 0 0 #c8ccd2}
+.piece-corps tr.dielectrique td.nom{box-shadow:inset 3px 0 0 var(--cyan)}
+.piece-corps tr.ignore td{color:var(--txt-dim)}
+.piece-corps tr.ignore td.nom{text-decoration:line-through;text-decoration-color:var(--border2)}
+.piece-etat{font-family:var(--mono);font-size:10px;color:var(--txt-dim);white-space:nowrap}
+.piece-etat.ko{color:var(--red)}
+.piece-emprise{margin-top:5px;font-family:var(--mono);font-size:10px;color:var(--txt-dim)}
+.piece-emprise:empty{display:none}
+
+/* ---------- le placement à la souris (34-placement.js) ----------
+   Posé en bas de la vue 3D, dans la même matière que le sélecteur de vue du
+   haut : ce sont deux barres de la même vue. */
+.place3d{
+  position:absolute;left:10px;bottom:10px;z-index:5;max-width:calc(100% - 20px);
+  background:rgba(23,24,27,.9);border:1px solid var(--border2);
+  border-radius:6px;padding:4px 6px;display:flex;flex-direction:column;gap:3px;
+}
+.place3d .vb{padding:2px 7px;font-size:11px}
+.place3d[hidden]{display:none}
+.place3d .pl-ligne{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.place3d .pl-nom{font-size:11.5px;color:var(--txt-dim);margin-right:6px;
+  max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.place3d .pl-nom b{color:var(--yellow);font-weight:600}
+.place3d .vb[disabled]{opacity:.4;cursor:default}
+.place3d .pl-pas,.place3d .pl-ck{display:flex;align-items:center;gap:4px;
+  font-size:10.5px;color:var(--txt-dim);font-family:var(--mono)}
+.place3d .pl-pas select{font-size:10.5px;padding:1px 3px}
+.place3d .pl-aide{font-size:10.5px;color:var(--txt-dim);font-family:var(--mono)}
+
+/* La pièce choisie en 3D, et le corps que le clic a touché. */
+.objet.piece.choisie{border-color:var(--yellow);box-shadow:inset 3px 0 0 var(--yellow)}
+.piece-corps tr.vise td{background:#2a2715}
+.piece-corps td.nom small{display:block;font-family:var(--mono);font-size:9.5px;color:var(--txt-dim)}
+.place3d .pl-etq{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--txt-dim)}
+.place3d input[type=range]{width:120px;accent-color:var(--yellow)}
+.place3d .pl-ck input[disabled]+*{opacity:.4}
+/* L'œil d'un corps ou d'une pièce : visible en 3D, sans effet sur le calcul. */
+input.oeil{accent-color:var(--cyan);cursor:pointer;margin:0}
+.piece-corps tr.masque td.nom{opacity:.45}
+.piece-etat.repare{color:var(--green)}
+.piece-corps td .tb.mini{margin-left:4px;padding:1px 6px;font-size:10px}

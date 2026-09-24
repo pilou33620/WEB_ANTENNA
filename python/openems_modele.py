@@ -40,9 +40,15 @@ pouces d'un fichier IPC-2581 en pouces sont ramenes au millimetre.
 import copy
 import math
 
+import openems_pieces
+
 # Le document porte des polygones de cuivre : il est plus gros qu'un document
-# de ligne de transmission, plus petit qu'un document de chute DC.
-MAX_CORPS = 24 * 1024 * 1024
+# de ligne de transmission, plus petit qu'un document de chute DC. Et depuis
+# qu'il porte aussi les pieces importees -- un boitier, des piles, en
+# triangles --, il lui faut la place de leur budget (voir
+# openems_pieces.MAX_TRIANGLES : quatre cent mille triangles font une
+# dizaine de megaoctets en base64).
+MAX_CORPS = 64 * 1024 * 1024
 
 C0 = 299792458.0            # m/s
 MU0 = 4e-7 * math.pi
@@ -1061,8 +1067,9 @@ def _vias(doc, conducteurs, k_mm):
 # en coordonnees, et elles entrent dans le maillage comme le reste.
 #
 # CE QU'ELLES NE SONT PAS : un editeur 3D. Quatre formes, des nombres, et la
-# vue 3D pour verifier. Dessiner une piece mecanique demande un outil de
-# mecanique, et l'importer demanderait un lecteur de STEP.
+# vue 3D pour verifier. Une piece mecanique reelle -- un boitier avec ses
+# parois, ses bossages et ses conges -- s'IMPORTE : c'est le travail de
+# `_pieces` et d'openems_pieces.py, a l'etape « Autour ».
 PRIMITIVES = ("fil", "cylindre", "boite", "sphere")
 
 
@@ -1141,6 +1148,74 @@ def _primitives(doc, k_mm):
                 raise ErreurModele("La sphere « %s » n'a pas de rayon." % nom)
         out.append(o)
     return out
+
+
+# ==========================================================================
+# Le substrat de la carte entiere
+# ==========================================================================
+# PAR DEFAUT, LE SUBSTRAT NE COUVRE QUE LE CUIVRE RETENU : sa boite englobante,
+# `boite_cu`. C'est juste quand on simule une antenne sur son plan de masse ;
+# c'est faux des qu'il reste de la carte au-dela -- une carte de 50 x 70 mm
+# dont on n'a retenu que l'antenne et sa masse locale est simulee avec un
+# stratifie tronque, et ce qui depasse (les deux tiers de la carte, parfois)
+# n'existe pas pour le solveur. Avec un boitier autour, c'est pire : la paroi
+# plastique « voit » une carte plus petite que la vraie.
+#
+# Quand la page envoie le CONTOUR de la carte (le <Profile> du fichier, ou le
+# contour dessine en conception), le substrat suit ce contour, polygone exact,
+# sur toute sa hauteur. Les decoupes interieures ne sont pas reprises : un
+# AddLinPoly n'a pas de trou, et une fente dans le stratifie se simule mieux
+# en la designant qu'en la devinant.
+CARTE_MAX_POINTS = 4000
+
+
+def _carte(doc, k_mm):
+    """Le contour de la carte, en mm, ou None s'il n'est pas demande."""
+    c = _dict(_dict(doc).get("carte"))
+    if not c.get("substrat"):
+        return None
+    pts = _polyligne(_liste(c.get("contour")))
+    if len(pts) < 3:
+        return None
+    if len(pts) > CARTE_MAX_POINTS:
+        raise ErreurModele(
+            "Le contour de la carte a %d sommets, %d au plus."
+            % (len(pts), CARTE_MAX_POINTS),
+            "Decochez « le substrat suit le contour de la carte » a l'etape "
+            "« Autour » : le substrat reprendra l'emprise du cuivre.")
+    pts = [(x * k_mm, y * k_mm) for x, y in pts]
+    if abs(_aire(pts)) <= 0:
+        return None
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    # LES ARETES DROITES DU CONTOUR PORTENT UNE LIGNE : un bord de carte
+    # vertical en x qui tombe entre deux lignes fait un stratifie plus large
+    # ou plus etroit d'une demi-cellule. Les bords obliques ne se suivent pas
+    # sur une grille cartesienne, on ne pretend pas les suivre.
+    lx, ly = set([min(xs), max(xs)]), set([min(ys), max(ys)])
+    n = len(pts)
+    for i in range(n):
+        (x0, y0), (x1, y1) = pts[i], pts[(i + 1) % n]
+        if abs(x1 - x0) < 1e-6 and abs(y1 - y0) > 0.5:
+            lx.add(round(x0, 6))
+        if abs(y1 - y0) < 1e-6 and abs(x1 - x0) > 0.5:
+            ly.add(round(y0, 6))
+    return {"contour": pts,
+            "boite": [min(xs), min(ys), max(xs), max(ys)],
+            "lignes_x": sorted(lx)[:64], "lignes_y": sorted(ly)[:64]}
+
+
+def _pieces(doc, k_mm):
+    """Les pieces importees (STEP, STL), verifiees et placees.
+
+    Le travail est dans openems_pieces.py ; ce qui reste ici est la
+    traduction de ses refus dans la langue de ce module, pour que la page les
+    affiche comme les autres -- un message, un conseil.
+    """
+    try:
+        return openems_pieces.pieces(_dict(doc).get("pieces"), k_mm)
+    except openems_pieces.ErreurPiece as exc:
+        raise ErreurModele(exc.message, exc.conseil)
 
 
 def _emprise_primitive(o):
@@ -2206,12 +2281,21 @@ def _maillage(modele, bande, res_air, res_die, res_fin=0.0, bandes=None):
     # rayonne autant que le cuivre, et un maillage d'air autour de lui ne le
     # represente pas. C'est aussi pourquoi un gros objet fait exploser le
     # nombre de cellules — le bilan le montre plutot que de le cacher.
-    x = _lignes(boite["x1"], em[0], res_air)
-    x += _lignes(em[0], em[3], res_die)
-    x += _lignes(em[3], boite["x2"], res_air)
-    y = _lignes(boite["y1"], em[1], res_air)
-    y += _lignes(em[1], em[4], res_die)
-    y += _lignes(em[4], boite["y2"], res_air)
+    # Trois zones par axe : l'air, le pas « exterieur » des pieces et de la
+    # carte au-dela du cuivre, et le pas fin du cuivre. Voir `emprise_fin`
+    # dans `normaliser`.
+    fe = modele.get("emprise_fin") or em
+    rx = (modele.get("resolution") or {}).get("ext") or res_die
+    rx = max(res_die, rx)
+
+    def axe(a, b1, b2):
+        return (_lignes(b1, em[a], res_air)
+                + _lignes(em[a], fe[a], rx)
+                + _lignes(fe[a], fe[a + 3], res_die)
+                + _lignes(fe[a + 3], em[a + 3], rx)
+                + _lignes(em[a + 3], b2, res_air))
+    x = axe(0, boite["x1"], boite["x2"])
+    y = axe(1, boite["y1"], boite["y2"])
 
     # -- les bandes fines, en travers du cuivre etroit -----------------------
     # LE FOND NE PASSE PAS SOUS UNE BANDE : elle l'y remplace, plus fin. Une
@@ -2254,8 +2338,10 @@ def _maillage(modele, bande, res_air, res_die, res_fin=0.0, bandes=None):
         z_obl.append(d["z0"])
         z_obl.append(d["z1"])
     z += _lignes(boite["z1"], em[2], res_air)
-    z += _lignes(em[2], 0.0, res_die)
-    z += _lignes(z_haut, em[5], res_die)
+    z += _lignes(em[2], fe[2], rx)
+    z += _lignes(fe[2], 0.0, res_die)
+    z += _lignes(z_haut, fe[5], res_die)
+    z += _lignes(fe[5], em[5], rx)
     z += _lignes(em[5], boite["z2"], res_air)
 
     # -- les aretes du port, qui doivent tomber sur des lignes ---------------
@@ -2302,6 +2388,27 @@ def _maillage(modele, bande, res_air, res_die, res_fin=0.0, bandes=None):
         x_obl += [e[0], e[3]]
         y_obl += [e[1], e[4]]
         z_obl += [e[2], e[5]]
+
+    # -- les faces des pieces importees --------------------------------------
+    # DE L'AFFINAGE, ET NON DES LIGNES OBLIGATOIRES, a la difference des
+    # primitives juste au-dessus. Une primitive a six faces ; une piece
+    # importee en a des dizaines, et deux d'entre elles a un dixieme de
+    # millimetre -- un epaulement, une nervure -- poseraient, obligatoires,
+    # une cellule-copeau qui commanderait le pas de temps de tout le domaine.
+    # Rangees dans l'affinage, elles cedent au quart du pas vise : une paroi
+    # plus epaisse que cela garde ses deux faces, donc au moins une cellule
+    # entiere a son epaisseur exacte -- c'est ce qu'il fallait. Voir
+    # openems_pieces._plans pour le choix des faces.
+    carte = modele.get("carte")
+    if carte:
+        x_aff += carte["lignes_x"]
+        y_aff += carte["lignes_y"]
+    z_pieces = []
+    for _, c in openems_pieces.corps_inclus(modele.get("pieces") or []):
+        e, pl = c["emprise"], c["plans"]
+        x_aff += [e[0], e[3]] + pl[0]
+        y_aff += [e[1], e[4]] + pl[1]
+        z_pieces += [e[2], e[5]] + pl[2]
 
     # -- la regle du tiers aux aretes de cuivre ------------------------------
     # On ne la pose que sur les aretes qui bornent l'emprise du cuivre : poser
@@ -2454,6 +2561,22 @@ def _maillage(modele, bande, res_air, res_die, res_fin=0.0, bandes=None):
         for i in range(1, n):
             z_aff.append(d["z0"] + d["ep"] * i / n)
     mini_z = plancher_z if plancher_z > 0 else res_die / 4.0
+    # Les faces des pieces en z, au seuil du plan et non au plancher du
+    # substrat : ce dernier descend a la moitie de la plus petite cellule du
+    # plan pour les trois cellules qu'il faut SOUS UNE PISTE, et une paroi de
+    # boitier n'a pas a payer ce prix-la.
+    # Et entre elles aussi : deux faces de piece plus proches que ce seuil
+    # n'en gardent qu'une, la premiere venue dans l'ordre des cotes.
+    mini_z_pieces = max(mini_z, res_die / 4.0)
+    deja = sorted(z_obl + z_aff)
+    for v in sorted(set(round(v, 9) for v in z_pieces)):
+        i = _place(deja, v)
+        if i > 0 and v - deja[i - 1] < mini_z_pieces:
+            continue
+        if i < len(deja) and deja[i] - v < mini_z_pieces:
+            continue
+        deja.insert(i, v)
+        z_aff.append(v)
     mz = _lisser(_fusionner(z, mini_z, z_obl, z_aff, res_die / 3.0), res_die)
     # CE QUI SERRE LA GRILLE, AXE PAR AXE. Ecrit ici et nulle part ailleurs :
     # c'est le seul endroit ou les trois listes -- obligatoires, affinage,
@@ -3038,6 +3161,8 @@ def normaliser(doc):
     # parle de celui-la, et n'a pas eu a changer.
     port = next(p for p in ports if p["excite"])
     primitives = _primitives(doc, k_mm)
+    pieces = _pieces(doc, k_mm)
+    carte = _carte(doc, k_mm)
     # LA MASSE SEULE N'EST PAS UNE ANTENNE. Si tout le cuivre recu vient du
     # net de masse (marque « m » par la page), rien n'a ete designe comme
     # antenne : le calcul porterait sur le plan de masse de la carte, et il
@@ -3059,10 +3184,28 @@ def normaliser(doc):
     # une marge d'air mesuree depuis la carte seule laisserait un boitier ou
     # un fil DANS la couche absorbante — c'est-a-dire hors du calcul, sans
     # que rien ne le dise.
-    emprise = [boite_cu[0], boite_cu[1], 0.0,
-               boite_cu[2], boite_cu[3], z_haut]
+    #
+    # DEUX EMPRISES, ET LE PAS FIN SEULEMENT DANS LA PREMIERE. `emprise_fin`
+    # est ce que le pas du DIELECTRIQUE doit couvrir : le cuivre, ses ports,
+    # les objets saisis a la main. Le reste de l'emprise -- la carte au-dela
+    # du cuivre, un boitier, des piles -- recoit le pas de SA matiere,
+    # lambda/20/racine(er). Avant, tout etait au pas fin, et ce pas-la est
+    # souvent tenu par la largeur d'une piste : un boitier ABS de 60 mm
+    # maille au quart d'un ruban de 0,5 mm faisait trois fois le calcul de
+    # l'antenne seule, pour une paroi qui n'en demandait pas tant.
+    emprise_fin = [boite_cu[0], boite_cu[1], 0.0,
+                   boite_cu[2], boite_cu[3], z_haut]
     for e in ([_emprise_primitive(o) for o in primitives]
               + [_emprise_port(p) for p in ports]):
+        for k in range(3):
+            emprise_fin[k] = min(emprise_fin[k], e[k])
+            emprise_fin[k + 3] = max(emprise_fin[k + 3], e[k + 3])
+    emprise = list(emprise_fin)
+    if carte:
+        cb = carte["boite"]
+        emprise = [min(emprise[0], cb[0]), min(emprise[1], cb[1]), emprise[2],
+                   max(emprise[3], cb[2]), max(emprise[4], cb[3]), emprise[5]]
+    for e in openems_pieces.emprises(pieces):
         for k in range(3):
             emprise[k] = min(emprise[k], e[k])
             emprise[k + 3] = max(emprise[k + 3], e[k + 3])
@@ -3071,6 +3214,13 @@ def normaliser(doc):
     # vaut N cellules, donc la marge conseillee depend du pas de maillage.
     er_max = max([d["er"] for d in dielectriques] or [1.0])
     res_air, res_die, res_detail = _resolution(bande, er_max, cuivre, boite_cu)
+    # LE PAS HORS DU CUIVRE : lambda/20 dans la matiere la plus lente qu'on y
+    # trouve -- une paroi de verre (er 6,5), le stratifie de la carte entiere.
+    # Jamais plus fin que le pas du dielectrique, jamais plus grossier que
+    # celui de l'air.
+    er_ext = max([c["er"] for _, c in openems_pieces.corps_inclus(pieces)
+                  if c["materiau"] == "dielectrique"]
+                 + ([er_max] if carte else []) or [1.0])
     m = _dict(doc.get("maillage"))
     res_air_saisi = _nb_pos(m.get("res_air"), 0.0) * k_mm
     res_air = res_air_saisi or res_air
@@ -3081,6 +3231,9 @@ def normaliser(doc):
     res_die_saisi = _nb_pos(m.get("res_die"), 0.0) * k_mm
     res_die = res_die_saisi or res_die
     res_detail["saisi"] = bool(res_die_saisi)
+    res_ext = min(res_air, max(res_die, res_air / math.sqrt(max(1.0, er_ext))))
+    res_detail["ext"] = res_ext
+    res_detail["er_ext"] = er_ext
     boite = _boite(doc, emprise, bande, res_air, k_mm)
     tiers = m.get("tiers")
     tiers = TIERS_DEFAUT if tiers is None else bool(tiers)
@@ -3100,13 +3253,16 @@ def normaliser(doc):
         "vias": vias,
         "boite_cuivre": boite_cu,
         "emprise": emprise,
+        "emprise_fin": emprise_fin,
         "primitives": primitives,
+        "pieces": pieces,
+        "carte": carte,
         "port": port,
         "ports": ports,
         "bande": bande,
         "boite": boite,
         "maillage_tiers": tiers,
-        "resolution": {"air": res_air, "die": res_die,
+        "resolution": {"air": res_air, "die": res_die, "ext": res_ext,
                        "er_max": er_max,
                        "detail": res_detail,
                        "lambda_min_mm": C0 / bande["f2"] * 1000.0,
@@ -3166,7 +3322,11 @@ def normaliser(doc):
                   "absorbes": n_absorbes,
                   "vias": len(vias),
                   "couches_cuivre": len(cuivre),
-                  "primitives": len(primitives)},
+                  "primitives": len(primitives),
+                  "pieces": len(pieces),
+                  "corps": sum(1 for _ in openems_pieces.corps_inclus(pieces)),
+                  "triangles": sum(c["triangles"] for _, c in
+                                   openems_pieces.corps_inclus(pieces))},
     }
 
     mx, my, mz = _mailler(modele, bande, res_air, res_die)
@@ -3329,8 +3489,9 @@ def _cause_cellule(m):
                        "l'objet : une face de port, une arete de primitive. "
                        "Elargissez l'objet jusqu'au pas vise, ou retirez-le",
         "affinage": "une ligne de la regle du tiers, posee autour d'une "
-                    "arete de cuivre. Retirez de la selection le cuivre qui "
-                    "ne rayonne pas",
+                    "arete de cuivre, ou le plan d'une face de piece "
+                    "importee. Retirez de la selection le cuivre qui ne "
+                    "rayonne pas, ou marquez « ignore » le corps en cause",
         "remplissage": "une ligne reguliere de la grille. Le pas vise la "
                        "commande",
     }
@@ -4007,6 +4168,31 @@ def _avis(m):
                      "n'est pas la bonne, et sa resonance sort trop haut. %s"
                      % (largeur, CELLULES_PAR_PISTE, cellules, cause),
         })
+
+    # UNE PIECE TOURNEE HORS DES QUARTS DE TOUR PAR RAPPORT A LA GRILLE. Ses
+    # parois ne sont plus alignees sur les lignes : elles sont vues en
+    # marches d'escalier, et une paroi mince n'y porte plus de ligne de
+    # maillage (`_plans` ne retient que les faces alignees) -- elle est vue a
+    # moitie ou pas du tout selon l'endroit ou elle tombe. C'est le cas d'un
+    # boitier dans lequel on a tourne la CARTE de 30 degres : le solveur, lui,
+    # voit le boitier tourne de -30.
+    for p in m.get("pieces") or []:
+        if not any(c.get("materiau") != "ignore" for c in p["corps"]):
+            continue
+        biais = [v for v in p.get("rotation") or ()
+                 if abs(v / 90.0 - round(v / 90.0)) > 1e-6]
+        if biais:
+            out.append({
+                "rang": "attention",
+                "titre": "Piece de biais dans la grille",
+                "texte": "« %s » est tournee de %s degres par rapport a la "
+                         "carte : ses parois ne sont plus alignees sur la "
+                         "grille, qui suit toujours la carte. Elles y sont "
+                         "vues en marches d'escalier, et une paroi mince n'y "
+                         "porte plus de ligne de maillage. Preferez des "
+                         "quarts de tour entre la carte et son boitier."
+                         % (p["nom"], ", ".join("%g" % v for v in biais)),
+            })
 
     return out
 

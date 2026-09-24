@@ -2091,7 +2091,252 @@ except Exception as _exc:                              # noqa: BLE001
 
 # --------------------------------------------------------------------------
 print()
-print("22. Les bancs JavaScript (decoupage de polygones, logique de la page)")
+print("22. Les pieces importees (STEP, STL) : boitier, piles")
+# CE QUE LE BANC VERIFIE ICI, C'EST CE QUE CSXCAD NE DIRAIT PAS. Un polyedre
+# ouvert, ou dont les sommets ne sont pas recolles, y est vu vide PARTOUT --
+# verifie a la main sur CSXCAD 0.6.3, IsInside = faux au centre d'un cube non
+# recolle. Le boitier partirait au solveur et n'y existerait pas. Le modele
+# doit donc recoller, refuser l'ouvert, et poser des lignes sur les parois --
+# sans quoi une paroi de 1,5 mm tombe entre deux lignes et disparait a moitie.
+import base64 as _b64                                  # noqa: E402
+import struct as _struct                               # noqa: E402
+import openems_pieces                                  # noqa: E402
+
+_QUADS = [[(0, 0, 0), (0, 1, 0), (1, 1, 0), (1, 0, 0)],
+          [(0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)],
+          [(0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)],
+          [(0, 1, 0), (0, 1, 1), (1, 1, 1), (1, 1, 0)],
+          [(0, 0, 0), (0, 0, 1), (0, 1, 1), (0, 1, 0)],
+          [(1, 0, 0), (1, 1, 0), (1, 1, 1), (1, 0, 1)]]
+
+
+def _pave(o, d, inverse=False, soude=True, faces=6):
+    """Un pave en triangles ; `soude=False` duplique les sommets par face,
+    comme OpenCascade les rend."""
+    S, T, idx = [], [], {}
+    for q in _QUADS[:faces]:
+        ids = []
+        for p in q:
+            v = tuple(o[k] + d[k] * p[k] for k in range(3))
+            if soude and v in idx:
+                ids.append(idx[v])
+                continue
+            idx[v] = len(S)
+            S.append(v)
+            ids.append(idx[v])
+        a, b, c, e = ids
+        tr = [(a, b, c), (a, c, e)]
+        T += [t[::-1] for t in tr] if inverse else tr
+    return S, T
+
+
+def _coque(o, d, ep):
+    S1, T1 = _pave(o, d)
+    S2, T2 = _pave([o[k] + ep for k in range(3)],
+                   [d[k] - 2 * ep for k in range(3)], inverse=True)
+    n = len(S1)
+    return S1 + S2, T1 + [tuple(i + n for i in t) for t in T2]
+
+
+def _corps(nom, ST, materiau="dielectrique", er=2.8, df=0.006):
+    S, T = ST
+    return {"nom": nom, "materiau": materiau, "matiere": "ABS", "er": er, "df": df,
+            "sommets": _b64.b64encode(_struct.pack(
+                "<%df" % (3 * len(S)), *[c for v in S for c in v])).decode(),
+            "triangles": _b64.b64encode(_struct.pack(
+                "<%dI" % (3 * len(T)), *[i for t in T for i in t])).decode()}
+
+
+def _piece(*corps, **quoi):
+    p = {"id": "p1", "nom": "boitier", "position": [0, 0, 0],
+         "rotation": [0, 0, 0], "corps": list(corps)}
+    p.update(quoi)
+    return p
+
+
+_COQUE = _coque([-5, -5, -8], [80, 80, 20], 1.5)
+mp = openems_modele.normaliser(document(pieces=[_piece(_corps("coque", _COQUE))]))
+_c = mp["pieces"][0]["corps"][0]
+verifie("une coque fermee est acceptee", _c["ferme"] and _c["triangles"] == 24)
+verifie("l'emprise s'etend au boitier",
+        mp["emprise"][2] == -8.0 and mp["emprise"][5] == 12.0, mp["emprise"])
+verifie("la boite d'air part du boitier, pas de la carte",
+        mp["boite"]["z1"] < -8.0 and mp["boite"]["z2"] > 12.0)
+for _ax, _v in (("x", (-5.0, -3.5, 73.5, 75.0)), ("z", (-8.0, -6.5, 10.5, 12.0))):
+    verifie("les DEUX faces de chaque paroi portent une ligne (%s)" % _ax,
+            all(any(abs(q - v) < 1e-6 for q in mp["maillage"][_ax]) for v in _v),
+            [v for v in _v if not any(abs(q - v) < 1e-6 for q in mp["maillage"][_ax])])
+verifie("un boitier fait grossir le maillage, et cela se voit",
+        mp["estimation"]["cellules"] > m["estimation"]["cellules"])
+_sg = openems_pieces.sans_geometrie(mp)
+verifie("la page recoit le modele SANS les triangles, et il est du JSON",
+        all("_geo" not in c for p in _sg["pieces"] for c in p["corps"])
+        and "_geo" in mp["pieces"][0]["corps"][0] and bool(json.dumps(_sg)))
+
+_verre = openems_modele.normaliser(document(pieces=[_piece(
+    _corps("vitre", _COQUE, er=6.5, df=0.015))]))
+verifie("une piece en verre (er 6,5) resserre le pas DE SA REGION, pas celui du cuivre",
+        _verre["resolution"]["ext"] < mp["resolution"]["ext"]
+        and _verre["resolution"]["die"] == mp["resolution"]["die"]
+        and _verre["resolution"]["er_max"] == mp["resolution"]["er_max"],
+        (_verre["resolution"]["ext"], mp["resolution"]["ext"]))
+
+# LE PAS FIN RESTE SUR LE CUIVRE. Un boitier ABS autour du patch ne se maille
+# pas au pas qu'impose le cuivre : entre l'emprise du cuivre et celle du
+# boitier, les lignes sont a lambda/20/racine(2,8).
+_GRAND = _coque([-40, -40, -25], [150, 150, 55], 2.0)
+_fin = {"res_die": 0.4}
+_mg = openems_modele.normaliser(document(pieces=[_piece(_corps("coque", _GRAND))], maillage=_fin))
+_fe = _mg["emprise_fin"]
+_xs = [v for v in _mg["maillage"]["x"] if _mg["emprise"][0] + 2.5 < v < _fe[0] - 1e-6]
+_ecarts = [b - a for a, b in zip(_xs, _xs[1:])]
+verifie("hors du cuivre, le boitier est maille a son pas et non au pas fin",
+        _ecarts and max(_ecarts) > 4 * 0.4 and min(_ecarts) > 0.4 * 1.5,
+        (_ecarts, _mg["resolution"]["ext"]))
+_c0 = openems_modele.normaliser(document(maillage=_fin))["estimation"]["cellules"]
+verifie("un grand boitier coute moins que trois fois l'antenne seule",
+        _mg["estimation"]["cellules"] < 3 * _c0, (_mg["estimation"]["cellules"], _c0))
+
+# LES CORPS IGNORES NE COMPTENT PAS DANS LA LIMITE : un export complet, carte
+# peuplee comprise, passe tant que peu de corps partent au solveur.
+_n = openems_pieces.MAX_CORPS
+_beaucoup = [{"nom": "composant %d" % i, "materiau": "ignore"} for i in range(_n + 50)]
+_mi = openems_modele.normaliser(document(pieces=[_piece(_corps("coque", _COQUE), *_beaucoup)]))
+verifie("450 corps dont 1 simule : le modele passe",
+        _mi["stats"]["corps"] == 1)
+refuse("au-dela de 400 corps SIMULES, le refus dit de marquer « ignore »",
+       document(pieces=[_piece(*[_corps("vis %d" % i, _COQUE, "metal") for i in range(_n + 1)])]),
+       "ignore")
+
+# LA SOUDURE DU SERVEUR NE FUSIONNE QUE L'IDENTIQUE : deux sommets a 0,8 um
+# que la page a gardes distincts le restent.
+_S, _T = _pave([0, 0, 0], [5, 5, 5])
+_S = _S + [(0.0008, 0.0006, 0.0)]
+_T = _T + [(0, 1, len(_S) - 1), (0, len(_S) - 1, 1)]
+_a = openems_pieces._analyser("t", _corps("x", (_S, _T))["sommets"], _corps("x", (_S, _T))["triangles"])
+verifie("un sommet a moins d'un micron d'un autre n'est pas fusionne par le serveur",
+        _a["n_sommets"] == 9, _a["n_sommets"])
+
+# UNE PIECE DE BIAIS DANS LA GRILLE LE DIT.
+_bi = openems_modele.normaliser(document(pieces=[_piece(_corps("coque", _COQUE), rotation=[0, 0, 30])]))
+verifie("une piece tournee de 30 degres par rapport a la carte donne un avis",
+        any("biais" in a["titre"] for a in _bi["avis"]))
+verifie("un quart de tour, non",
+        not any("biais" in a["titre"] for a in openems_modele.normaliser(
+            document(pieces=[_piece(_corps("coque", _COQUE), rotation=[0, 0, 90])]))["avis"]))
+
+_ouvert = _pave([10, 10, 5], [5, 5, 5], faces=5)
+refuse("un corps OUVERT est refuse (CSXCAD le verrait vide)",
+       document(pieces=[_piece(_corps("vis", _ouvert, "metal"))]),
+       "n'est pas ferme")
+_ign = openems_modele.normaliser(document(pieces=[_piece(
+    _corps("coque", _COQUE), {"nom": "PCB", "materiau": "ignore"},
+    _corps("vis", _ouvert, "ignore"))]))
+verifie("un corps ignore n'a pas besoin de ses triangles, et ne compte pas",
+        _ign["stats"]["corps"] == 1 and _ign["stats"]["triangles"] == 24,
+        _ign["stats"])
+refuse("une permittivite sous 1 est refusee",
+       document(pieces=[_piece(_corps("coque", _COQUE, er=0.5))]),
+       "permittivite")
+
+_brut = _pave([10, 10, 5], [5, 5, 5], soude=False)
+_sd = openems_modele.normaliser(document(pieces=[_piece(
+    _corps("pile", _brut, "metal"), rotation=[0, 90, 0], position=[1, 2, 3])]))
+_cs = _sd["pieces"][0]["corps"][0]
+verifie("des sommets dupliques par face sont recolles (24 -> 8)",
+        _cs["sommets"] == 8 and _cs["ferme"], _cs)
+verifie("la rotation tourne sur le centre de la piece, la position deplace",
+        all(abs(a - b) < 1e-9 for a, b in
+            zip(_cs["emprise"], (11, 12, 8, 16, 17, 13))), _cs["emprise"])
+_cz = openems_modele.normaliser(document(pieces=[_piece(
+    _corps("pile", _brut, "metal"), rotation=[0, 0, 90], centre=[10, 10, 5])]))
+verifie("le centre envoye par la page fait foi (corps ignores compris)",
+        all(abs(a - b) < 1e-9 for a, b in
+            zip(_cz["pieces"][0]["corps"][0]["emprise"], (5, 10, 5, 10, 15, 10))),
+        _cz["pieces"][0]["corps"][0]["emprise"])
+verifie("un metal passe au-dessus du cuivre, un plastique sous le substrat",
+        _cs["priorite"] > 13 and _c["priorite"] < 1)
+
+_max = openems_pieces.MAX_TRIANGLES
+openems_pieces.MAX_TRIANGLES = 10
+refuse("un budget de triangles depasse est refuse, et dit quoi faire",
+       document(pieces=[_piece(_corps("coque", _COQUE))]), "triangles")
+openems_pieces.MAX_TRIANGLES = _max
+
+_sp = openems_script.generer(mp)
+try:
+    compile(_sp, "pieces.py", "exec")
+    verifie("le script avec pieces compile", True)
+except SyntaxError as exc:
+    verifie("le script avec pieces compile", False, str(exc))
+verifie("chaque corps simule devient un polyedre",
+        _sp.count("_polyedre(piece_") == 1 and "AddPolyhedron" in _sp)
+verifie("un plastique part en materiau, avec sa permittivite",
+        "epsilon=2.8" in _sp)
+
+# -- le substrat de la carte entiere ---------------------------------------
+# Par defaut le stratifie simule s'arrete a l'emprise du cuivre retenu ; avec
+# le contour de la carte, il a la taille de la vraie -- et le maillage aussi.
+_CONTOUR = [-10, -10, 80, -10, 80, 95, 40, 110, -10, 95]
+_mc = openems_modele.normaliser(document(carte={"substrat": True,
+                                                "contour": _CONTOUR}))
+verifie("le substrat de la carte entiere agrandit l'emprise a son contour",
+        _mc["emprise"][:2] == [-10.0, -10.0] and _mc["emprise"][3:5] == [80.0, 110.0],
+        _mc["emprise"])
+verifie("ses bords droits portent une ligne de maillage",
+        all(any(abs(q - v) < 1e-6 for q in _mc["maillage"][a])
+            for a, v in (("x", -10.0), ("x", 80.0), ("y", -10.0))))
+_sc = openems_script.generer(_mc)
+verifie("le substrat part en polygone (AddLinPoly), et non en boite",
+        "sub_0.AddLinPoly(" in _sc and "sub_0.AddBox(" not in _sc)
+_mo = openems_modele.normaliser(document(carte={"substrat": False,
+                                                "contour": _CONTOUR}))
+verifie("decoche, rien ne change : le substrat reste l'emprise du cuivre",
+        _mo["emprise"] == m["emprise"] and _mo.get("carte") is None)
+
+# LA VRAIE QUESTION, POSEE A CSXCAD LUI-MEME quand il est installe : la paroi
+# est-elle pleine, la cavite vide, et le reste-t-elles apres le passage par le
+# XML (le chemin des pertes de Debye) ?
+try:
+    import openems_run                                 # noqa: E402
+    _exe = openems_run.interprete() if openems_run.etat().get("dispo") else ""
+except Exception:                                      # noqa: BLE001
+    _exe = ""
+if _exe:
+    _code = (
+        "import os, sys, tempfile\n"
+        "d = os.environ.get('OPENEMS_DLL', '')\n"
+        "if d and hasattr(os, 'add_dll_directory'):\n"
+        "    os.add_dll_directory(d)\n"
+        "import numpy as np\n"
+        "from CSXCAD import ContinuousStructure\n"
+        "CSX = ContinuousStructure()\n"
+        "exec(sys.stdin.read(), {'np': np, 'CSX': CSX})\n"
+        "x = os.path.join(tempfile.mkdtemp(), 'p.xml')\n"
+        "CSX.Write2XML(x)\n"
+        "C2 = ContinuousStructure(); C2.ReadFromXML(x)\n"
+        "for C in (CSX, C2):\n"
+        "    p = C.GetAllProperties()[0].GetAllPrimitives()[0]; p.Update()\n"
+        "    print(p.IsInside([-4.2, 30, 0]), p.IsInside([30, 30, 0]),"
+        " p.IsInside([80, 30, 0]))\n")
+    try:
+        _r = subprocess.run([_exe, "-c", _code], input=openems_script._bloc_pieces(mp),
+                            capture_output=True, text=True, timeout=120,
+                            env=openems_run._preparer_env())
+        _l = (_r.stdout or "").strip().splitlines()
+        verifie("CSXCAD voit la paroi pleine, la cavite et le dehors vides",
+                len(_l) == 2 and _l[0] == "True False False", _r.stdout + _r.stderr[-300:])
+        verifie("et toujours apres le passage par le XML",
+                len(_l) == 2 and _l[1] == "True False False", _l)
+    except Exception as exc:                           # noqa: BLE001
+        verifie("CSXCAD relit les pieces", False, str(exc))
+else:
+    print("   CSXCAD absent : la lecture des polyedres par le solveur n'est pas")
+    print("   verifiee ici.")
+
+# --------------------------------------------------------------------------
+print()
+print("23. Les bancs JavaScript (decoupage de polygones, logique de la page)")
 # IL EST EN JAVASCRIPT, ET IL EST QUAND MEME VERIFIE ICI. Le decoupage d'une
 # decoupe au bord d'un versement est le seul morceau de l'outil dont on ne
 # voit PAS le resultat : une fente mal coupee ne fait pas d'erreur, elle fait

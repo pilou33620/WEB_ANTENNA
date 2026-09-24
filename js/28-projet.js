@@ -186,6 +186,12 @@ function prjAntenne(){
     modeleCuivre:ANT.modeleCuivre,
     pertes:ANT.pertes,
     primitives:ANT.primitives,
+    /* Les pièces, triangles compris : un boîtier STEP ne se retrouve pas
+       tout seul sur le disque, et un projet qui renverrait à un fichier
+       d'ailleurs ne se rouvrirait pas chez un collègue. */
+    pieces:ANT.pieces,
+    substratCarte:!!ANT.substratCarte,
+    carte3d:ANT.carte3d,
     bande:ANT.bande, uniteF:ANT.uniteF,
     ports:ANT.ports, portActif:ANT.portActif,
     boite:ANT.boite, maillage:ANT.maillage,
@@ -321,6 +327,17 @@ function prjAntAppliquer(a){
   if(a.pertes&&(a.pertes.mode==="kappa"||a.pertes.mode==="debye"))
     ANT.pertes={mode:a.pertes.mode, f_kappa:prjNombre(a.pertes.f_kappa,0)};
   if(Array.isArray(a.primitives))ANT.primitives=a.primitives;
+  if(Array.isArray(a.pieces)&&typeof antPiecesRelire==="function")
+    ANT.pieces=antPiecesRelire(a.pieces);
+  /* UN PROJET D'AVANT L'OPTION GARDE L'ANCIEN SUBSTRAT. Ses calculs ont été
+     faits avec le stratifié réduit à l'emprise du cuivre : le rouvrir avec
+     la carte entière changerait le S11 sans qu'on ait rien touché, et la
+     comparaison avec ses résultats enregistrés serait fausse. Seuls les
+     projets neufs — ou enregistrés depuis — prennent le défaut. */
+  ANT.substratCarte=(typeof a.substratCarte==="boolean")?a.substratCarte:false;
+  if(a.carte3d&&Array.isArray(a.carte3d.position)&&Array.isArray(a.carte3d.rotation))
+    ANT.carte3d={position:a.carte3d.position.slice(0,3).map(v=>+v||0),
+                 rotation:a.carte3d.rotation.slice(0,3).map(v=>+v||0)};
 
   if(a.bande&&a.bande.f1>0&&a.bande.f2>a.bande.f1)Object.assign(ANT.bande,a.bande);
   if(ANT_UNITES_F[a.uniteF])ANT.uniteF=a.uniteF;

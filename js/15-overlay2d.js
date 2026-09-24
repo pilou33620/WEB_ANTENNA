@@ -49,13 +49,21 @@ function antSurimpression(c,dpr,W,H){
    lui, et les redécrire à chaque image était du travail rendu au navigateur
    pour un dessin identique. Le pointillé, lui, reste posé sur le contexte à
    chaque image : son pas est en unités du monde, il DOIT suivre le zoom. */
-const ANT_OBJETS_CHEMINS={prims:null, k:0, metal:null, autre:null};
+/* LA CLÉ EST LE MODÈLE ENTIER, et non sa seule liste de primitives : les
+   pièces importées (33-pieces.js) y sont peintes aussi, et le modèle est un
+   objet neuf à chaque réponse du serveur. */
+const ANT_OBJETS_CHEMINS={m:null, k:0, metal:null, autre:null};
 
 function antObjetsChemins(m,k){
-  if(ANT_OBJETS_CHEMINS.prims===m.primitives&&ANT_OBJETS_CHEMINS.k===k)
+  if(ANT_OBJETS_CHEMINS.m===m&&ANT_OBJETS_CHEMINS.k===k)
     return ANT_OBJETS_CHEMINS;
   const metal=new Path2D(), autre=new Path2D();
-  for(const o of m.primitives){
+  /* Les pièces importées : le rectangle de chaque corps simulé. Un contour
+     exact de boîtier vu de dessus ne dirait rien de plus que son emprise, et
+     il coûterait cent mille segments à chaque image. */
+  if(typeof antPiecesEmpreintes==="function")
+    for(const e of antPiecesEmpreintes(m,k))(e.metal?metal:autre).rect(e.x,e.y,e.w,e.h);
+  for(const o of (m.primitives||[])){
     const p=(o.materiau==="metal")?metal:autre;
     if(o.type==="boite"){
       p.rect(o.a[0]*k,o.a[1]*k,(o.b[0]-o.a[0])*k,(o.b[1]-o.a[1])*k);
@@ -76,14 +84,14 @@ function antObjetsChemins(m,k){
       p.arc(o.pts[0][0]*k,o.pts[0][1]*k,r,0,2*Math.PI);
     }
   }
-  ANT_OBJETS_CHEMINS.prims=m.primitives; ANT_OBJETS_CHEMINS.k=k;
+  ANT_OBJETS_CHEMINS.m=m; ANT_OBJETS_CHEMINS.k=k;
   ANT_OBJETS_CHEMINS.metal=metal; ANT_OBJETS_CHEMINS.autre=autre;
   return ANT_OBJETS_CHEMINS;
 }
 
 function antPeindreObjets(c,dpr){
   const m=ANT.modele;
-  if(!m||!m.primitives||!m.primitives.length)return;
+  if(!m||!((m.primitives||[]).length||(m.pieces||[]).length))return;
   const k=(V.unite==="in")?(1/25.4):1;
   const ch=antObjetsChemins(m,k);
   poserMonde(c,dpr);

@@ -23,7 +23,7 @@
 const ANT_ETAPES=[
   {id:"cuivre",   titre:"Le cuivre",    sous:"quel métal part au solveur"},
   {id:"empilage", titre:"L'empilage",   sous:"épaisseurs, permittivités, pertes"},
-  {id:"objets",   titre:"Autour",       sous:"ce qui n'est pas sur la carte"},
+  {id:"objets",   titre:"Autour",       sous:"boîtier, piles, pièces STEP — ce qui n'est pas sur la carte"},
   {id:"bande",    titre:"La bande",     sous:"ce qu'on veut mesurer, et où"},
   {id:"port",     titre:"Les ports",    sous:"par où l'onde entre, et ce qui en ressort"},
   {id:"boite",    titre:"La boîte",     sous:"air, PML, maillage"},
@@ -133,6 +133,20 @@ const ANT={
   viasSupposes:0,
 
   /* -- 6. la boîte ------------------------------------------------------- */
+  /* Les pièces importées : un boîtier STEP, des piles, un modèle posé d'un
+     clic. Chacune porte ses corps, chaque corps sa matière et ses triangles
+     (en base64 : voir 33-pieces.js, qui dit aussi pourquoi les tableaux
+     décodés ne vivent pas ici). */
+  pieces:[],
+  /* Le substrat suit le contour de la carte entière, et non l'emprise du
+     cuivre retenu. Vrai par défaut : un stratifié tronqué est une faute de
+     modèle qui ne se voit dans aucun résultat. Voir `_carte` dans
+     python/openems_modele.py. */
+  substratCarte:true,
+  /* La place de la carte dans l'ASSEMBLAGE (unité du fichier, degrés, autour
+     de son centre). Rien de ce que le serveur reçoit n'en dépend, sauf la
+     position relative des pièces : voir `antPieceRelative` (33-pieces.js). */
+  carte3d:{position:[0,0,0], rotation:[0,0,0]},
   /* Zéro veut dire « laisse l'assistant décider » : le serveur remplace alors
      par le quart de la longueur d'onde basse et le dit. */
   boite:{mx:0, my:0, mz_haut:0, mz_bas:0, pml:8},
@@ -366,6 +380,11 @@ function antRaz(){
   ANT.boite={mx:0,my:0,mz_haut:0,mz_bas:0,pml:8};
   ANT.maillage={res_air:0,res_die:0,tiers:true};
   ANT.primitives=[];
+  /* Les pièces partent avec la carte, comme les objets d'« Autour » : leur
+     position est comptée dans le repère de CETTE carte, et un boîtier posé
+     autour d'elle tomberait n'importe où autour de la suivante. */
+  ANT.pieces=[];
+  ANT.carte3d={position:[0,0,0], rotation:[0,0,0]};
   ANT.dumps.actif=false;
   ANT.modele=null; ANT.refus=null; ANT.tache=null; ANT.resultat=null;
 
@@ -541,6 +560,9 @@ function antDocument(){
     pertes:{mode:ANT.pertes.mode, f_kappa:ANT.pertes.f_kappa},
     masse:{cachee:!!ANT.masseCachee},
     primitives:ANT.primitives,
+    pieces:(typeof antPiecesDoc==="function")?antPiecesDoc():[],
+    carte:{substrat:!!ANT.substratCarte,
+           contour:(V.modele&&V.modele.contour&&V.modele.contour.o)||[]},
     dumps:{actif:ANT.dumps.actif, types:ANT.dumps.types.slice(),
            mode:ANT.dumps.mode, region:ANT.dumps.region,
            z:ANT.dumps.z, x:ANT.dumps.x, y:ANT.dumps.y,
@@ -700,6 +722,7 @@ function antReglagesEcrire(){
     localStorage.setItem(ANT_CLE,JSON.stringify({
       uniteF:ANT.uniteF, bande:ANT.bande, modeleCuivre:ANT.modeleCuivre,
       boite:{pml:ANT.boite.pml}, maillage:{tiers:ANT.maillage.tiers},
+      substratCarte:!!ANT.substratCarte,
       arret:ANT.arret, nf2ff:ANT.nf2ff, portR:ANT.port.R,
       pertes:ANT.pertes, dumps:ANT.dumps
     }));
@@ -716,6 +739,7 @@ function antReglagesLire(){
     ANT.modeleCuivre=j.modeleCuivre;
   if(j.boite&&j.boite.pml>=4&&j.boite.pml<=20)ANT.boite.pml=j.boite.pml|0;
   if(j.maillage)ANT.maillage.tiers=!!j.maillage.tiers;
+  if(typeof j.substratCarte==="boolean")ANT.substratCarte=j.substratCarte;
   if(j.arret)Object.assign(ANT.arret,j.arret);
   if(j.nf2ff)ANT.nf2ff.actif=!!j.nf2ff.actif;
   if(j.portR>0)ANT.port.R=j.portR;

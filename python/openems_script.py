@@ -29,6 +29,8 @@
 import math
 import os
 
+import openems_pieces
+
 C0 = 299792458.0
 EPS0 = 8.8541878128e-12
 
@@ -190,6 +192,91 @@ def _bloc_debye(m, pertes):
     return "".join(t)
 
 
+# Une ligne de base64 par tranche : le script reste lisible par un editeur
+# de texte ordinaire, qui ne s'etrangle pas sur une ligne de dix megaoctets.
+LARGEUR_B64 = 100
+
+
+def _chaine_b64(texte, indent=8):
+    """Une longue chaine, coupee en morceaux que Python recolle seul."""
+    tab = " " * indent
+    morceaux = [texte[i:i + LARGEUR_B64]
+                for i in range(0, len(texte), LARGEUR_B64)] or [""]
+    return ("(\n" + "".join('%s"%s"\n' % (tab, x) for x in morceaux)
+            + " " * (indent - 4) + ")")
+
+
+def _bloc_pieces(m):
+    """Les pieces importees : un polyedre ferme par corps.
+
+    LES TRIANGLES SONT DANS LE SCRIPT, compresses et encodes, et non dans un
+    fichier STL a cote. C'est la promesse du script : autonome. Un fichier
+    annexe se perd a la premiere copie, et le calcul qu'on rejoue dans six
+    mois se ferait alors sans son boitier -- sans que rien ne le dise.
+    """
+    b = m["bande"]
+    pertes = m.get("pertes") or {}
+    f_k = pertes.get("f_kappa") or b["f0"]
+    t = []
+    a = t.append
+    a("# --------------------------------------------------------------------\n")
+    a("# 4ter. Les pieces importees (STEP, STL) : boitier, piles, vis\n")
+    a("# --------------------------------------------------------------------\n")
+    a("# Chaque corps est un POLYEDRE FERME : des triangles, et CSXCAD decide\n")
+    a("# qu'une cellule est dedans en comptant les traversees d'un rayon. Un\n")
+    a("# polyedre ouvert, ou dont les sommets ne sont pas recolles, y serait\n")
+    a("# vu vide PARTOUT, sans avertissement : l'outil a verifie avant\n")
+    a("# d'ecrire que chaque arete borde deux triangles.\n")
+    a("#\n")
+    a("# Les sommets sont PLACES (rotation et position appliquees), en mm,\n")
+    a("# flottants 64 bits ; les faces, des triplets d'indices. Les deux sont\n")
+    a("# compresses (zlib) puis encodes (base64).\n")
+    a("#\n")
+    a("# Priorites : un plastique (%d) cede a la carte -- substrat a 1,\n"
+      % openems_pieces.PRIORITE_DIELECTRIQUE)
+    a("# cuivre a 10 et plus --, un metal (%d) passe au-dessus.\n"
+      % openems_pieces.PRIORITE_METAL)
+    a("import base64 as _b64\n")
+    a("import zlib as _zlib\n\n\n")
+    a("def _polyedre(prop, sommets, faces, priorite):\n")
+    a("    s = np.frombuffer(_zlib.decompress(_b64.b64decode(sommets)),\n")
+    a("                      dtype='<f8').reshape(-1, 3)\n")
+    a("    f = np.frombuffer(_zlib.decompress(_b64.b64decode(faces)),\n")
+    a("                      dtype='<u4').reshape(-1, 3)\n")
+    a("    p = prop.AddPolyhedron(priority=priorite)\n")
+    a("    for x, y, z in s.tolist():\n")
+    a("        p.AddVertex(x, y, z)\n")
+    a("    for tri in f.tolist():\n")
+    a("        p.AddFace(tri)\n")
+    a("    return p\n")
+    n = 0
+    for i, p in enumerate(m["pieces"]):
+        for j, c in enumerate(p["corps"]):
+            if c["materiau"] == "ignore":
+                continue
+            v = "piece_%d_%d" % (i, j)
+            nom = _ident("%s_%s" % (p["nom"], c["nom"]), "piece")
+            e = c["emprise"]
+            quoi = c.get("matiere") or c["materiau"]
+            a("\n# %s / %s : %s, %d triangles, de (%s, %s, %s) a (%s, %s, %s) mm\n"
+              % (p["nom"], c["nom"], quoi, c["triangles"],
+                 _f(e[0], 3), _f(e[1], 3), _f(e[2], 3),
+                 _f(e[3], 3), _f(e[4], 3), _f(e[5], 3)))
+            if c["materiau"] == "metal":
+                a("%s = CSX.AddMetal('%s_%d')\n" % (v, nom, n))
+            else:
+                k = _kappa(c["er"], c["df"], f_k)
+                a("%s = CSX.AddMaterial('%s_%d', epsilon=%s, kappa=%.6e)"
+                  "   # tan d = %s a %.4g GHz\n"
+                  % (v, nom, n, _f(c["er"], 4), k, _f(c["df"], 5), f_k / 1e9))
+            a("_polyedre(%s,\n    %s,\n    %s,\n    priorite=%d)\n"
+              % (v, _chaine_b64(openems_pieces.sommets_b64(c)),
+                 _chaine_b64(openems_pieces.faces_b64(c)), c["priorite"]))
+            n += 1
+    a("\n")
+    return "".join(t)
+
+
 def generer(m, chemin_openems=None, dossier_sim=None):
     """Modele normalise -> texte du script. Rien n'est ecrit sur le disque."""
     b = m["bande"]
@@ -337,10 +424,17 @@ def generer(m, chemin_openems=None, dossier_sim=None):
           "   # %s, tan d = %s a %.4g GHz\n"
           % (i, nom, _f(d["er"], 4), k, d["nom"], _f(d["df"], 5),
              (pertes.get("f_kappa") or b["f0"]) / 1e9))
-        a("sub_%d.AddBox([%s, %s, %s], [%s, %s, %s], priority=1)\n"
-          % (i,
-             _f(m["boite_cuivre"][0]), _f(m["boite_cuivre"][1]), _f(d["z0"]),
-             _f(m["boite_cuivre"][2]), _f(m["boite_cuivre"][3]), _f(d["z1"])))
+        if m.get("carte"):
+            # Le contour de la carte entiere, et non l'emprise du cuivre :
+            # voir `_carte` dans openems_modele.py.
+            a("sub_%d.AddLinPoly(%s, 'z', %s, %s, priority=1)\n"
+              % (i, _poly(m["carte"]["contour"], 6, 8), _f(d["z0"]),
+                 _f(d["z1"] - d["z0"])))
+        else:
+            a("sub_%d.AddBox([%s, %s, %s], [%s, %s, %s], priority=1)\n"
+              % (i,
+                 _f(m["boite_cuivre"][0]), _f(m["boite_cuivre"][1]), _f(d["z0"]),
+                 _f(m["boite_cuivre"][2]), _f(m["boite_cuivre"][3]), _f(d["z1"])))
     a("\n")
 
     mode = m.get("modele_cuivre", "feuille")
@@ -485,6 +579,9 @@ def generer(m, chemin_openems=None, dossier_sim=None):
                   % (v, _f(o["c"][0]), _f(o["c"][1]), _f(o["c"][2]),
                      _f(o["r"]), pr))
         a("\n")
+
+    if any(True for _ in openems_pieces.corps_inclus(m.get("pieces") or [])):
+        a(_bloc_pieces(m))
 
     a("# --------------------------------------------------------------------\n")
     a("# 5. Le maillage\n")

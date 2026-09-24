@@ -111,18 +111,23 @@ essais figure dans l'état renvoyé à la page.
 │   ├── 30-ia.js            l'assistant IA : vérification locale, et le modèle si on veut
 │   ├── 31-rapport.js       le rapport d'ingénierie (avec charge cellules × nmax et localisation de la plus petite cellule)
 │   ├── 32-visionneuse.js   la carte de champ animée, lue dans les .vtr — sans ParaView
+│   ├── 33-pieces.js        les pièces importées (STEP, STL) : boîtier, piles, une matière par corps
+│   ├── 34-placement.js     les placer à la souris en 3D : choisir, glisser, accrocher face contre face
+│   ├── travailleur-occt.js le lecteur STEP/IGES/BREP, dans un fil à part
 │   ├── 90-workspace.js     les panneaux détachables
-│   └── vendor/three.min.js three.js r134, posé ici et non pris sur un CDN
+│   ├── vendor/three.min.js three.js r134, posé ici et non pris sur un CDN
+│   └── vendor/occt/        OpenCascade en WebAssembly (occt-import-js), repris de WEB_3D
 ├── python/
 │   ├── ipc2581_*.py        le parseur IPC-2581 (filtrage calques hors cuivre/perçage, netClass) et sa traduction en JSON
 │   ├── openems_modele.py   le document relu, vérifié, nettoyé (masse cachée, fusions, ports), maillé, chiffré
+│   ├── openems_pieces.py   les pièces importées : recollées, vérifiées fermées, placées, leurs faces maillées
 │   ├── openems_script.py   le modèle → un script Python autonome
 │   ├── openems_run.py      l'exécution en sous-processus, et son suivi
 │   ├── openems_champs.py   les .vtr relus : inventaire, tranche, amplitude et phase
 │   ├── openems_antenne.py  la façade : les seules fonctions que web_antenna.py connaît
 │   ├── projet.py           les projets sur le disque : où on les range, et comment on les rouvre
 │   └── test/
-│       ├── banc-openems.py   le banc principal : 771 vérifications sans solveur, 22 sections
+│       ├── banc-openems.py   le banc principal : 852 vérifications sans solveur, 23 sections
 │       └── banc-champs.py    le format .vtr, l'inventaire, le découpage
 ├── test/
 │   ├── carte-antenne.py    fabrique une carte d'essai IPC-2581
@@ -479,9 +484,170 @@ Le métal est un **conducteur parfait**. Un boîtier en volume à conductivité
 finie demanderait de mailler l'épaisseur de peau — quelques microns, hors de
 portée — pour une différence qui se compte en centièmes de décibel.
 
-Ce n'est **pas un éditeur 3D** : quatre formes et des nombres. Dessiner une
-pièce mécanique demande un outil de mécanique ; l'importer demanderait un
-lecteur de STEP.
+Ce n'est **pas un éditeur 3D** : quatre formes et des nombres. Une pièce
+mécanique réelle — un boîtier avec ses parois, ses bossages, ses congés — ne
+se saisit pas en coordonnées : elle **s'importe**, en STEP, dans cette même
+étape (voir « Le boîtier et les piles » juste en dessous).
+
+### Le boîtier et les piles — des pièces STEP, une matière par corps
+
+C'est le boîtier qui déplace la résonance : une paroi plastique d'εr ≈ 3 à
+quelques millimètres d'une antenne imprimée la tire vers le bas de plusieurs
+pour cent, et une pile métallique derrière elle lui coupe une part de son
+rayonnement. Sa géométrie existe déjà, dans l'outil de mécanique : l'étape
+« Autour » la prend telle quelle.
+
+* **Importer** un fichier **STEP, IGES, BREP ou STL** (bouton, ou dépôt sur le
+  bloc). Le STEP est lu **dans le navigateur** par OpenCascade compilé en
+  WebAssembly — le même noyau que [WEB_3D](../WEB_3D), posé dans
+  `js/vendor/occt/` — et triangulé à la finesse d'une grille FDTD (0,1 mm de
+  flèche), pas d'un rendu. Chaque solide du fichier devient un **corps**.
+* **Ou poser un modèle** : un **boîtier de principe** autour de la carte (jeu,
+  hauteur au-dessus et en dessous, épaisseur de paroi réglables), ou une
+  **pile** — CR2032, CR2450, AA, AAA, 18650, LiPo 503450 —, métallique, aux
+  cotes des normes.
+* **Chaque corps reçoit sa matière** : métal (conducteur parfait), un
+  plastique de la liste — ABS, PC, PC/ABS, PA66, PA66-GF30, PLA, PMMA, PP,
+  PTFE, silicone, verre, FR-4, alumine, mousse —, un diélectrique saisi à la
+  main, ou **ignoré**. Les εr et tan δ de la liste sont des valeurs
+  **typiques** autour du gigahertz ; la fiche du fournisseur fait foi, et les
+  champs se corrigent. La matière est **devinée** sur le nom que la mécanique
+  a donné (« Battery », « Vis M2 », « Shield » → métal), et la **carte
+  elle-même**, quand l'export la contient, est ignorée d'office : elle est déjà
+  dans le modèle, exacte, cuivre compris.
+* **Placer** : une position et trois angles (X, puis Y, puis Z, autour du
+  centre de la pièce). Position et rotation à zéro laissent la pièce **où son
+  fichier la met** : un export fait dans le repère de la carte tombe juste sans
+  rien toucher. Un fichier dessiné ailleurs est ramené au milieu de la carte à
+  l'import, et l'outil le dit. Les boutons *centrer sur la carte*, *poser
+  dessus*, *poser dessous*, *centrer en Z* et les quarts de tour font le reste.
+
+**Placer à la souris, dans la vue 3D.** Le bouton **3D** d'une pièce ouvre la
+vue sur elle ; une barre, en bas de la vue, porte trois gestes.
+
+* **Choisir** — un clic sur une pièce la choisit (elle s'allume en jaune, sa
+  fiche aussi, et la ligne du corps touché — c'est ainsi qu'on reconnaît un
+  corps qu'un export STEP a nommé « Admi05EC3FB26751 » ; sa taille est écrite
+  sous son nom). Un second clic au même endroit prend la pièce **derrière** :
+  une pile dans un boîtier fermé se choisit ainsi.
+* **Déplacer** — glisser la pièce choisie : dans le plan horizontal, ou le
+  long d'un seul axe (boutons, ou touches X, Y, Z). Un **pas** arrondit la
+  position. Ailleurs que sur la pièce, le glisser fait tourner la vue, comme
+  d'habitude. Au clavier : flèches, Page haut/bas pour Z, Maj pour dix fois
+  plus.
+* **Accrocher** — deux clics : sur la pièce, puis sur ce qu'elle doit
+  toucher — la carte, le boîtier, une autre pièce.
+  * *face → face* : la pièce **tourne** pour que les deux faces se regardent
+    (case « orienter ») et vient au **contact**, à plat ; « centrer » amène en
+    plus le centre de sa face sur celui de l'autre. C'est le geste qui pose
+    une pile sur un bossage, ou une coque sur la carte.
+  * *point → point* : un point sur un point. Le point pris est le plus proche
+    du curseur parmi les sommets, les milieux d'arête **et le centre de la
+    face** — viser le milieu d'un disque donne son centre, que la
+    triangulation ne porte pourtant pas.
+  * *point → face* : la pièce glisse le long de la normale jusqu'au plan.
+
+  Une bille et un anneau montrent ce qui sera pris, avant le clic. Maj vise
+  **à travers** la première paroi touchée ; **masquer** retire une pièce de la
+  vue (pas de la simulation) — le boîtier, le temps de poser ce qu'il
+  contient. **Ctrl+Z** défait le dernier placement.
+
+**Regarder.** La même barre porte le **rendu** — *plein* par défaut (le métal
+gris acier, le plastique clair et mat, l'ignoré sombre), *transparent* ou
+*filaire* —, une **coupe** par un plan X, Y ou Z qu'un curseur déplace (ce qui
+est au-delà n'est ni dessiné ni visé), et les **masques** : chaque corps et
+chaque pièce a sa case « visible » dans sa fiche, et *masquer le corps* /
+*la pièce* fait la même chose depuis la vue. Masquer ne touche pas à la
+simulation, et c'est gardé dans le projet.
+
+**La carte, telle qu'elle est.** La vue 3D dessine aussi la carte
+électronique entière — son contour, le **cuivre de ses deux faces** en
+texture (les mêmes chemins que la vue 2D, perçages découpés) et ses
+**composants** en blocs — pour poser un boîtier contre elle, y accrocher une
+face, voir qu'un bossage tombe sur un condensateur. Les composants ont une
+**hauteur supposée** (0,3 × √surface, entre 0,35 et 4 mm) : le fichier
+IPC-2581 ne la donne pas. Cette représentation ne part pas au solveur ; ce qui
+y part est dessiné par-dessus — le substrat et le cuivre retenu.
+
+**La carte se place comme une pièce.** Elle se choisit d'un clic dans la vue
+3D — y compris à travers un boîtier opaque —, se glisse, se tourne, s'accroche
+face contre face, s'annule par Ctrl+Z, et sa fiche (en tête de la liste des
+pièces) porte sa position et sa rotation, un quart de tour par bouton et
+« ↺ origine ». Déplacer la carte déplace **la carte** : les pièces restent où
+elles sont.
+
+Le solveur, lui, ne voit jamais la carte bouger, et c'est voulu : sa grille
+est alignée sur elle, et tout ce qu'il reçoit — cuivre, ports, substrat — est
+compté dans le repère de la carte. La page garde donc la place de la carte
+dans l'**assemblage**, et envoie les pièces **vues de la carte**
+(B⁻¹ ∘ pièce). Tourner la carte de +90° envoie le boîtier tourné de −90° :
+c'est la même physique, et le banc vérifie que B · (pièce vue de la carte)
+redonne exactement la pièce dans l'assemblage. Tourner la carte d'un angle
+quelconque met les parois du boîtier en biais dans la grille — des marches
+d'escalier : c'est la vérité du calcul, pas un défaut de l'outil.
+
+**Le substrat de la carte entière.** Par défaut, le stratifié simulé suit
+désormais le **contour de la carte** (le `<Profile>` du fichier) et non la
+seule emprise du cuivre retenu : une carte dont on n'a retenu que l'antenne
+était simulée avec un stratifié tronqué, et la paroi d'un boîtier voyait une
+carte plus petite que la vraie. Le substrat part en `AddLinPoly`, ses bords
+droits portent une ligne de maillage, et l'emprise — donc le maillage fin —
+couvre toute la carte — au pas de son stratifié, le pas fin restant sur le
+cuivre. La case, en tête du bloc des pièces, rend l'ancien comportement ; un
+projet enregistré avant cette option se rouvre avec l'ancien substrat, pour
+que ses résultats restent comparables.
+
+Aucun de ces gestes ne place la pièce de lui-même : il écrit sa position et sa
+rotation, comme les champs de la fiche, et le modèle est revérifié. **Sans
+modèle** — le serveur a refusé, le port n'est pas encore posé —, la vue 3D
+dessine quand même la carte, en plaque, et les pièces : placer le boîtier est
+souvent la première chose qu'on fait.
+
+**Un solide fermé, ou rien — et c'est vérifié.** CSXCAD décide qu'une cellule
+est dans la pièce en comptant les traversées d'un rayon. Sur une surface
+**ouverte**, ou dont les sommets ne sont pas recollés, il répond « dehors »
+partout, **sans un avertissement** : vérifié sur CSXCAD 0.6.3, un cube dont
+les sommets sont dupliqués par face — c'est ainsi qu'OpenCascade les rend —
+est vu vide jusqu'en son centre. La page **recolle** donc les sommets, compte
+les arêtes qui ne bordent qu'une face, et **répare** ce qui se répare sans
+toucher à la forme : sommets recollés à une tolérance croissante (jusqu'à
+0,05 mm, par distance vraie et non par arrondi), **jonctions en T** coupées
+(un sommet d'une face au milieu d'une arête de la voisine), **petits trous**
+bouchés (moins d'1 mm² ou 2 mm de diagonale). Une vraie ouverture — un
+couvercle absent — reste ouverte : la boucher serait inventer de la matière.
+Un corps encore ouvert naît **ignoré**, marqué en rouge, avec un bouton
+*réparer* aux tolérances élargies (0,2 mm, trous jusqu'à 5 mm²) ; lui donner
+une matière fait refuser le modèle, avec la raison. Ce qui a été réparé est
+écrit sur la ligne (✓, et le détail au survol). Le serveur refait la
+vérification.
+
+**Une ligne de maillage sur chaque paroi.** Une paroi de 1,5 mm qui tombe entre
+deux lignes d'une grille à 3 mm est vue à moitié, ou pas du tout, selon
+l'endroit où elle tombe — et le boîtier change d'épaisseur quand on le déplace.
+Les grandes faces planes de chaque corps (alignées sur un axe, plus d'1 mm²,
+seize par axe au plus) portent donc une ligne d'**affinage** : une paroi plus
+épaisse que le quart du pas garde ses deux faces, donc au moins une cellule
+entière à son épaisseur exacte.
+
+**Le pas fin reste sur le cuivre.** Le maillage a trois zones par axe : l'air,
+le pas « extérieur » — λ/20/√εr de la matière la plus lente qu'on y trouve,
+une paroi de verre, le stratifié de la carte entière — dans le boîtier et la
+carte au-delà du cuivre, et le pas fin du diélectrique, tenu par la largeur
+des pistes, dans la seule emprise du cuivre et de ses ports. Avant, tout le
+boîtier était maillé au pas des pistes : sur un boîtier de 190 × 190 × 80 mm
+autour du patch, 34,9 M cellules (≈ 7 h 45) ; aujourd'hui 4,6 M (≈ 1 h), pour
+2,9 M sans boîtier.
+
+**Ce qui part au solveur.** Chaque corps devient un `AddPolyhedron` fermé,
+écrit **dans le script** (sommets placés en flottants 64 bits, compressés et
+encodés) — pas dans un STL à côté, qui se perdrait à la première copie. Un
+plastique a la priorité 0 et **cède à la carte** là où ils se recouvrent (un
+bossage contre le stratifié) ; un métal a la priorité 20. Un corps ignoré ne
+voyage même pas avec ses triangles. La vue 3D dessine les triangles de la page
+avec **la matrice que le serveur a appliquée** : le métal opaque, le
+diélectrique translucide, l'ignoré en fantôme gris — c'est ainsi qu'on vérifie
+qu'un export mécanique tombe sur la carte. Le projet garde les pièces,
+triangles compris, et le rapport liste chaque corps avec sa matière.
 
 ### 4. La bande — elle commande tout le reste
 
@@ -1568,6 +1734,24 @@ retenu, les ports, la boîte d'air et la grille FDTD Yee) :
 
 ## L'aperçu 3D
 
+**Naviguer : les gestes de WEB_3D.** La vue reprend la navigation de la
+visionneuse [WEB_3D](../WEB_3D), son préréglage par défaut :
+
+| geste | effet |
+| :--- | :--- |
+| clic droit glissé (ou gauche) | tourner, Z restant en haut |
+| bouton du milieu, Ctrl + droit, Maj + gauche | déplacer, le long des axes de l'écran |
+| Maj + clic droit glissé | zoomer |
+| molette | zoomer **vers le curseur** |
+| double-clic | le point visé devient le centre de rotation (dans le vide : recadrer) |
+| un doigt · deux doigts | tourner · déplacer et pincer |
+
+Un clic gauche sans glisser reste un clic : il choisit une pièce. Le
+déplacement suit enfin l'écran — il poussait avant le centre le long du
+regard, et l'on s'enfonçait dans la scène en croyant glisser de côté —, et le
+clic droit n'ouvre plus le menu du navigateur.
+
+
 Quatre des fautes qui gâchent une simulation d'antenne ne se voient **pas**
 en 2D, parce qu'elles portent sur la hauteur :
 
@@ -1683,9 +1867,12 @@ tous les outils liraient sans broncher et dont la moitié serait inventée.
 python python/test/banc-openems.py
 ```
 
-771 vérifications sans solveur réparties en 22 sections : cotes en z, sens des
+852 vérifications sans solveur réparties en 23 sections : cotes en z, sens des
 polygones, maillage, refus attendus, conversion pouces/millimètres, script
-généré, les deux modèles de pertes, les quatre primitives, la conductivité
+généré, les deux modèles de pertes, les quatre primitives, les pièces
+importées (recollage, corps ouvert refusé, lignes sur les parois, rotation, et
+— si openEMS est installé — CSXCAD lui-même qui voit la paroi pleine et la
+cavité vide, avant et après le passage par le XML), la conductivité
 déclarée d'un conducteur, le poids des enregistrements, les ports multiples et
 leurs refus, la géométrie du connecteur coaxial, les points d'un balayage —
 croisement compris, où le garde-fou porte sur le produit —, l'assemblage des
@@ -1786,6 +1973,14 @@ court-circuitée à son bout. Le dégagement est depuis un polygone, comme les
 découpes de versement l'ont toujours été.
 
 ## Limites connues
+
+* **Une pièce importée est vue en marches d'escalier.** La grille FDTD est
+  cartésienne : une paroi plane alignée sur un axe tombe juste (elle porte ses
+  lignes), un congé ou une paroi inclinée est rendu par les cellules qui
+  l'approchent. Le métal y est un conducteur parfait, et un plastique ne
+  remplace jamais la carte là où ils se recouvrent. Le budget est de 400 000
+  triangles simulés : au-delà, marquez « ignoré » ce qui ne compte pas (vis
+  loin de l'antenne, composants).
 
 * **Une simulation rend une colonne du tableau S**, pas le tableau. Deux ports
   donnent S₁₁ et S₂₁ ; S₂₂ et S₁₂ demandent une seconde simulation,

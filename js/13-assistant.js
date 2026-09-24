@@ -330,6 +330,9 @@ function antEtapeActualiser(etapeId,corps){
     if(mEl)mEl.innerHTML=antMaillageNoteHtml(m,k);
     const rEl=corps.querySelector("#antBoiteRecap");
     if(rEl)rEl.innerHTML=antBoiteRecapHtml(m,k);
+  }else if(etapeId==="objets"){
+    if(typeof antPiecesActualiser==="function")
+      antPiecesActualiser(corps.querySelector("#antPieces"));
   }else if(etapeId==="bande"){
     const rEl=corps.querySelector("#antBandeRecap");
     if(rEl)rEl.innerHTML=antBandeRecapHtml(m);
@@ -377,7 +380,7 @@ function antEtapeEtat(i){
     /* « Autour » n'a rien d'obligatoire : une antenne nue est un cas
        legitime. La pastille verte dit « j'ai mis quelque chose », pas
        « c'est complet ». */
-    case "objets":   return ANT.primitives.length?"faite":"vide";
+    case "objets":   return (ANT.primitives.length||ANT.pieces.length)?"faite":"vide";
     case "bande":    return (ANT.bande.f1>0&&ANT.bande.f2>ANT.bande.f1)?"faite":"vide";
     /* Tous les ports, et non le seul qu'on regle : l'etape est faite quand
        l'onde a par ou entrer, pas quand le port 2 est selectionne. */
