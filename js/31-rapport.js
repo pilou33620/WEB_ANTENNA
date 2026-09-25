@@ -245,9 +245,6 @@ function rapCollecterDonnees(){
     d.ports.push({
       n: p.n != null ? p.n : (i + 1),
       nom: p.nom || ("Port " + (i + 1)),
-      /* La broche vient de la page : le serveur ne la renvoie pas. */
-      broche: (ANT.ports && ANT.ports[i] && ANT.ports[i].broche)
-        ? ANT.ports[i].broche.ref + "." + ANT.ports[i].broche.num : "",
       type: p.type || "localise",
       excite: !!p.excite,
       x: p.x || 0,
@@ -551,7 +548,7 @@ function rapDiagnostiquer(d){
       rang: "crit",
       desc: rz.texte || "Le S11 ne descend jamais sous −3 dB : la fréquence affichée n'est pas une résonance.",
       conseil: rz.panne === "court"
-        ? "Cherchez ce qui relie les deux bornes du port : le cuivre sous lui, un trou métallisé, ou un écart plus étroit qu'une demi-maille (avis « Le maillage soude l'antenne à la masse »). Posez le port sur une broche à l'étape « Le port » pour qu'il soit vérifié avant le calcul."
+        ? "Cherchez ce qui relie les deux bornes du port : le cuivre sous lui, un trou métallisé, ou un écart plus étroit qu'une demi-maille (avis « Le maillage soude l'antenne à la masse »). Le verdict de l'étape « Le port » dit, avant le calcul, ce que touche chacune de ses deux bornes."
         : (rz.panne === "ouvert"
           ? "Vérifiez que chaque borne du port touche du cuivre retenu, et que ce cuivre n'est pas plus fin que la maille."
           : "Élargissez la bande simulée : la résonance est peut-être au-delà.")
@@ -769,7 +766,7 @@ function rapGenererHtml(d, diags){
       h += '          <td class="highlight">' + rapEscHtml(p.nom) + '</td>';
       h += '          <td><span class="rap-badge-mini ' + (p.excite ? "rap-badge-cuivre" : "rap-badge-die") + '">' + (p.excite ? "EXCITÉ" : "CHARGE 50 Ω") + '</span></td>';
       h += '          <td>' + (p.type === "coaxial" ? "Coaxial (ra=" + rapNb(p.ra, 3) + ", rb=" + rapNb(p.rb, 3) + " mm)" : "Localisé (" + rapNb(p.w, 2) + "×" + rapNb(p.l, 2) + " mm)") + '</td>';
-      h += '          <td class="num mono">' + rapNb(p.x, 3) + ', ' + rapNb(p.y, 3) + ' mm' + (p.broche ? ' — broche ' + rapEscHtml(p.broche) : '') + '</td>';
+      h += '          <td class="num mono">' + rapNb(p.x, 3) + ', ' + rapNb(p.y, 3) + ' mm</td>';
       h += '          <td>' + rapEscHtml(p.de) + ' → ' + rapEscHtml(p.a) + ' (' + p.dir + ')</td>';
       h += '          <td>' + (p.ligne && p.ligne.d > 0 ? "Ruban d=" + rapNb(p.ligne.d, 2) + " mm (w=" + rapNb(p.ligne.w, 2) + " mm)" : "Aucun") + '</td>';
       h += '        </tr>';
@@ -963,7 +960,7 @@ function rapGenererMarkdown(d, diags){
   // 5. Ports
   L.push("## 5. Ports & Excitation");
   d.ports.forEach(function(p){
-    L.push("- Port " + p.n + " (" + p.nom + ") : " + (p.excite ? "EXCITÉ" : "CHARGE 50 Ω") + ", type " + p.type + ", position (" + rapNb(p.x, 3) + ", " + rapNb(p.y, 3) + " mm)" + (p.broche ? " sur la broche " + p.broche : "") + ", " + ((p.dir === "x" || p.dir === "y") && p.type !== "coaxial" ? "dans le plan de " + p.de + " (" + p.dir + ")" : "de " + p.de + " à " + p.a));
+    L.push("- Port " + p.n + " (" + p.nom + ") : " + (p.excite ? "EXCITÉ" : "CHARGE 50 Ω") + ", type " + p.type + ", position (" + rapNb(p.x, 3) + ", " + rapNb(p.y, 3) +  " mm), " + ((p.dir === "x" || p.dir === "y") && p.type !== "coaxial" ? "dans le plan de " + p.de + " (" + p.dir + ")" : "de " + p.de + " à " + p.a));
   });
   L.push("");
 

@@ -304,22 +304,55 @@ function antPeindrePort(c,dpr){
     c.strokeStyle=p.excite?"#f2c744":"#8fb8d8";
     c.lineWidth=p.excite?1.8:1.4;
     if(!p.excite)c.setLineDash([3,3]);
-    c.beginPath(); c.arc(s.x,s.y,R,0,2*Math.PI); c.stroke();
-    /* Un port dans le plan enjambe un écart : ses deux bornes se montrent,
-       et c'est en les voyant tomber l'une sur la pastille, l'autre sur la
-       masse, qu'on sait qu'il est bien posé. */
-    if((p.dir==="x"||p.dir==="y")&&p.ecart>0&&p.type!=="coaxial"){
-      const e=p.ecart/2, ux=p.dir==="x"?e:0, uy=p.dir==="y"?e:0;
-      const a=w2s(p.x-ux,p.y-uy), b=w2s(p.x+ux,p.y+uy);
-      c.save(); c.setLineDash([]); c.lineWidth=2.5; c.fillStyle=c.strokeStyle;
-      c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke();
-      for(const m of [a,b]){ c.beginPath(); c.arc(m.x,m.y,2.5,0,2*Math.PI); c.fill(); }
+    /* UN PORT DANS LE PLAN ENJAMBE UN ÉCART, ET C'EST L'ÉCART QU'ON DOIT VOIR.
+       La croix d'un port vertical, posée au milieu, tombait pile dans le
+       vide qu'il enjambe — 0,21 mm, deux pixels à l'échelle ordinaire — et
+       cachait ses deux bornes : on croyait le port « dans le vide » alors
+       qu'il allait de la pastille à la masse. Ici, pas de croix : deux
+       traits EN TRAVERS de l'écart, un à chaque borne, assez longs pour se
+       voir à toute échelle, et de la couleur de ce qu'ils touchent — celle
+       du port côté antenne, le vert côté masse, le rouge s'ils ne touchent
+       rien. Les points lus sont ceux du verdict (`antPortBornesPlan`,
+       36-port-verdict.js) : l'écran et le panneau disent la même chose. */
+    const plan=(p.dir==="x"||p.dir==="y")&&p.ecart>0&&p.type!=="coaxial";
+    let bornes=null;
+    if(plan){
+      /* Sans modèle, on ne sait pas ce qu'elles touchent (null) : ni rouge
+         ni vert, la teinte du port. */
+      bornes=(typeof antPortBornesPlan==="function"&&V.modele)
+        ? antPortBornesPlan(p).map(b=>({s:w2s(b.x,b.y),touche:b.touche}))
+        : [-1,1].map(function(sg){
+            const e=p.ecart/2;
+            return {s:w2s(p.x+sg*(p.dir==="x"?e:0),p.y+sg*(p.dir==="y"?e:0)),
+                    touche:null};
+          });
+      const teinte=c.strokeStyle;
+      const couleur=function(t){
+        return t==="masse"?"#4cc38a":(t==="antenne"||t===null)?teinte:"#e8443a";
+      };
+      c.save(); c.setLineDash([]);
+      c.lineWidth=1.5;
+      c.beginPath(); c.moveTo(bornes[0].s.x,bornes[0].s.y);
+      c.lineTo(bornes[1].s.x,bornes[1].s.y); c.stroke();
+      /* Le trait en travers : perpendiculaire à l'écart, dans l'écran. */
+      const vx=bornes[1].s.x-bornes[0].s.x, vy=bornes[1].s.y-bornes[0].s.y;
+      const L=Math.hypot(vx,vy)||1, nx=-vy/L*7, ny=vx/L*7;
+      for(const b of bornes){
+        c.strokeStyle=couleur(b.touche); c.lineWidth=3;
+        c.beginPath(); c.moveTo(b.s.x-nx,b.s.y-ny); c.lineTo(b.s.x+nx,b.s.y+ny);
+        c.stroke();
+      }
       c.restore();
+      c.save(); c.lineWidth=1; c.setLineDash([2,3]);
+      c.beginPath(); c.arc(s.x,s.y,R+6,0,2*Math.PI); c.stroke();
+      c.restore();
+    }else{
+      c.beginPath(); c.arc(s.x,s.y,R,0,2*Math.PI); c.stroke();
+      c.beginPath();
+      c.moveTo(s.x-R*1.7,s.y); c.lineTo(s.x+R*1.7,s.y);
+      c.moveTo(s.x,s.y-R*1.7); c.lineTo(s.x,s.y+R*1.7);
+      c.stroke();
     }
-    c.beginPath();
-    c.moveTo(s.x-R*1.7,s.y); c.lineTo(s.x+R*1.7,s.y);
-    c.moveTo(s.x,s.y-R*1.7); c.lineTo(s.x,s.y+R*1.7);
-    c.stroke();
     /* Un coaxial a une gaine, et elle occupe de la place sur la carte : le
        dégagement qu'elle impose dans le plan de masse fait deux fois son
        rayon, et c'est une surface qu'on doit voir pour savoir si elle mord
@@ -342,10 +375,16 @@ function antPeindrePort(c,dpr){
     c.fillStyle=p.excite?"#f2c744":"#8fb8d8";
     c.textBaseline="top";
     const nom=(ANT.ports.length>1?"port "+(i+1)+" ":"port ");
+    /* Ce que les bornes touchent VRAIMENT, pas ce qu'elles devraient
+       toucher : « pastille ↔ masse » s'affichait aussi sur une piste, et sur
+       une borne dans le vide. */
+    const touche=t=>t==="masse"?"masse":t==="antenne"?"antenne":t===null?"?":"vide";
     const txt=p.de&&p.a
-      ? (nom+(p.broche?p.broche.ref+"."+p.broche.num+" · ":"")+
-         ((p.dir==="x"||p.dir==="y")&&p.type!=="coaxial"
-           ? p.de+" (dans le plan)" : p.de+" → "+p.a)+
+      ? (nom+
+         (plan
+           ? p.de+", en travers de "+aL(p.ecart)+" ("+touche(bornes[0].touche)+
+             " ↔ "+touche(bornes[1].touche)+")"
+           : p.de+" → "+p.a)+
          (p.excite?"":" (en charge)"))
       : (nom+"(couches à choisir)");
     c.fillText(txt,s.x+R*1.9,s.y+4);
@@ -388,14 +427,6 @@ function antPosePortInstaller(){
    plan de masse le plus proche en dessous. C'est la configuration de toutes
    les antennes imprimées ; les deux listes restent là pour les autres. */
 function antPortEn(wx,wy){
-  /* Posé à la main : il n'est plus accroché à sa broche, s'il l'était. Le
-     verdict du panneau proposera de l'y raccrocher s'il tombe sur une. */
-  /* L'orientation dans le plan venait de la broche, pas d'un choix : elle
-     s'en va avec elle. */
-  if(ANT.port.broche){
-    ANT.port.dir="z";
-    if(typeof antPortDecrocher==="function")antPortDecrocher(ANT.port);
-  }
   ANT.port.x=+wx.toFixed(4);
   ANT.port.y=+wy.toFixed(4);
   ANT.port.pose=true;
@@ -410,6 +441,10 @@ function antPortEn(wx,wy){
     ANT.port.de=V.couches[trouve.c]?V.couches[trouve.c].nom:ANT.port.de;
   }
   if(!ANT.port.de&&LT.cu.length)ANT.port.de=LT.cu[0].nom;
+  /* « VERS » SE LIT DANS LE CUIVRE, PAS DANS L'EMPILAGE, et le point glisse
+     jusqu'à un endroit où le port est franc. Voir 37-port-auto.js. La
+     devinette par l'empilage ne sert plus qu'à défaut. */
+  if(typeof antPortAuto==="function")antPortAuto();
   if(!ANT.port.a)ANT.port.a=antMasseSous(ANT.port.de);
 
   ANT.posePort=false;

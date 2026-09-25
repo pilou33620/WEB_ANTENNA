@@ -132,6 +132,13 @@ LIGNES_MAX_BANDES = 20000
 # avertissements « cuivre non resolu », et les essais d'affinage. 707 sur
 # P01x274PCB-C.xml. On les ecarte a l'entree, et on les compte.
 LARGEUR_DEGENEREE_MM = 1e-3
+# CE QUE VOIT LE CUIVRE D'ANTENNE POSE DU COTE « CACHE » d'un plan de
+# reference (voir `_masse_cachee`) : la masse a moins de PROCHE_ANTENNE_MM de
+# lui, dans le plan. Une piste a 0,37 mm de son plan tient son champ a
+# quelques hauteurs de dielectrique de ses bords ; 2 mm, c'est cinq fois
+# cela. Au-dela, la masse de cette face ne fait que doubler le contour du
+# plan de reference.
+PROCHE_ANTENNE_MM = 2.0
 # LE BUDGET DE L'AFFINAGE, EN CELLULES-PAS DE TEMPS (voir `_cout`) : un plafond
 # absolu, et un plafond relatif au maillage de fond. Les deux sont
 # necessaires. Sans l'absolu, une grande carte s'affinerait jusqu'a la nuit de
@@ -795,27 +802,69 @@ def _masse_cachee(doc, cuivre, conducteurs, vias, ports):
     traversants) laissent fuir un peu de champ vers ce qui est retire. D'ou
     la case « garder toute la masse » de la page, et l'avis qui le dit.
 
-    Rend (plan de reference, {couche: polygones retires}), ou (None, {}).
+    L'ANTENNE PEUT ETRE DES DEUX COTES DU PLAN. La couche « de » du port dit
+    ou l'antenne est alimentee, pas ou elle rayonne : sur P01x274PCB-C.xml,
+    la sonde se pose sur le point de test du DESSUS et le trou metallise
+    porte le signal jusqu'a l'antenne, sur le DESSOUS. Un port pose sur la
+    pastille du dessus retirait la masse de la face opposee, celle qui borde
+    l'antenne ; un port pose sous l'antenne retire celle qui entoure la
+    pastille du point de test et sa piste. Le cuivre d'antenne du cote cache
+    voit donc la masse qui l'entoure : tout polygone de masse a moins de
+    PROCHE_ANTENNE_MM de lui est garde. Le reste de cette face est retire
+    comme avant -- loin de tout cuivre d'antenne, il ne fait que doubler le
+    contour que le plan de reference porte deja.
+
+    Rend (plan de reference, {couche: polygones retires},
+    {couche: mm2 de cuivre d'antenne du cote cache}, polygones gardes pour
+    leur voisinage), ou (None, {}, {}, 0).
     """
     if _dict(_dict(doc).get("masse")).get("cachee"):
-        return None, {}
+        return None, {}, {}, 0
     # LE PORT DIT OU SONT L'ANTENNE ET SON PLAN : il relie la couche de
     # l'antenne (« de ») a celle de la masse (« a »). La presence de cuivre ne
     # le dirait pas -- un net d'antenne a des pastilles traversantes sur
     # toutes les couches.
     port = next((p for p in ports if p.get("excite")), ports[0] if ports else None)
     if port is None:
-        return None, {}
+        return None, {}, {}, 0
+    # UN PORT DANS LE PLAN NE DIT RIEN DU PLAN DE REFERENCE. Ses deux bornes
+    # sont sur « de », en travers d'une fente ; « a » n'est la que parce qu'il
+    # faut deux conducteurs distincts, et la page y met la couche voisine
+    # (37-port-auto.js). La prendre pour le plan qui cache la masse
+    # retirerait celle d'une antenne coplanaire sur la foi d'un remplissage.
+    if not port.get("coax") and port.get("dir") in ("x", "y"):
+        return None, {}, {}, 0
     z_de = {c["nom"]: c["z0"] for c in conducteurs}
     blocs = {b["couche"]: b for b in cuivre}
     ref = blocs.get(port["a"])
     if (ref is None or port["de"] not in z_de
             or not any(q.get("m") for q in ref["polys"])):
-        return None, {}
+        return None, {}, {}, 0
     z_ant, z_ref = z_de[port["de"]], ref["z0"]
     if abs(z_ant - z_ref) < 1e-12:
-        return None, {}
+        return None, {}, {}, 0
     dessous = z_ref < z_ant          # le cote cache est au-dela du plan
+
+    def derriere(b):
+        return (b["z0"] < z_ref) if dessous else (b["z0"] > z_ref)
+
+    # Le cuivre d'antenne du cote cache, et les boites ou la masse le voit.
+    vue, voisinages = {}, []
+    d = PROCHE_ANTENNE_MM
+    for b in cuivre:
+        if b["couche"] == ref["couche"] or not derriere(b):
+            continue
+        for q in b["polys"]:
+            if q.get("m"):
+                continue
+            vue[b["couche"]] = vue.get(b["couche"], 0.0) + abs(_aire(q["o"])) - sum(
+                abs(_aire(t)) for t in q.get("t") or ())
+            x0, y0, x1, y1 = _boite_pts(q["o"])
+            voisinages.append((x0 - d, y0 - d, x1 + d, y1 + d))
+
+    def voisine(r):
+        return any(r[0] <= v[2] and r[2] >= v[0] and r[1] <= v[3] and r[3] >= v[1]
+                   for v in voisinages)
 
     proteges = {ref["couche"]}
     for p in ports:
@@ -829,27 +878,31 @@ def _masse_cachee(doc, cuivre, conducteurs, vias, ports):
         if (bb[2] - bb[0]) * (bb[3] - bb[1]) >= 1.0:
             surfaces.append(_Surface(q, 2.0))
     if not surfaces:
-        return None, {}
+        return None, {}, {}, 0
 
-    retires = {}
+    retires, proches = {}, 0
     for b in cuivre:
         if b["couche"] in proteges:
             continue
         # Seules les couches DERRIERE le plan, vues depuis l'antenne.
-        if (b["z0"] >= z_ref) if dessous else (b["z0"] <= z_ref):
+        if not derriere(b):
             continue
         gardes = []
         for q in b["polys"]:
             if q.get("m"):
                 r = _boite_pts(q["o"])
                 if any(sf.contient(r) for sf in surfaces):
-                    retires[b["couche"]] = retires.get(b["couche"], 0) + 1
-                    continue
+                    if voisine(r):
+                        proches += 1
+                    else:
+                        retires[b["couche"]] = retires.get(b["couche"], 0) + 1
+                        continue
             gardes.append(q)
         b["polys"] = gardes
     cuivre[:] = [b for b in cuivre if b["polys"]]
+    vue = vue if proches else {}
     if not retires:
-        return None, {}
+        return (ref["couche"] if proches else None), {}, vue, proches
 
     # LES VIAS SUIVENT. Un via de couture qui descendait jusqu'a la face
     # opposee s'arrete desormais a la derniere couche gardee qu'il traverse ;
@@ -866,7 +919,7 @@ def _masse_cachee(doc, cuivre, conducteurs, vias, ports):
         v["de"], v["a"] = pris[0]["nom"], pris[-1]["nom"]
         nouveaux.append(v)
     vias[:] = nouveaux
-    return ref["couche"], retires
+    return ref["couche"], retires, vue, proches
 
 
 def _reduire_empilage(conducteurs, dielectriques, cuivre, vias, ports):
@@ -3317,7 +3370,8 @@ def normaliser(doc):
             "carte (Ctrl+clic pour plusieurs morceaux), puis « Prendre la "
             "selection de la carte ».")
     n_vias_avant = len(vias)
-    plan_ref, masse_retiree = _masse_cachee(doc, cuivre, conducteurs, vias, ports)
+    plan_ref, masse_retiree, antenne_derriere, masse_proche = _masse_cachee(
+        doc, cuivre, conducteurs, vias, ports)
     n_polys -= sum(masse_retiree.values())
     conducteurs, dielectriques, empilage_reduit = _reduire_empilage(
         conducteurs, dielectriques, cuivre, vias, ports)
@@ -3463,7 +3517,9 @@ def normaliser(doc):
         # La masse retiree parce que le plan de reference la cache a
         # l'antenne. Voir `_masse_cachee`.
         "masse_cachee": {"reference": plan_ref, "retires": masse_retiree,
-                         "vias_retires": n_vias_avant - len(vias)},
+                         "vias_retires": n_vias_avant - len(vias),
+                         "antenne_derriere": antenne_derriere,
+                         "gardes_proches": masse_proche},
         "stats": {"polygones": n_polys, "degeneres": n_degeneres,
                   "absorbes": n_absorbes,
                   "vias": len(vias),
@@ -4056,7 +4112,16 @@ def _ponts_couche(couche, ant, mas, mx, my, portee, pas, budget, grappes=True):
 # posee pour un ecart peut en souder un autre a cote, ou n'avoir pas suffi a
 # un ecart en biais. Au bout de ECARTS_TOURS, ce qui reste est rendu tel quel
 # a `_avis_ponts_de_maille`.
-ECART_OUVRABLE_MM = 0.02
+ECART_OUVRABLE_MM = 0.08
+# LE PLANCHER DES CELLULES QUE CES LIGNES FABRIQUENT. Chaque ecart se regle
+# sans voir les autres, et deux ecarts voisins -- les deux cotes d'un meme
+# ruban, deux pastilles cote a cote -- posaient leurs lignes a 0,016 mm l'une
+# de l'autre : un pas de temps divise par quatre pour tout le calcul, et
+# quatorze heures annoncees au lieu de trois (P01x274PCB-C.xml, port sur
+# A400.1). Une ligne qui tomberait plus pres qu'ECART_CELLULE_MIN_MM d'une
+# ligne deja posee n'est pas posee : celle qui est la tient sa place, et le
+# controle rejoue au tour suivant dit si cela suffit.
+ECART_CELLULE_MIN_MM = 0.03
 ECARTS_TOURS = 8
 
 
@@ -4132,7 +4197,8 @@ def _lignes_au_tiers(s, lignes, bilan):
         if g < ECART_OUVRABLE_MM:
             continue
         for c in _meilleures_coupes(lignes[axe], a, b):
-            if _inserer(lignes[axe], c, g / 12.0, bilan, axe):
+            if _inserer(lignes[axe], c, max(g / 12.0, ECART_CELLULE_MIN_MM),
+                        bilan, axe):
                 neuf = True
     return neuf
 
@@ -4151,9 +4217,9 @@ def _couper_arete(s, lignes, bilan):
     for axe, autre in bords:
         ici = s["x"] if axe == "x" else s["y"]
         c = (ici + autre) / 2.0
-        if abs(autre - ici) / 2.0 < ECART_OUVRABLE_MM / 4.0:
+        if abs(autre - ici) / 2.0 < ECART_CELLULE_MIN_MM:
             continue
-        if _inserer(lignes[axe], c, ECART_OUVRABLE_MM / 4.0, bilan, axe):
+        if _inserer(lignes[axe], c, ECART_CELLULE_MIN_MM, bilan, axe):
             neuf = True
     return neuf
 
@@ -4190,7 +4256,103 @@ def _ouvrir_ecarts(m):
             bilan["plus_petit_ecart"] = s["ecart"] if e is None else min(e, s["ecart"])
         if not neuf:
             break
+    _elargir_cellules(m, lignes, bilan)
     return bilan
+
+
+# LA PLUS PETITE CELLULE, REPRISE APRES COUP. Chaque ecart se regle sans voir
+# les autres, et une ligne d'ecart finissait a 0,034 mm d'une ligne de grille
+# que l'ecart n'avait pas vue (P01x274PCB-C.xml, ruban d'alimentation en L4) :
+# 564 000 pas de temps, 49 h annoncees. Une fois tous les ecarts ouverts, on
+# reprend la plus petite cellule de chaque axe tant qu'une ligne d'ecart la
+# borde : on essaie de retirer cette ligne, puis de la deplacer entre ses deux
+# voisines, du plus large au plus serre, et le controle des ponts est REJOUE
+# a chaque essai -- un essai qui ressoude quoi que ce soit est defait. On
+# s'arrete au plancher de l'axe : en dessous d'elle, une cellule n'est plus
+# un accident.
+ELARGIR_ESSAIS = 60
+
+
+def _elargir_cellules(m, lignes, bilan):
+    posees = bilan["lignes"]
+    if not (posees["x"] or posees["y"]):
+        return
+    plancher = (m.get("maillage_detail") or {}).get("plancher") or {}
+    budget = [ELARGIR_ESSAIS]
+
+    # CE QUI COMPTE, CE SONT LES ECARTS SOUDES, PAS LEUR NOMBRE. Un essai qui
+    # ressoude un ecart ici en liberant un noeud la garderait le meme compte.
+    # Un essai est sain quand chaque noeud soude qu'il laisse l'etait deja
+    # avant lui -- meme couche, memes points de cuivre en regard, a une
+    # demi-maille pres (le noeud bouge avec la ligne). Les ecarts trop minces
+    # pour etre ouverts (un contact d'IFA dessine a 10 microns) ne jugent rien :
+    # le maillage n'y peut rien, et ils sont deja dans l'avis des ponts.
+    def soudes():
+        return [s for s in _ponts_de_maille(m, grappes=False)
+                if s["ecart"] >= ECART_OUVRABLE_MM]
+    tol = 0.5 * m["resolution"]["die"]
+    base = soudes()
+
+    def connu(s):
+        return any(b["couche"] == s["couche"]
+                   and math.hypot(b["pa"][0] - s["pa"][0], b["pa"][1] - s["pa"][1]) <= tol
+                   and math.hypot(b["pm"][0] - s["pm"][0], b["pm"][1] - s["pm"][1]) <= tol
+                   for b in base)
+
+    def sain():
+        budget[0] -= 1
+        return all(connu(s) for s in soudes())
+
+    for axe in ("x", "y"):
+        t = lignes[axe]
+        cible = plancher.get(axe) or 0.0
+        # Seule la plus petite cellule de l'axe compte pour le pas de temps :
+        # des qu'elle resiste -- deux lignes de grille, ou aucun essai sain --,
+        # elargir les suivantes ne gagnerait rien.
+        while budget[0] > 0 and len(t) > 2:
+            k = min(range(len(t) - 1), key=lambda i: t[i + 1] - t[i])
+            a, b = t[k], t[k + 1]
+            d = b - a
+            if d >= cible:
+                break
+            ecart = [v for v in (a, b) if v in posees[axe]]
+            if not ecart:
+                break
+            fait = False
+            for v in ecart:
+                j = t.index(v)
+                if j == 0 or j == len(t) - 1:
+                    continue
+                g, dr = t[j - 1], t[j + 1]
+                # Retirer la ligne : la cellule devient dr - g.
+                t.pop(j)
+                if sain():
+                    posees[axe].remove(v)
+                    bilan[axe] -= 1
+                    bilan["elargies"] = bilan.get("elargies", 0) + 1
+                    fait = True
+                    break
+                t.insert(j, v)
+                if budget[0] <= 0:
+                    break
+                # La deplacer : du centre vers les bords, et seulement la ou
+                # la plus petite des deux cellules voisines grandit.
+                essais = sorted((g + (dr - g) * i / 8.0 for i in range(1, 8)),
+                                key=lambda c: -min(c - g, dr - c))
+                for c in essais:
+                    if min(c - g, dr - c) <= d + 1e-9 or budget[0] <= 0:
+                        break
+                    t[j] = c
+                    if sain():
+                        posees[axe][posees[axe].index(v)] = c
+                        bilan["elargies"] = bilan.get("elargies", 0) + 1
+                        fait = True
+                        break
+                    t[j] = v
+                if fait:
+                    break
+            if not fait:
+                break
 
 
 def _avis_ecarts_ouverts(m):
@@ -4209,8 +4371,12 @@ def _avis_ecarts_ouverts(m):
                  "ecart, placees pour garder les cellules les plus larges "
                  "possible ; le plus etroit fait %.3f mm. "
                  "Le prix : la plus petite cellule fait maintenant %.3f x %.3f "
-                 "mm dans le plan, et le pas de temps de tout le calcul la suit."
-                 % (b["x"], b["y"], b["plus_petit_ecart"] or 0.0, pc[0], pc[1]),
+                 "mm dans le plan, et le pas de temps de tout le calcul la suit.%s"
+                 % (b["x"], b["y"], b["plus_petit_ecart"] or 0.0, pc[0], pc[1],
+                    (" %d de ces lignes ont ensuite ete retirees ou deplacees "
+                     "pour elargir la plus petite cellule, le controle des "
+                     "ponts rejoue a chaque fois." % b["elargies"])
+                    if b.get("elargies") else ""),
     }]
 
 
@@ -4237,8 +4403,7 @@ def _avis_ponts_de_maille(m):
     texte += (" Si ce cuivre est relie au port, le port verra un court-circuit : "
               "un S11 plat pres de 0 dB, une impedance d'entree de quelques "
               "ohms inductifs -- et le calcul ira au bout sans rien dire. Un "
-              "morceau isole (la piste qui repartait vers la radio, derriere "
-              "un port pose sur une broche) n'est que mis a la masse, sans "
+              "morceau isole n'est que mis a la masse, sans "
               "consequence sur l'alimentation. Si ce cuivre n'est pas l'antenne "
               "(pastille d'un connecteur, d'un point de test), retirez-le de la "
               "selection ou posez le port ailleurs ; sinon affinez le maillage "
@@ -4595,6 +4760,20 @@ def _avis(m):
                       "ne decrivaient rien."),
         })
     mc = m.get("masse_cachee") or {}
+    # Le cuivre d'antenne du cote cache garde la masse qui l'entoure : la
+    # phrase qui le dit sert aux deux avis ci-dessous.
+    proches = ""
+    if mc.get("gardes_proches"):
+        proches = (" %d polygone(s) de masse sont gardes quand meme, a moins "
+                   "de %.0f mm du cuivre d'antenne retenu de ce cote-la -- %s "
+                   "-- qu'ils bordent. Si ce cuivre ne rayonne pas (la piste "
+                   "qui repart vers la radio, la pastille d'un point de test), "
+                   "retirez-le de la selection a l'etape « Le cuivre » : cette "
+                   "masse-la partira aussi."
+                   % (mc["gardes_proches"], PROCHE_ANTENNE_MM,
+                      ", ".join("« %s » (%.1f mm2)" % (c, a_)
+                                for c, a_ in sorted((mc.get("antenne_derriere")
+                                                     or {}).items()))))
     if mc.get("retires"):
         out.append({
             "rang": "info",
@@ -4607,10 +4786,18 @@ def _avis(m):
                       "reliaient plus deux couches gardees, sont retires. "
                       "Ecart attendu : faible, par les seuls trous du plan. "
                       "Cochez « Garder toute la masse » a l'etape « Le "
-                      "cuivre » pour comparer."
+                      "cuivre » pour comparer.%s"
                       % (", ".join("« %s » (%d polygone(s))" % (c, n)
                                    for c, n in sorted(mc["retires"].items())),
-                         mc.get("vias_retires", 0))),
+                         mc.get("vias_retires", 0), proches)),
+        })
+    elif proches:
+        out.append({
+            "rang": "info",
+            "titre": "Masse gardee derriere « %s »" % mc["reference"],
+            "texte": ("Le port prend sa masse sur « %s », et du cuivre "
+                      "d'antenne retenu est aussi de l'autre cote." % mc["reference"])
+                     + proches,
         })
     if m.get("empilage_reduit"):
         out.append({

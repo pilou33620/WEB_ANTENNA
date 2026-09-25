@@ -227,13 +227,6 @@ function antCuivreCalcul(){
 
   const nets=new Set(ANT.nets);
   if(ANT.netMasse>=0)nets.add(ANT.netMasse);
-  /* CE QU'UN PORT POSÉ SUR UNE BROCHE REMPLACE : le trou métallisé de la
-     broche et ses pastilles des autres couches sortent du modèle, sa pastille
-     sous le port y entre même sans la case « pastilles ». Voir
-     `antBrochesRemplacees`, 36-port-broche.js. */
-  const remplace=(typeof antBrochesRemplacees==="function")
-    ? antBrochesRemplacees()
-    : {pads:new Set(), trous:new Set(), forces:[], pistes:new Set()};
 
   const bloc=function(ci){
     if(!blocs.has(ci))
@@ -257,7 +250,7 @@ function antCuivreCalcul(){
     if(masse)for(const [ci,b] of blocs)avant.set(ci,b.polys.length);
 
     for(const p of n.pistes){
-      if(!ANT.couches.has(p.c)||remplace.pistes.has(p))continue;
+      if(!ANT.couches.has(p.c))continue;
       if(!(p.w>0)){compte.fins++;continue;}
       compte.pistes+=antPolyligneEnPolys(p.p,p.w,bloc(p.c).polys);
     }
@@ -286,8 +279,7 @@ function antCuivreCalcul(){
 
     if(ANT.avecPastilles)
       for(const q of n.pads){
-        if(!ANT.couches.has(q.c)||remplace.pads.has(q))continue;
-        if(remplace.forces.indexOf(q)>=0)continue;      // entrée plus bas, une fois
+        if(!ANT.couches.has(q.c))continue;
         const poly=antPadEnPoly(q);
         if(poly){bloc(q.c).polys.push({o:poly});compte.pads++;}
       }
@@ -326,15 +318,9 @@ function antCuivreCalcul(){
       }
     }else if(f.k==="pad"){
       if(deja(o.pad?o.pad.n:-1,o.c,ANT.avecPastilles))continue;
-      if(remplace.pads.has(o)||remplace.forces.indexOf(o)>=0)continue;
       const poly=antPadEnPoly(o);
       if(poly){bloc(o.c).polys.push({o:poly});compte.pads++;}
     }
-  }
-  for(const q of remplace.forces){
-    if(!ANT.couches.has(q.c))continue;
-    const poly=antPadEnPoly(q)||(typeof antBrocheRond==="function"?antBrocheRond(q):null);
-    if(poly){bloc(q.c).polys.push({o:poly});compte.pads++;}
   }
 
   /* Les vias des nets d'abord — c'est là que `ANT.viasSupposes` se remet à
@@ -348,8 +334,6 @@ function antCuivreCalcul(){
     const v=antViaDeTrou(t);
     if(v&&!vias.some(w=>w.x===v.x&&w.y===v.y&&w.d===v.d))vias.push(v);
   }
-  if(remplace.trous.size)
-    vias=vias.filter(v=>!remplace.trous.has(mdlCleXY(v.x,v.y)));
 
   return {blocs:Array.from(blocs.values()),
           vias:vias,

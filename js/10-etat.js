@@ -244,10 +244,7 @@ function antPortNeuf(exc){
              l'antenne. Zéro veut dire « non déclarée », et c'est le défaut :
              l'impédance est alors lue là où le port est posé, sans rien
              ajouter. Voir `_ligne_alim` dans python/openems_modele.py. */
-          ligne_d:0, ligne_w:0,
-          /* La broche de composant où le port est accroché, {ref, num}, ou
-             null pour un port posé à la main. Voir 36-port-broche.js. */
-          broche:null};
+          ligne_d:0, ligne_w:0};
 }
 
 Object.defineProperty(ANT,"port",{
@@ -298,10 +295,6 @@ function antPortDoc(p,i){
   const d={type:p.type||"localise", nom:"port "+(i+1),
            dir:p.dir, x:p.x, y:p.y, w:p.w, l:p.l, ecart:p.ecart,
            R:p.R, de:p.de, a:p.a, excite:!!p.excite, pose:!!p.pose};
-  /* Pour mémoire seulement : le serveur n'en fait rien — ce que la broche
-     remplace a déjà été retiré du cuivre envoyé —, mais le rapport et le
-     script disent ainsi où est le port en des termes qu'on relit. */
-  if(p.broche)d.broche=p.broche.ref+"."+p.broche.num;
   if(p.type==="coaxial"){
     d.ra=p.ra; d.rb=p.rb; d.er=p.er;
     d.ep_gaine=p.ep_gaine; d.longueur=p.longueur;
@@ -386,6 +379,13 @@ function antRaz(){
   if(corpsAssistant&&corpsAssistant.dataset)corpsAssistant.dataset.etape="";
   ANT.boite={mx:0,my:0,mz_haut:0,mz_bas:0,pml:8};
   ANT.maillage={res_air:0,res_die:0,tiers:true};
+  /* LE GARDE-FOU AUSSI : c'est le septième des champs calculés (`ANT_AUTO`,
+     13-assistant.js). Imposé sur une carte, il partait tel quel sur la
+     suivante — 5 000 pas demandés pour antenna4c.xml, où ils suffisaient,
+     restaient sur P01x274PCB-C.xml, qui en réclame 575 886. Le critère
+     d'énergie, lui, est une exigence de précision et non une valeur de la
+     carte : il reste. */
+  ANT.arret.nmax=0;
   ANT.primitives=[];
   /* Les pièces partent avec la carte, comme les objets d'« Autour » : leur
      position est comptée dans le repère de CETTE carte, et un boîtier posé

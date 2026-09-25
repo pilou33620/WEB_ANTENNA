@@ -2650,6 +2650,184 @@ verifie("sans modele du serveur, l'apercu 3D dessine quand meme carte et pieces"
         ml.boite.z2>11.6, JSON.stringify(ml&&ml.boite));
 ANT.pieces=[];
 
+/* -- le port qui se pose tout seul (37-port-auto.js) ----------------------
+   La carte P01x274PCB-C.xml, reduite a ce qui compte autour du port : un
+   ruban d'antenne de 0,49 mm sur Conductor-4 qui sort de la masse a
+   y = 64,1 ; la masse des quatre couches, avec la reserve du point de test
+   sur Conductor-1, -2 et -3. Le clic de l'utilisateur, (4,78 ; 62,668),
+   etait a 0,04 mm du bord de la reserve de Conductor-2 et Conductor-3. */
+console.log("");
+console.log("Le port qui se pose tout seul");
+charger("37-port-auto.js");
+(function(){
+  const R=(x1,y1,x2,y2)=>({x1,y1,x2,y2});
+  const dans=(r,x,y)=>x>=r.x1&&x<=r.x2&&y>=r.y1&&y<=r.y2;
+  const carte={
+    "Conductor-1":{ant:[],mas:[R(-3,-6,39,64.1)],trous:[R(-0.55,51.65,12.19,62.71)]},
+    "Conductor-2":{ant:[],mas:[R(-3,-6,39,64.1)],trous:[R(3.11,61.09,6.49,62.71)]},
+    "Conductor-3":{ant:[],mas:[R(-3,-6,39,64.1)],trous:[R(3.11,61.09,6.49,62.71)]},
+    "Conductor-4":{ant:[R(4.55,62.41,5.04,64.3),R(0.52,64.3,5.29,80)],
+                   mas:[R(-3,-6,39,64.1)],trous:[R(4.1,61,5.49,64.1)]},
+  };
+  const nature=function(c,x,y){
+    const k=carte[c]; if(!k)return "";
+    if(k.ant.some(r=>dans(r,x,y)))return "antenne";
+    if(k.mas.some(r=>dans(r,x,y))&&!k.trous.some(r=>dans(r,x,y)))return "masse";
+    return "";
+  };
+  const couches=[{nom:"Conductor-1",z:0},{nom:"Conductor-2",z:-0.37},
+                 {nom:"Conductor-3",z:-1.08},{nom:"Conductor-4",z:-1.45}];
+  const q=(x,y,de,nat)=>antPortChercher({x:x,y:y,de:de,couches:couches,
+                                         nature:nat||nature,k:1});
+
+  let r=q(4.78,62.668,"Conductor-4");
+  verifie("P01x274 : le clic contre la reserve glisse vers la masse franche",
+          !r.echec&&r.a==="Conductor-3"&&r.dir==="z"&&r.y>=62.71+0.3-1e-9&&
+          r.y<=64.1-0.3+1e-9&&r.deplace<0.6, JSON.stringify(r));
+  verifie("... et il ne traverse plus Conductor-3 pour aller a Conductor-2",
+          r.a!=="Conductor-2", r.a);
+  r=q(4.8,63.4,"Conductor-4");
+  verifie("un clic deja franc ne bouge pas", !r.echec&&r.deplace===0&&
+          r.a==="Conductor-3", JSON.stringify(r));
+
+  /* La masse de Conductor-3 retiree du modele : le port descend a
+     Conductor-2 en traversant Conductor-3, vide au point. */
+  const sans3=(c,x,y)=>c==="Conductor-3"?"":nature(c,x,y);
+  r=q(4.8,63.4,"Conductor-4",sans3);
+  verifie("une couche vide au point se traverse", !r.echec&&
+          r.a==="Conductor-2", JSON.stringify(r));
+
+  /* Coplanaire seule : aucune masse sous l'antenne, une fente de 0,2 mm a
+     sa droite. Le port se pose dans le plan, en travers d'elle. */
+  const copla=function(c,x,y){
+    if(c!=="Conductor-4")return "";
+    if(x>=4&&x<=5&&y>=0&&y<=20)return "antenne";
+    if(x>=5.2&&x<=15&&y>=0&&y<=20)return "masse";
+    return "";
+  };
+  r=q(4.5,10,"Conductor-4",copla);
+  verifie("coplanaire sans masse dessous : port dans le plan, en travers de "+
+          "la fente", !r.echec&&r.fente&&r.dir==="x"&&
+          Math.abs(r.ecart-0.2)<0.02&&Math.abs(r.x-5.1)<0.02&&
+          r.a!=="Conductor-4", JSON.stringify(r));
+
+  r=q(30,30,"Conductor-4");
+  verifie("aucune antenne pres du clic : on le dit, on ne pose rien",
+          !!r.echec, JSON.stringify(r));
+
+  /* Un via de couture de 0,3 mm a 0,1 mm du clic, entre les deux couches du
+     port : le point est refuse, le port s'en eloigne de plus que la marge. */
+  const via={x:4.9,y:63.4,d:0.3,de:"Conductor-3",a:"Conductor-4"};
+  r=antPortChercher({x:4.8,y:63.4,de:"Conductor-4",couches:couches,
+                     nature:nature,k:1,vias:[via]});
+  verifie("un trou metallise pres du clic : le port s'en ecarte",
+          !r.echec&&r.dir==="z"&&
+          Math.hypot(r.x-via.x,r.y-via.y)-via.d/2>0.3-1e-9, JSON.stringify(r));
+  /* ... mais pas d'un via qui ne passe pas entre ses deux couches. */
+  r=antPortChercher({x:4.8,y:63.4,de:"Conductor-4",couches:couches,
+                     nature:nature,k:1,
+                     vias:[{x:4.9,y:63.4,d:0.3,de:"Conductor-1",a:"Conductor-2"}]});
+  verifie("... un via entre deux autres couches ne gene pas",
+          !r.echec&&r.deplace===0, JSON.stringify(r));
+
+  /* Un ruban de 0,08 mm, plus fin que deux marges d'antenne. */
+  const fin=function(c,x,y){
+    if(c==="Conductor-4"&&x>=5&&x<=5.08&&y>=0&&y<=20)return "antenne";
+    if(c==="Conductor-3")return "masse";
+    return "";
+  };
+  r=q(5.04,10,"Conductor-4",fin);
+  verifie("un ruban de 0,08 mm recoit quand meme son port",
+          !r.echec&&r.a==="Conductor-3"&&r.x>5&&r.x<5.08, JSON.stringify(r));
+
+  /* La fente mesuree a son bord, pas au pas d'echantillonnage. */
+  const f105=function(c,x,y){
+    if(c!=="Conductor-4")return "";
+    if(x>=4&&x<=5&&y>=0&&y<=20)return "antenne";
+    if(x>=5.105&&x<=15&&y>=0&&y<=20)return "masse";
+    return "";
+  };
+  r=q(4.5,10,"Conductor-4",f105);
+  verifie("une fente de 0,105 mm se mesure a 0,105 mm",
+          !r.echec&&r.fente&&Math.abs(r.ecart-0.105)<1e-3&&
+          Math.abs(r.x-5.0525)<1e-3, JSON.stringify(r));
+})();
+
+/* -- le verdict du port (36-port-verdict.js) --------------------------------
+   Il lit le cuivre du modele par `antCuivreDuModele` : on lui en donne un,
+   fait a la main, et l'on remet tout en place apres. */
+console.log("");
+console.log("Le verdict du port");
+charger("36-port-verdict.js");
+(function(){
+  const garde={cu:global.antCuivreDuModele, modele:V.modele, unite:V.unite,
+               lt:{cu:LT.cu,gap:LT.gap}, port:JSON.stringify(ANT.port)};
+  const R=(x1,y1,x2,y2,m,trous)=>({o:[x1,y1,x2,y1,x2,y2,x1,y2],m:!!m,
+    t:(trous||[]).map(t=>[t[0],t[1],t[2],t[1],t[2],t[3],t[0],t[3]])});
+  let CU;
+  global.antCuivreDuModele=()=>CU;
+  V.modele={}; V.unite="mm";
+  LT.cu=[{nom:"L1",role:"signal"},{nom:"L2",role:"gnd"},{nom:"L3",role:"gnd"}];
+  LT.gap=[{t:0.2},{t:1}];
+  const port=(o)=>Object.assign({pose:true,type:"localise",dir:"z",x:1,y:5,
+                                 de:"L1",a:"L2"},o);
+  const graves=v=>v.filter(d=>d.ok===false).map(d=>d.t);
+  const avertis=v=>v.filter(d=>d.ok===null).map(d=>d.t);
+
+  CU={blocs:[{couche:"L1",polys:[R(0,0,2,20)]},
+             {couche:"L2",polys:[R(-10,-10,30,30,true)]},
+             {couche:"L3",polys:[R(-10,-10,30,30,true)]}],vias:[]};
+  let v=antPortVerdict(port());
+  verifie("un port franc : deux bornes justes, rien d'autre",
+          v.length===2&&v.every(d=>d.ok===true), JSON.stringify(v));
+  v=antPortVerdict(port({a:"L3"}));
+  verifie("un port qui traverse la masse pleine de L2 pour aller a L3 : ✗",
+          graves(v).some(t=>/traverse la masse sur « L2 »/.test(t)),
+          JSON.stringify(v));
+
+  /* Un bloc NEUF, comme le rend `antCuivreDuModele` apres un recalcul : les
+     seaux de 36-port-verdict.js sont ranges par bloc. */
+  CU.blocs[1]={couche:"L2",polys:[R(-10,-10,30,30,true,[[-5,-5,5,4.96]])]};
+  v=antPortVerdict(port());
+  verifie("une borne de masse a 0,04 mm d'une reserve n'a pas de ✓",
+          !v.some(d=>d.ok===true&&/« L2 »/.test(d.t))&&
+          avertis(v).some(t=>/0[,.]0[45]/.test(t)), JSON.stringify(v));
+
+  CU.blocs[1]={couche:"L2",polys:[R(-10,-10,30,30,true)]};
+  CU.vias=[{x:1,y:5,d:0.3,de:"L1",a:"L2"}];
+  verifie("un port pose sur un via entre ses deux couches : ✗",
+          graves(antPortVerdict(port())).some(t=>/trou métallisé/.test(t)));
+  CU.vias=[{x:1,y:5,d:0.3,de:"L2",a:"L3"}];
+  verifie("... un via entre deux autres couches ne dit rien",
+          antPortVerdict(port()).every(d=>d.ok===true));
+  CU.vias=[];
+
+  /* Le port dans le plan : les bornes du verdict sont celles de l'ecran. */
+  CU={blocs:[{couche:"L1",polys:[R(4,0,5,20),R(5.2,0,15,20,true)]}],vias:[]};
+  const b=antPortBornesPlan(port({dir:"x",x:5.1,y:10,ecart:0.2}));
+  verifie("port dans le plan : une borne sur l'antenne, l'autre sur la masse",
+          b[0].touche==="antenne"&&b[1].touche==="masse"&&
+          Math.abs(b[0].x-5)<1e-9&&Math.abs(b[1].x-5.2)<1e-9, JSON.stringify(b));
+
+  /* La recherche qui echoue ne garde rien du clic precedent. */
+  Object.assign(ANT.port,{pose:true,type:"localise",de:"L1",a:"L3",
+                          dir:"x",ecart:0.3,x:50,y:50});
+  const r=antPortAuto();
+  verifie("un clic sans solution remet le port vertical, sur la masse "+
+          "devinee par l'empilage",
+          r&&r.echec&&ANT.port.dir==="z"&&ANT.port.a==="L2",
+          JSON.stringify(ANT.port));
+  verifie("... et le panneau le dit", /laissé où il a été cliqué/.test(antPortAutoHtml()));
+  antPortAutoOublier(ANT.port);
+  verifie("une retouche a la main efface la note du clic",
+          antPortAutoHtml()==="");
+
+  global.antCuivreDuModele=garde.cu; V.modele=garde.modele; V.unite=garde.unite;
+  LT.cu=garde.lt.cu; LT.gap=garde.lt.gap;
+  Object.keys(ANT.port).forEach(c=>delete ANT.port[c]);
+  Object.assign(ANT.port,JSON.parse(garde.port));
+})();
+
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")
                                             :"toutes passees."));

@@ -339,6 +339,8 @@ function antEtapeActualiser(etapeId,corps){
   }else if(etapeId==="port"){
     const rEl=corps.querySelector("#antPortRecap");
     if(rEl)rEl.innerHTML=antPortRecapHtml();
+    const vEl=corps.querySelector("#antPortVerdict");
+    if(vEl)vEl.innerHTML=antPortVerdictBlocHtml();
   }else if(etapeId==="cuivre"){
     const rEl=corps.querySelector("#antCuivreRecap");
     if(rEl)rEl.innerHTML=antCuivreRecapHtml();
@@ -568,10 +570,13 @@ ${sansNets?'<p class="alerte">Ce fichier ne déclare pas de connectivité : tout
 function antMasseCacheeNote(){
   if(ANT.masseCachee)return "y compris derrière le plan de référence";
   const mc=ANT.modele&&ANT.modele.masse_cachee;
-  if(mc&&mc.reference&&mc.retires){
-    const n=Object.values(mc.retires).reduce((a,b)=>a+b,0);
+  const n=mc&&mc.retires?Object.values(mc.retires).reduce((a,b)=>a+b,0):0;
+  if(mc&&mc.reference&&n)
     return "sinon "+aEnt(n)+" polygone(s) caché(s) par « "+aEsc(mc.reference)+" » sont retirés";
-  }
+  /* L'antenne est des deux côtés du plan : la masse qui la borde reste. Voir
+     `_masse_cachee`. */
+  if(mc&&mc.reference&&mc.gardes_proches)
+    return "rien n'est retiré : la masse derrière « "+aEsc(mc.reference)+" » borde de l'antenne";
   return "sinon la masse cachée par le plan de référence est retirée";
 }
 
@@ -963,13 +968,11 @@ ${ANT.ports.length>1?`<div class="champ">
     </select></span>
 </div>
 
-${coax||typeof antPortBrocheHtml!=="function"?"":antPortBrocheHtml()}
-
 <div class="champ">
   <button class="tb ${ANT.posePort?"on":""}" id="bPosePort">
     ${ANT.posePort?"◉ Cliquez le point d'alimentation sur la carte…":"⌖ Poser le port sur la carte"}
   </button>
-  <p class="note">${coax?"Cliquer":"Ou à la main : cliquer"} vaut mieux que saisir : l'assistant prend alors la
+  <p class="note">Cliquer vaut mieux que saisir : l'assistant prend alors la
      largeur de la piste sous le curseur, et vérifie que le point est bien sur
      le cuivre retenu.</p>
 </div>
@@ -1023,7 +1026,14 @@ ${coax?`
       <option value="x"${p.dir==="x"?" selected":""}>x — horizontale</option>
       <option value="y"${p.dir==="y"?" selected":""}>y — horizontale</option>
     </select></span>
+  ${p.dir==="x"||p.dir==="y"?`<span><label>Écart enjambé</label><input type="text" inputmode="decimal" spellcheck="false" id="antPecart" value="${mdlNb(p.ecart)}"></span>
+  <span class="unite">${antUnite()}</span>`:""}
 </div>
+${p.dir==="x"||p.dir==="y"?`<p class="note">Dans le plan, le port enjambe la
+   fente entre l'antenne et sa masse, <b>sur la couche « de »</b> : ses deux
+   bornes sont à ± la moitié de l'écart autour du point. La couche « vers » ne
+   sert à rien physiquement — il en faut seulement une autre, le serveur
+   exigeant deux conducteurs distincts.</p>`:""}
 
 <div class="champ ligne">
   <span><label>Largeur</label><input type="text" inputmode="decimal" spellcheck="false" id="antPw" value="${mdlNb(p.w)}"></span>
@@ -1078,8 +1088,17 @@ ${(p.ligne_d>0&&p.ligne_w>0)?(function(){
 <div id="antPortRecap">
   ${antPortRecapHtml()}
 </div>
-${typeof antPortVerdictHtml==="function"?antPortVerdictHtml():""}`;
+<div id="antPortVerdict">${antPortVerdictBlocHtml()}</div>`;
 };
+
+/* La note du dernier clic et le verdict : réécrits à chaque actualisation
+   (`antEtapeActualiser`), pas seulement au rendu complet de l'étape. Une
+   couche « vers » changée dans la liste laissait les deux ✓ d'avant à
+   l'écran, et la note « la masse est pleine sous le port » avec eux. */
+function antPortVerdictBlocHtml(){
+  return (typeof antPortAutoHtml==="function"?antPortAutoHtml():"")+
+         (typeof antPortVerdictHtml==="function"?antPortVerdictHtml():"");
+}
 
 function antPortRecapHtml(){
   if(!ANT.modele||!ANT.modele.ports||!ANT.modele.ports[ANT.portActif])return "";
@@ -1127,19 +1146,21 @@ ANT_LIER.port=function(box){
     antAssistantRendre(true);
     document.body.classList.toggle("pose-port",!!ANT.posePort);
   };
+  /* Une cote qui place le port, retouchée à la main : la note du dernier
+     clic (« la masse est pleine sous le port ») ne le décrit plus. Voir
+     `antPortAutoOublier`, 37-port-auto.js. */
+  const oublier=function(){
+    if(typeof antPortAutoOublier==="function")antPortAutoOublier(ANT.port);
+  };
+  const PLACE={x:1,y:1,ecart:1,de:1,a:1,dir:1,type:1};
   const n=function(id,cle,min){
     antLierNombre(box.querySelector(id), ANT.port, cle, {
       min: min!=null?min:-Infinity,
-      apres: ()=>{
-        ANT.port.pose=true;
-        /* Une cote retouchée à la main déplace le port hors de sa broche. */
-        if((cle==="x"||cle==="y")&&typeof antPortDecrocher==="function")
-          antPortDecrocher(ANT.port);
-      }
+      apres: ()=>{ ANT.port.pose=true; if(PLACE[cle])oublier(); }
     });
   };
-  if(typeof antPortBrocheLier==="function")antPortBrocheLier(box);
-  n("#antPx","x"); n("#antPy","y"); n("#antPw","w",0.001);
+  n("#antPx","x"); n("#antPy","y"); n("#antPecart","ecart",0.001);
+  n("#antPw","w",0.001);
   n("#antPl","l",0.001); n("#antPR","R",1);
   n("#antPra","ra",0.001); n("#antPrb","rb",0.001); n("#antPer","er",1);
   n("#antPepg","ep_gaine",0.001); n("#antPlong","longueur",0.01);
@@ -1147,12 +1168,20 @@ ANT_LIER.port=function(box){
   antLierNombre(box.querySelector("#antPlgw"), ANT.port, "ligne_w", {min:0});
   const s=function(id,cle){
     const el=box.querySelector(id);
-    if(el)el.onchange=function(){ ANT.port[cle]=this.value; antMaj(true); };
+    if(el)el.onchange=function(){
+      ANT.port[cle]=this.value;
+      if(PLACE[cle])oublier();
+      /* L'orientation change les champs de l'étape — l'écart enjambé n'existe
+         que dans le plan : le corps se refait tout de suite. */
+      if(cle==="dir")antAssistantRendre(true);
+      antMaj(true);
+    };
   };
   s("#antPde","de"); s("#antPa","a"); s("#antPdir","dir");
   const t=box.querySelector("#antPtype");
   if(t)t.onchange=function(){
     ANT.port.type=this.value;
+    oublier();
     /* Un coaxial est toujours vertical : sa source est radiale, et son axe
        est celui du perçage. Laisser « x » affiché sur un port coaxial ferait
        croire à un choix qui n'existe pas. */

@@ -2210,9 +2210,13 @@ for _forme in ("rond", "carre"):
             (_eo, _m["ponts_maille"]))
     verifie("... l'ecart dessine est rendu, et non la maille (%s)" % _forme,
             abs(_eo["plus_petit_ecart"] - 0.1) < 0.005, _eo)
-    verifie("... et le prix est dit : une cellule du tiers de l'ecart (%s)"
-            % _forme,
-            min(_m["estimation"]["plus_petite_cellule_mm"][:2]) < 0.05
+    # LE TIERS DE L'ECART N'EST PLUS LE PRIX : `_elargir_cellules` reprend
+    # la plus petite cellule une fois l'ecart ouvert, et le controle des ponts
+    # rejoue a chaque essai dit jusqu'ou elle peut grandir.
+    _pc = min(_m["estimation"]["plus_petite_cellule_mm"][:2])
+    verifie("... et le prix est dit, une cellule elargie au-dela du tiers de "
+            "l'ecart (%s)" % _forme,
+            0.1 / 3 < _pc < 0.3
             and any("ouvert" in a["titre"] for a in _m["avis"]),
             _m["estimation"]["plus_petite_cellule_mm"])
     # Ce que le controle dit SANS l'ouverture : zero tour, et le pont reste,
@@ -2231,6 +2235,64 @@ for _forme in ("rond", "carre"):
     verifie("pastille %s a 0,21 mm, grille de 0,3 mm : une ligne tombe "
             "dedans, rien a dire" % _forme, not _av, _m["ponts_maille"])
 
+# LA PLUS PETITE CELLULE, REPRISE APRES L'OUVERTURE (`_elargir_cellules`).
+# Sur P01x274, une ligne d'ecart finissait a 0,034 mm d'une ligne de grille :
+# 49 h annoncees. On balaie la pastille dans sa reserve -- trois ecarts, cinq
+# positions sur la grille -- avec et sans la reprise : elle ne doit jamais
+# ressouder, jamais rendre la cellule plus petite, et la grandir la ou les
+# lignes au tiers la pincaient.
+
+
+def _pastille_decalee(ecart, dx, essais=None):
+    doc = json.loads(json.dumps(_d))
+    plan = doc["cuivre"][1]["polys"][0]
+    plan["t"] = [_rond(10.0 + dx, 10.0, 0.6 + ecart)]
+    doc["cuivre"][1]["polys"].append({"o": _rond(10.0 + dx, 10.0, 0.6)})
+    garde = openems_modele.ELARGIR_ESSAIS
+    if essais is not None:
+        openems_modele.ELARGIR_ESSAIS = essais
+    try:
+        m = openems_modele.normaliser(doc)
+    finally:
+        openems_modele.ELARGIR_ESSAIS = garde
+    return m, min(m["estimation"]["plus_petite_cellule_mm"][:2])
+
+
+_pire_sans, _pire_avec, _soudes, _recule = 1.0, 1.0, [], []
+for _ec in (0.1, 0.14, 0.18):
+    for _i in range(5):
+        _dx = 0.043 * _i
+        _ma, _avec = _pastille_decalee(_ec, _dx)
+        _ms, _sans = _pastille_decalee(_ec, _dx, essais=0)
+        _pire_sans, _pire_avec = min(_pire_sans, _sans), min(_pire_avec, _avec)
+        if _ma["ponts_maille"] and not _ms["ponts_maille"]:
+            _soudes.append((_ec, _dx))
+        if _avec < _sans - 1e-9:
+            _recule.append((_ec, _dx, _sans, _avec))
+verifie("reprise de la plus petite cellule : aucun ecart ressoude",
+        not _soudes, _soudes)
+verifie("... jamais une cellule plus petite qu'avant",
+        not _recule, _recule)
+verifie("... et la pire cellule grandit nettement",
+        _pire_avec > 1.5 * _pire_sans, (_pire_sans, _pire_avec))
+
+# L'IFA DE P01x274 (A400) : la patte de court-circuit s'arrete a 0,01 mm du
+# morceau de plan de masse, et la carte reelle les soude. La reprise ne doit
+# ni l'ouvrir ni y toucher, et la pastille a 0,14 mm d'a cote reste ouverte.
+_dfa = json.loads(json.dumps(_d))
+_pl = _dfa["cuivre"][1]["polys"][0]
+_pl["t"] = [_rond(10.0, 10.0, 0.74), rect(20, 20, 10, 10)]
+_dfa["cuivre"][1]["polys"] += [{"o": _rond(10.0, 10.0, 0.6)},
+                               {"o": rect(24, 20.01, 1, 9)}]
+_mfa = openems_modele.normaliser(_dfa)
+_pts = _mfa["ponts_maille"]
+verifie("IFA : la patte a 0,01 mm de la masse reste soudee",
+        any(s["ecart"] < 0.02 and 23.9 <= s["x"] <= 25.1 for s in _pts),
+        [(s["ecart"], s["x"], s["y"]) for s in _pts])
+verifie("... et aucun ecart ouvrable n'est soude a cote",
+        not [s for s in _pts if s["ecart"] >= openems_modele.ECART_OUVRABLE_MM],
+        [(s["ecart"], s["x"], s["y"]) for s in _pts])
+
 # Une languette d'antenne qui TOUCHE la masse (la patte d'un IFA) : le contact
 # est dessine, pas fabrique par la grille.
 _di = json.loads(json.dumps(_d))
@@ -2246,6 +2308,80 @@ _dn["cuivre"][1]["polys"][0]["t"] = [_rond(10.0, 10.0, 0.7)]
 _dn["cuivre"][1]["polys"].append({"o": _rond(10.0, 10.0, 0.6)})
 verifie("sans masse connue : on se tait",
         not openems_modele.normaliser(_dn)["ponts_maille"])
+
+# --------------------------------------------------------------------------
+print()
+print("20 ter. La masse cachee, quand l'antenne est des deux cotes du plan")
+# LE CAS DE P01x274PCB-C.xml : la sonde se pose sur le point de test du
+# DESSUS, le trou metallise porte le signal jusqu'a l'antenne, sur le
+# DESSOUS. La couche « de » du port ne dit pas ou l'antenne rayonne.
+
+
+def _pile3(dessus, dessous, de, a, px, py):
+    return document(
+        empilage=[
+            {"nom": "TOP", "cuivre": True, "ep": 0.035, "seq": 1},
+            {"nom": "D1", "cuivre": False, "ep": 0.37, "er": 4.37, "df": 0.02, "seq": 2},
+            {"nom": "MID", "cuivre": True, "ep": 0.035, "seq": 3},
+            {"nom": "D2", "cuivre": False, "ep": 0.71, "er": 4.37, "df": 0.02, "seq": 4},
+            {"nom": "BOT", "cuivre": True, "ep": 0.035, "seq": 5},
+        ],
+        cuivre=[
+            {"couche": "TOP", "polys": dessus},
+            {"couche": "MID", "polys": [{"o": rect(0, 0, 40, 40), "m": 1}]},
+            {"couche": "BOT", "polys": dessous},
+        ],
+        port={"type": "localise", "dir": "z", "x": px, "y": py,
+              "w": 0.5, "l": 0.5, "R": 50.0, "de": de, "a": a},
+        bande={"f1": 0.8e9, "f2": 0.95e9, "n": 101, "fcible": 0.868e9})
+
+
+_masse_haut = {"o": rect(30, 30, 2, 2), "m": 1}      # loin de tout
+_masse_bas = {"o": rect(5, 30, 2, 2), "m": 1}        # loin de tout
+_bord_bas = {"o": rect(24, 10, 1, 1), "m": 1}        # a 1 mm du rayonnant
+_bord_haut = {"o": rect(21.5, 19.5, 1, 1), "m": 1}   # a 1 mm de la pastille
+_rayonnant = {"o": rect(18, 5, 5, 20)}                 # 100 mm2, sur BOT
+_pastille = {"o": rect(19.5, 19.5, 1, 1)}              # le point de test, sur TOP
+
+_mc = openems_modele.normaliser(_pile3(
+    [_masse_haut], [_rayonnant, _masse_bas],
+    "BOT", "MID", 20.0, 10.0))["masse_cachee"]
+verifie("antenne dessous, port dessous : la masse du dessus est cachee",
+        _mc["retires"] == {"TOP": 1} and not _mc["gardes_proches"], _mc)
+
+_m3 = openems_modele.normaliser(_pile3(
+    [_pastille, _masse_haut], [_rayonnant, _masse_bas, _bord_bas],
+    "TOP", "MID", 20.0, 20.0))
+_mc = _m3["masse_cachee"]
+verifie("port sur la pastille du dessus : la masse qui borde l'antenne reste",
+        _mc["gardes_proches"] == 1 and "BOT" in _mc["antenne_derriere"], _mc)
+verifie("et celle qui en est loin part quand meme",
+        _mc["retires"] == {"BOT": 1}, _mc)
+verifie("l'avis dit ce qui est garde, et pourquoi",
+        any("gardes quand meme" in a["texte"] for a in _m3["avis"]),
+        [a["titre"] for a in _m3["avis"]])
+
+_mc = openems_modele.normaliser(_pile3(
+    [_pastille, _bord_haut, _masse_haut], [_rayonnant, _masse_bas],
+    "BOT", "MID", 20.0, 10.0))["masse_cachee"]
+verifie("P01x274 : le point de test du dessus garde sa masse, le reste part",
+        _mc["retires"] == {"TOP": 1} and _mc["gardes_proches"] == 1, _mc)
+
+_mc = openems_modele.normaliser(_pile3(
+    [_pastille, _bord_haut], [_rayonnant, _masse_bas],
+    "BOT", "MID", 20.0, 10.0))["masse_cachee"]
+verifie("tout ce qui est cache borde l'antenne : rien n'est retire, et on le sait",
+        not _mc["retires"] and _mc["reference"] == "MID"
+        and _mc["gardes_proches"] == 1, _mc)
+
+# Le meme document, port DANS LE PLAN : « a » n'est qu'une couche voisine
+# exigee par le format (37-port-auto.js), pas un plan de reference.
+_dp = _pile3([_masse_haut], [_rayonnant, _masse_bas], "BOT", "MID", 20.0, 10.0)
+_dp["port"]["dir"] = "x"
+_dp["port"]["ecart"] = 0.2
+_mc = openems_modele.normaliser(_dp)["masse_cachee"]
+verifie("port dans le plan : sa couche « vers » ne cache aucune masse",
+        _mc["reference"] is None and not _mc["retires"], _mc)
 
 # --------------------------------------------------------------------------
 print()
