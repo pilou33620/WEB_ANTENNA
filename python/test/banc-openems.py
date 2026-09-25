@@ -703,6 +703,19 @@ verifie("la decoupe sort a une priorite superieure au plan de masse",
         "priority=11" in t2 and "priority=10" in t2)
 verifie("le conducteur sans trou sort a priorite superieure a la decoupe",
         "priority=12" in t2)
+# Des trous sur TOUTES les couches : ceux de dessus se remplissent de
+# substrat, ceux de dessous d'air. `air_trou` n'etait cree que si le tout
+# premier trou en avait besoin — NameError au lancement sinon.
+d = document()
+for bloc in d["cuivre"]:
+    for poly in bloc["polys"]:
+        poly["t"] = [rect(30, 30, 10, 10)]
+t3 = openems_script.generer(openems_modele.normaliser(d))
+if "air_trou." in t3:
+    verifie("air_trou est cree avant d'etre employe",
+            "air_trou = CSX.AddMaterial" in t3 and
+            t3.index("air_trou = CSX.AddMaterial") < t3.index("air_trou."))
+verifie("air_trou n'est cree qu'une fois", t3.count("air_trou = CSX.AddMaterial") <= 1)
 
 print()
 print("5b. Les trois modes de cuivre")

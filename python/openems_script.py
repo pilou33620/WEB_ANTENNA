@@ -460,6 +460,11 @@ def generer(m, chemin_openems=None, dossier_sim=None):
     a("# materiau du substrat a une priorite PLUS HAUTE. C'est ainsi que\n")
     a("# CSXCAD fait des trous — la priorite tranche, pas l'ordre d'ajout.\n")
     n_trou = 0
+    # Declare au PREMIER trou qui en a besoin, et non au premier trou tout
+    # court : les trous de la couche du haut se remplissent de substrat, et
+    # ceux de la couche du bas, venus ensuite, appelaient un `air_trou` que
+    # personne n'avait cree (NameError au lancement).
+    air_trou_cree = False
     for bloc in m["cuivre"]:
         nom = _ident(bloc["couche"], "cu")
         if mode == "volume":
@@ -495,8 +500,9 @@ def generer(m, chemin_openems=None, dossier_sim=None):
                         sous = i
                         break
                 cible = ("sub_%d" % sous) if sous is not None else "air_trou"
-                if sous is None and n_trou == 0:
+                if sous is None and not air_trou_cree:
                     a("air_trou = CSX.AddMaterial('air_trou', epsilon=1.0)\n")
+                    air_trou_cree = True
                 if mode == "volume":
                     a("%s.AddLinPoly(%s, 'z', %s, %s, priority=11)"
                       "   # decoupe\n"
