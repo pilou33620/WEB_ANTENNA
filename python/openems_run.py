@@ -674,7 +674,18 @@ class Tache(object):
                     "geometrie degeneree — polygone d'aire nulle, port "
                     "d'epaisseur nulle — en est la cause la plus frequente."
                     % -code)
-        return "Le calcul s'est arrete (code %d). Voir le journal." % code
+        # Une panne qu'on ne sait pas nommer se CITE : « voir le journal »
+        # renvoie a un panneau qu'on n'a pas forcement ouvert. La derniere
+        # ligne d'exception Python, ou a defaut les dernieres lignes ecrites.
+        lignes = [l.strip() for l in self.journal[-80:] if l.strip()]
+        erreur = [l for l in lignes
+                  if re.match(r"^[A-Za-z_][\w.]*(Error|Exception|Exit)\b", l)
+                  or l.lower().startswith(("error", "erreur", "fatal"))]
+        cite = erreur[-1] if erreur else " / ".join(lignes[-3:])
+        if cite:
+            return "Le calcul s'est arrete (code %d) : %s" % (code, cite[:400])
+        return ("Le calcul s'est arrete (code %d) sans rien ecrire au "
+                "journal." % code)
 
     def arreter(self):
         self.etat = "arrete"

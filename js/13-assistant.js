@@ -1465,6 +1465,8 @@ async function antLancer(){
   antBoutonsEtat();
   if(ANT.tache&&ANT.tache.etat==="arrete"){
     typeof wsHint==="function"&&wsHint("Simulation arrêtée. Les fichiers de calcul ont été conservés.");
+  }else if(ANT.tache&&ANT.tache.etat==="echoue"){
+    typeof wsHint==="function"&&wsHint("Échec : "+(ANT.tache.detail||"voir le journal du solveur"));
   }
 }
 
@@ -1670,7 +1672,14 @@ function antBoutonsEtat(){
           '<span>Énergie : <b>'+(av.energie_dB!=null?aNb(av.energie_dB,1)+' dB':'—')+'</b></span>'+
           '<span>Vitesse : <b>'+aNb(av.vitesse||0,1)+' MC/s</b></span>'+
           '<span>Durée : <b>'+antDuree(t.duree||0)+'</b></span>'+
-        '</div>';
+        '</div>'+
+        /* LE POURQUOI, LÀ OÙ ON REGARDE. Il était dans le panneau « Journal
+           du solveur » seul : un « Échec » sans motif dans l'assistant
+           laissait croire que l'outil ne le savait pas. */
+        ((t.etat==="echoue"||t.etat==="perdu")&&t.detail
+          ? '<div class="sim-assist-detail">'+aEsc(t.detail)+
+            '<br><small>Le journal complet est dans le panneau « Journal du solveur ».</small></div>'
+          : "");
     }else{
       boxSim.style.display="none";
       boxSim.innerHTML="";

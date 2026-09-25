@@ -376,6 +376,17 @@ function antCorpsTab(c){
   return t;
 }
 
+/* Les arêtes vives d'un corps, calculées une fois : un boîtier STEP fait
+   des centaines de milliers de triangles, et la scène se refait à chaque
+   geste. */
+const ANT_PIECES_ARETES=new WeakMap();
+function antCorpsAretes(c,geo){
+  const t=antCorpsTab(c);
+  let a=ANT_PIECES_ARETES.get(t);
+  if(!a){ a=new THREE.EdgesGeometry(geo,25); ANT_PIECES_ARETES.set(t,a); }
+  return a;
+}
+
 /* Un corps neuf, à partir de triangles bruts (en millimètres). */
 function antCorpsNeuf(nom,pos,idx,matiere,fort){
   const s=antFermer(pos,idx,fort);
@@ -1390,11 +1401,16 @@ function antPieceMateriau3d(mat){
     return new THREE.MeshBasicMaterial({wireframe:true, transparent:true,
       color:mat==="metal"?0xc8ccd2:(mat==="dielectrique"?0x8af0ff:0x6c727c),
       opacity:mat==="ignore"?0.25:0.6, depthWrite:false});
-  if(rendu==="transparent")
+  /* L'opacité se règle dans la barre de la vue (`PL.opacite`) : assez pour
+     voir la carte au travers, assez peu pour garder la forme. Le métal reste
+     opaque — c'est lui qui compte pour l'antenne. */
+  if(rendu==="transparent"){
+    const a=(typeof PL!=="undefined"&&PL.opacite>0)?PL.opacite:0.2;
     return new THREE.MeshPhongMaterial({flatShading:true, side:THREE.DoubleSide,
       color:mat==="metal"?0xc8ccd2:(mat==="dielectrique"?0x8af0ff:0x6c727c),
-      transparent:mat!=="metal", opacity:mat==="metal"?1:(mat==="dielectrique"?0.26:0.14),
+      transparent:mat!=="metal", opacity:mat==="metal"?1:(mat==="dielectrique"?a:a*0.55),
       depthWrite:mat==="metal", shininess:30});
+  }
   return new THREE.MeshPhongMaterial({flatShading:true, side:THREE.DoubleSide,
     color:mat==="metal"?0x9ea6b0:(mat==="dielectrique"?0xd9d4c7:0x4a4f57),
     shininess:mat==="metal"?80:12, specular:mat==="metal"?0x777777:0x1a1a1a});
@@ -1431,6 +1447,17 @@ function antPieces3d(m,racine,cx,cy,cz){
       mesh.matrix.copy(M);
       /* Ce qui permet à 34-placement.js de savoir ce qu'un clic a touché. */
       mesh.userData={piece:p.id, corps:j};
+      /* EN TRANSPARENT, LES ARÊTES RESTENT. Une coque à 20 % d'opacité ne
+         montre plus où sont ses parois, ses nervures, ses glissières : ce
+         sont justement elles qu'on regarde pour savoir si la carte est bien
+         dedans. Les arêtes vives seules (plus de 25°), pas la triangulation. */
+      if((typeof PL!=="undefined"&&PL.rendu)==="transparent"&&mat!=="ignore"){
+        const aretes=new THREE.LineSegments(antCorpsAretes(c,geo),
+          new THREE.LineBasicMaterial({color:mat==="metal"?0xe6e9ee:0xa9c4dc,
+            transparent:true, opacity:0.7, depthWrite:false}));
+        aretes.userData={aretes:true};
+        mesh.add(aretes);
+      }
       racine.add(mesh);
     });
   }

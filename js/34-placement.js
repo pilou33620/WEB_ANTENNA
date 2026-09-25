@@ -58,6 +58,9 @@ const PL={
      le MASQUANT (corps par corps : `masque` sur le corps ou la pièce, gardé
      dans le projet, sans effet sur la simulation) ou en le COUPANT. */
   rendu:"plein",
+  opacite:0.2,         // des plastiques, en rendu transparent
+  controle:null,       // le dernier contrôle d'interférences, voir plControler
+  alertes:null,        // son groupe dans la scène : les facettes fautives
   /* La coupe : un plan perpendiculaire à X, Y ou Z, posé à une fraction de
      la boîte de calcul. Ce qui est au-delà n'est ni dessiné ni visé. */
   coupe:{axe:"", t:0.5},
@@ -345,6 +348,7 @@ function antPlaceApres(m){
   plCouper();
   plSurligner();
   plMarques();
+  plControler();
   antPlaceBarre();
 }
 
@@ -556,7 +560,7 @@ function plGlisserFin(){
   PL.glisse=null;
   if(!g)return;
   if(g.rot){ plTournerFin(g); return; }
-  if(g.pos.every((v,i)=>v===g.pos0[i])){ antPlaceBarre(); return; }
+  if(g.pos.every((v,i)=>v===g.pos0[i])){ if(PL.alertes)PL.alertes.visible=true; antPlaceBarre(); return; }
   plMemoriser(g.p);
   g.p.position=g.pos;
   plApres();
@@ -764,7 +768,7 @@ function plTourner(e){
 function plTournerFin(g){
   plManipCouleurs();
   const deg=((g.angle%360)+360)%360;
-  if(!deg){ plManip(); antPlaceBarre(); return; }
+  if(!deg){ if(PL.alertes)PL.alertes.visible=true; plManip(); antPlaceBarre(); return; }
   const q=[0,0,0]; q["xyz".indexOf(g.axe)]=g.angle;
   const Q=antRotation(q), R=antRotation(g.rot0);
   const QR=[0,1,2].map(i=>[0,1,2].map(j=>Q[i][0]*R[0][j]+Q[i][1]*R[1][j]+Q[i][2]*R[2][j]));
@@ -780,7 +784,13 @@ function antPlacePointeur(quoi,e){
   if(!ANT3D.pret||!V.modele)return false;
   if(quoi==="down"){
     if(e.button!==0)return false;
-    if(PL.mode==="deplacer"&&PL.sel)return plManipDebut(e)||plGlisserDebut(e);
+    if(PL.mode==="deplacer"&&PL.sel){
+      const pris=plManipDebut(e)||plGlisserDebut(e);
+      /* Les facettes fautives datent de la place d'avant : on les cache le
+         temps du geste, le contrôle se refait au lâcher. */
+      if(pris&&PL.alertes)PL.alertes.visible=false;
+      return pris;
+    }
     return false;
   }
   if(quoi==="glisse"){ if(PL.glisse)(PL.glisse.rot?plTourner:plGlisser)(e); return true; }
@@ -984,8 +994,12 @@ function antPlaceBarre(){
   const vue='<div class="pl-ligne">'+
     '<span class="pl-etq">rendu</span>'+
     bt("data-pl-rendu","plein","plein","Pièces opaques",PL.rendu==="plein")+
-    bt("data-pl-rendu","transparent","transparent","Plastiques translucides, métal opaque",PL.rendu==="transparent")+
+    bt("data-pl-rendu","transparent","transparent","Plastiques translucides avec leurs arêtes, métal opaque — et contrôle des interférences avec la carte",PL.rendu==="transparent")+
     bt("data-pl-rendu","filaire","filaire","Les triangles seuls",PL.rendu==="filaire")+
+    (PL.rendu==="transparent"
+      ? '<input type="range" id="plOpacite" min="3" max="70" value="'+Math.round(PL.opacite*100)+'" title="Opacité des plastiques">'+
+        (PL.controle?'<span class="vsep"></span>'+plControleHtml():"")
+      : "")+
     '<span class="vsep"></span>'+
     '<label class="pl-ck" title="La carte telle qu\'elle est : contour, cuivre des deux faces, composants — pour y poser le boîtier. Elle ne part pas au solveur : ce qui y part est le substrat et le cuivre retenu."><input type="checkbox" id="plCarte"'+(PL.voirCarte?" checked":"")+'> carte</label>'+
     '<label class="pl-ck" title="Les composants en blocs. HAUTEURS SUPPOSÉES : le fichier IPC-2581 ne les donne pas."><input type="checkbox" id="plComposants"'+(PL.voirComposants?" checked":"")+(PL.voirCarte?"":" disabled")+'> composants</label>'+
@@ -1020,6 +1034,17 @@ function antPlaceBarre(){
   b.querySelectorAll("[data-pl-rendu]").forEach(el=>el.onclick=function(){ PL.rendu=el.dataset.plRendu; refaire(); });
   const lier=function(sel,ev,fn){ const el=q(sel); if(el)el[ev]=function(){ fn(el); }; };
   lier("#plPas","onchange",el=>{ PL.pas=+el.value||0; antPlaceBarre(); });
+  /* L'opacité change sur place, sans refaire la scène : on la met à
+     l'échelle, le rapport entre plastique et diélectrique reste le même. */
+  lier("#plOpacite","oninput",el=>{
+    const v=Math.max(0.03,(+el.value)/100), r=v/PL.opacite;
+    PL.opacite=v;
+    ANT3D.monde.traverse(function(o){
+      if(o.isMesh&&o.userData.piece&&o.material&&o.material.transparent&&!o.material.wireframe)
+        o.material.opacity=Math.min(1,o.material.opacity*r);
+    });
+    ant3dDessiner();
+  });
   lier("#plPasAngle","onchange",el=>{ PL.pasAngle=+el.value||0; antPlaceBarre(); });
   lier("#plOrienter","onchange",el=>{ PL.orienter=el.checked; });
   lier("#plCentrer","onchange",el=>{ PL.centrer=el.checked; });
@@ -1179,10 +1204,10 @@ function plForme(k){
   return f;
 }
 
-/* Les composants, en UNE géométrie : une carte en porte des centaines, et
-   autant d'objets coûteraient à chaque image. */
-function plComposants(zh,k,T){
-  const P=[], I=[];
+/* Les blocs des composants, en mm dans le repère de la carte :
+   [x1, y1, z1, x2, y2, z2], à leur hauteur supposée. */
+function plBlocsComposants(zh,k){
+  const out=[];
   for(const comp of ((V.modele&&V.modele.composants)||[])){
     const b=comp.boite;
     if(!b)continue;
@@ -1192,6 +1217,16 @@ function plComposants(zh,k,T){
     const h=Math.min(4,Math.max(0.35,0.3*Math.sqrt(w*l)));
     const cu=V.couches[comp.c];
     const [z1,z2]=(cu&&cu.dessous)?[-h,0]:[zh,zh+h];
+    out.push([x1,y1,z1,x2,y2,z2]);
+  }
+  return out;
+}
+
+/* Les composants, en UNE géométrie : une carte en porte des centaines, et
+   autant d'objets coûteraient à chaque image. */
+function plComposants(zh,k,T){
+  const P=[], I=[];
+  for(const [x1,y1,z1,x2,y2,z2] of plBlocsComposants(zh,k)){
     const n=P.length/3;
     for(const [x,y,z] of [[x1,y1,z1],[x2,y1,z1],[x2,y2,z1],[x1,y2,z1],[x1,y1,z2],[x2,y1,z2],[x2,y2,z2],[x1,y2,z2]]){
       const q=T(x,y,z); P.push(q[0],q[1],q[2]);
@@ -1242,4 +1277,187 @@ function antCarte3d(m,racine,T){
     const comp=plComposants(zh,k,T);
     if(comp)racine.add(comp);
   }
+}
+
+/* ==========================================================================
+   Le contrôle : la carte est-elle bien dans son boîtier ?
+   --------------------------------------------------------------------------
+   EN RENDU TRANSPARENT, CHAQUE PLACEMENT EST VÉRIFIÉ. Voir la carte à travers
+   la coque ne dit pas si une nervure la traverse d'un dixième : on le
+   calcule. Chaque facette des corps simulés du boîtier est ramenée dans le
+   repère de la carte, puis :
+
+     rouge   elle entre dans l'ÉPAISSEUR de la carte, à l'intérieur de son
+             contour — trous de fixation exclus : un bossage qui passe dans
+             un trou de vis est à sa place ;
+     orange  elle entre dans le bloc d'un composant. Les hauteurs sont
+             SUPPOSÉES (le fichier IPC-2581 ne les donne pas) : c'est un
+             « à vérifier », pas un verdict.
+
+   UN CONTACT N'EST PAS UNE INTERFÉRENCE : la carte posée sur ses appuis par
+   « Accrocher » touche exactement la face de la nervure. On laisse donc un
+   jeu de 10 µm (`PL_JEU`) avant de compter.
+   ========================================================================== */
+const PL_JEU=0.01;
+
+/* Le contour de la carte, en mm : l'extérieur et les trous. */
+function plContour(k){
+  const c=V.modele&&V.modele.contour;
+  const lire=function(a){ const p=[]; for(let i=0;i+1<a.length;i+=2)p.push([a[i]*k,a[i+1]*k]); return p; };
+  if(c&&c.o&&c.o.length>=6)return {o:lire(c.o), t:(c.t||[]).map(lire).filter(t=>t.length>=3)};
+  const b=V.bbox;
+  return {o:[[b.x1*k,b.y1*k],[b.x2*k,b.y1*k],[b.x2*k,b.y2*k],[b.x1*k,b.y2*k]], t:[]};
+}
+function plDansPoly(P,x,y){
+  let d=false;
+  for(let i=0,j=P.length-1;i<P.length;j=i++){
+    const a=P[i], b=P[j];
+    if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])d=!d;
+  }
+  return d;
+}
+function plDansCarte(R,x,y){ return plDansPoly(R.o,x,y)&&!R.t.some(t=>plDansPoly(t,x,y)); }
+/* Deux segments qui se coupent franchement (se toucher ne compte pas). */
+function plCroise(a,b,c,d){
+  const o=(p,q,r)=>(q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]);
+  const d1=o(a,b,c), d2=o(a,b,d), d3=o(c,d,a), d4=o(c,d,b);
+  return ((d1>0&&d2<0)||(d1<0&&d2>0))&&((d3>0&&d4<0)||(d3<0&&d4>0));
+}
+/* Sutherland–Hodgman sur un plan : on garde s·(p[a] − v) > 0. */
+function plCouperPoly(P,a,v,s){
+  const out=[];
+  for(let i=0;i<P.length;i++){
+    const p=P[i], q=P[(i+1)%P.length];
+    const dp=s*(p[a]-v), dq=s*(q[a]-v);
+    if(dp>0)out.push(p);
+    if((dp>0)!==(dq>0)&&dp!==dq){
+      const t=dp/(dp-dq);
+      out.push([p[0]+t*(q[0]-p[0]),p[1]+t*(q[1]-p[1]),p[2]+t*(q[2]-p[2])]);
+    }
+  }
+  return out;
+}
+/* Le morceau de facette pris dans l'épaisseur de la carte recouvre-t-il la
+   carte, vu de dessus ? Un sommet dedans, une arête qui croise le contour,
+   ou la carte entière sous la facette. */
+function plRecouvreCarte(P,R,aretes){
+  for(const p of P)if(plDansCarte(R,p[0],p[1]))return true;
+  for(let i=0;i<P.length;i++){
+    const a=P[i], b=P[(i+1)%P.length];
+    for(const e of aretes)if(plCroise(a,b,e[0],e[1]))return true;
+  }
+  return P.length>=3&&plDansPoly(P,R.o[0][0],R.o[0][1]);
+}
+
+function plControler(){
+  PL.controle=null;
+  if(PL.rendu!=="transparent"||!V.modele||!ANT.pieces.length||
+     typeof antPieceMatrice!=="function"){ plAlertes(null); return; }
+  const t0=performance.now();
+  const k=antKmm(), c=antCarteMm(), R=plContour(k), j=PL_JEU;
+  const aretes=[];
+  for(const P of [R.o].concat(R.t))
+    for(let i=0;i<P.length;i++)aretes.push([P[i],P[(i+1)%P.length]]);
+  const blocs=plBlocsComposants(c.z2,k);
+  /* La boîte de tout ce qui peut être touché : une facette hors d'elle est
+     écartée d'emblée — presque toutes, sur un boîtier. */
+  const G=[c.x1,c.y1,c.z1,c.x2,c.y2,c.z2];
+  for(const b of blocs)for(let a=0;a<3;a++){ G[a]=Math.min(G[a],b[a]); G[a+3]=Math.max(G[a+3],b[a+3]); }
+  const B=antCarteTransfo();
+  const res={carte:[], comp:[], pieces:[]};
+  for(const p of ANT.pieces){
+    const M=antPieceMatrice(p);
+    let nc=0, nk=0;
+    for(const corps of p.corps){
+      if(corps.matiere==="ignore")continue;
+      const t=antCorpsTab(corps), pos=t.pos, idx=t.idx;
+      /* Chaque sommet une fois : dans l'assemblage (W, pour dessiner) et
+         dans le repère de la carte (Q, pour tester). Q = Bᵀ·(W − c − t) + c. */
+      const W=new Float64Array(pos.length), Q=new Float64Array(pos.length);
+      for(let i=0;i<pos.length;i+=3){
+        const x=pos[i], y=pos[i+1], z=pos[i+2];
+        const wx=M[0]*x+M[4]*y+M[8]*z+M[12], wy=M[1]*x+M[5]*y+M[9]*z+M[13],
+              wz=M[2]*x+M[6]*y+M[10]*z+M[14];
+        W[i]=wx; W[i+1]=wy; W[i+2]=wz;
+        const dx=wx-B.c[0]-B.t[0], dy=wy-B.c[1]-B.t[1], dz=wz-B.c[2]-B.t[2];
+        for(let a=0;a<3;a++)Q[i+a]=B.R[0][a]*dx+B.R[1][a]*dy+B.R[2][a]*dz+B.c[a];
+      }
+      for(let f=0;f<idx.length;f+=3){
+        const i0=3*idx[f], i1=3*idx[f+1], i2=3*idx[f+2];
+        let dehors=false;
+        for(let a=0;a<3&&!dehors;a++){
+          const lo=Math.min(Q[i0+a],Q[i1+a],Q[i2+a]), hi=Math.max(Q[i0+a],Q[i1+a],Q[i2+a]);
+          dehors=hi<=G[a]+j||lo>=G[a+3]-j;
+        }
+        if(dehors)continue;
+        const T=[[Q[i0],Q[i0+1],Q[i0+2]],[Q[i1],Q[i1+1],Q[i1+2]],[Q[i2],Q[i2+1],Q[i2+2]]];
+        let quoi="";
+        let P=plCouperPoly(T,2,c.z1+j,1);
+        if(P.length)P=plCouperPoly(P,2,c.z2-j,-1);
+        if(P.length&&plRecouvreCarte(P,R,aretes))quoi="carte";
+        else for(const b of blocs){
+          let P2=T;
+          for(let a=0;a<3&&P2.length;a++){
+            P2=plCouperPoly(P2,a,b[a]+j,1);
+            if(P2.length)P2=plCouperPoly(P2,a,b[a+3]-j,-1);
+          }
+          if(P2.length){ quoi="comp"; break; }
+        }
+        if(!quoi)continue;
+        (quoi==="carte"?res.carte:res.comp).push(W[i0],W[i0+1],W[i0+2],W[i1],W[i1+1],W[i1+2],W[i2],W[i2+1],W[i2+2]);
+        if(quoi==="carte")nc++; else nk++;
+      }
+    }
+    res.pieces.push({nom:p.nom, carte:nc, comp:nk});
+  }
+  res.ms=performance.now()-t0;
+  PL.controle=res;
+  plAlertes(res);
+}
+
+/* Les facettes fautives, par-dessus tout : rouge pour la carte, orange pour
+   les composants. */
+function plAlertes(res){
+  if(!ANT3D.pret)return;
+  if(!PL.alertes){ PL.alertes=new THREE.Group(); ANT3D.scene.add(PL.alertes); }
+  if(PL.alertes.parent!==ANT3D.scene)ANT3D.scene.add(PL.alertes);
+  const g=PL.alertes;
+  while(g.children.length){
+    const o=g.children.pop();
+    if(o.geometry)o.geometry.dispose();
+    if(o.material)o.material.dispose();
+  }
+  g.visible=true;
+  if(!res)return;
+  const ctr=ANT3D.centre||{x:0,y:0,z:0};
+  for(const [tab,coul] of [[res.carte,0xff3b30],[res.comp,0xff9d3a]]){
+    if(!tab.length)continue;
+    const P=new Float32Array(tab.length);
+    for(let i=0;i<tab.length;i+=3){ P[i]=tab[i]-ctr.x; P[i+1]=tab[i+1]-ctr.y; P[i+2]=tab[i+2]-ctr.z; }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute("position",new THREE.BufferAttribute(P,3));
+    const plein=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:coul, side:THREE.DoubleSide,
+      transparent:true, opacity:0.75, depthTest:false, depthWrite:false}));
+    /* Le fil de fer par-dessus : une facette vue par la tranche reste un trait. */
+    const fil=new THREE.Mesh(geo.clone(),new THREE.MeshBasicMaterial({color:coul, wireframe:true,
+      depthTest:false, depthWrite:false, transparent:true}));
+    plein.renderOrder=fil.renderOrder=15;
+    g.add(plein,fil);
+  }
+}
+
+/* Ce que dit le contrôle, dans la barre. */
+function plControleHtml(){
+  const r=PL.controle;
+  if(!r)return "";
+  if(!r.pieces.some(p=>p.carte||p.comp))
+    return '<span class="pl-ok" title="Aucune facette du boîtier dans l\'épaisseur de la carte ni dans un composant (jeu de 10 µm)">✓ aucune interférence</span>';
+  const txt=[];
+  for(const p of r.pieces.filter(p=>p.carte))
+    txt.push('<span class="pl-ko" title="Facettes dans l\'épaisseur de la carte, en rouge dans la vue">⚠ '+
+      aEsc(p.nom)+' traverse la carte ('+p.carte+' facettes)</span>');
+  for(const p of r.pieces.filter(p=>p.comp))
+    txt.push('<span class="pl-avert" title="Facettes dans un bloc de composant, en orange. Hauteurs de composants SUPPOSÉES : à vérifier">'+
+      aEsc(p.nom)+' touche des composants ('+p.comp+')</span>');
+  return txt.join(" ");
 }
