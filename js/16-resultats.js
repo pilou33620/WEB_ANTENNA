@@ -99,11 +99,18 @@ function antResultatsRendre(){
 
   const bp=antBandePassante(r);
   const nf=r.nf2ff;
+  /* Sans résonance, ni f₀ ni gain ni rendement ne s'affichent en gros : un
+     chiffre dans une case se lit comme une mesure. Voir `antResonance`. */
+  const reso=antResonance(r);
 
   box.innerHTML=
     (bal?antBalVerdict(bal):"")+
     '<div class="verdict">'+
-      '<div class="cle"><b>'+aF(r.f0)+'</b><span>résonance</span></div>'+
+      (reso.reelle||r.f0==null
+        ?'<div class="cle"><b>'+aF(r.f0)+'</b><span>résonance'+
+          (reso.bord?' (au bord)':'')+'</span></div>'
+        :'<div class="cle ko"><b>aucune</b><span>résonance — S₁₁ jamais sous '+
+          "−"+aNb(-ANT_SEUIL_RESONANCE_DB,0)+' dB</span></div>')+
       '<div class="cle"><b>'+aNb(r.s11_min_db,2)+' dB</b><span>S₁₁ minimal</span></div>'+
       '<div class="cle"><b>'+aNb(r.z0_re,1)+' '+(r.z0_im>=0?"+":"−")+
         aNb(Math.abs(r.z0_im),1)+'j Ω</b><span>impédance d\'entrée'+
@@ -126,10 +133,10 @@ function antResultatsRendre(){
       (nf&&nf.dmax_dbi!=null
         ?'<div class="cle"><b>'+aNb(nf.dmax_dbi,2)+' dBi</b>'+
           '<span>directivité</span></div>':"")+
-      (nf&&nf.gain_dbi!=null
+      (nf&&nf.gain_dbi!=null&&(reso.reelle||r.f0==null)
         ?'<div class="cle"><b>'+aNb(nf.gain_dbi,2)+' dBi</b>'+
           '<span>gain réalisé</span></div>':"")+
-      (nf&&nf.rendement!=null
+      (nf&&nf.rendement!=null&&(reso.reelle||r.f0==null)
         ?'<div class="cle"><b>'+aNb(nf.rendement*100,1)+' %</b>'+
          '<span>rendement de rayonnement</span></div>':"")+
     '</div>'+
@@ -367,6 +374,73 @@ function antBandePassante(r){
           bord:!!r.bp_bord};
 }
 
+/* UN MINIMUM N'EST PAS UNE RÉSONANCE. Le serveur rend toujours un f₀ — c'est
+   l'argument du minimum de |S₁₁| —, y compris sur une courbe plate à 0 dB où
+   ce minimum n'est qu'un centième de décibel de bruit, ou le bord de la bande.
+   L'annoncer comme résonance, avec son « écart à la cible » et le conseil
+   d'allonger le brin d'autant, envoyait retoucher une antenne que le port ne
+   voyait même pas : sur P01x274PCB-C.xml, « 904 MHz, 4,2 % d'écart » pour un
+   port court-circuité par le maillage.
+
+   −3 dB : la moitié de la puissance réfléchie. Au-dessus, rien ne résonne dans
+   la bande — ou le port ne voit pas l'antenne. L'impédance dit lequel des
+   deux : quelques ohms réactifs, c'est un court-circuit (une self de
+   X/ω nH quand X > 0, le cas d'un trou métallisé ou d'une patte de masse) ;
+   une partie réelle ou une réactance capacitive énormes, un circuit ouvert.
+
+   Rend {reelle, bord, panne, L_nH} — `panne` vaut "court", "ouvert" ou "". */
+const ANT_SEUIL_RESONANCE_DB=-3;
+function antResonance(r){
+  const out={reelle:false, bord:false, panne:"", L_nH:null};
+  if(!r||r.f0==null||r.s11_min_db==null||!isFinite(r.s11_min_db))return out;
+  const f=r.f||[];
+  if(f.length>1){
+    const pas=Math.abs(f[1]-f[0])||0;
+    out.bord=(r.f0<=f[0]+pas*1.5)||(r.f0>=f[f.length-1]-pas*1.5);
+  }
+  out.reelle=r.s11_min_db<=ANT_SEUIL_RESONANCE_DB;
+  if(!out.reelle&&r.z0_re!=null&&r.z0_im!=null){
+    const re=r.z0_re, im=r.z0_im;
+    if(re<5&&Math.abs(im)<50){
+      out.panne="court";
+      if(im>0&&r.f0>0)out.L_nH=im/(2*Math.PI*r.f0)*1e9;
+    }else if(re>350||im<-300)out.panne="ouvert";
+  }
+  return out;
+}
+
+/* Ce que l'avis dit quand rien ne résonne — une phrase, réutilisée par le
+   rapport pour que les deux ne se contredisent pas. */
+function antResonanceTexte(r,res){
+  let t="Aucune résonance : le S₁₁ ne descend jamais sous "+
+    "−"+aNb(-ANT_SEUIL_RESONANCE_DB,0)+" dB (minimum "+aNb(r.s11_min_db,2)+" dB"+
+    (res.bord?", au bord de la bande":"")+"). Le "+aF(r.f0)+
+    " affiché n'est que l'endroit où la courbe est le moins haute — n'en tirez "+
+    "aucun écart à la cible, et ne retouchez pas l'antenne d'après lui.";
+  if(res.panne==="court")
+    t+=" L'impédance d'entrée ("+aNb(r.z0_re,1)+(r.z0_im>=0?" + ":" − ")+
+      aNb(Math.abs(r.z0_im),1)+"j Ω) est celle d'un COURT-CIRCUIT"+
+      (res.L_nH!=null?" : une self de "+aNb(res.L_nH,2)+" nH, l'ordre de "+
+        "grandeur d'un trou métallisé ou d'un bout de piste":"")+
+      ". Le port touche la masse — par le cuivre, un via, ou un écart que le "+
+      "maillage a refermé (voir les avis du modèle, étape « Le calcul »).";
+  else if(res.panne==="ouvert")
+    t+=" L'impédance d'entrée est celle d'un CIRCUIT OUVERT : une borne du "+
+      "port ne touche aucun cuivre, ou le cuivre sous elle a été ignoré par le "+
+      "maillage.";
+  else if(res.bord)
+    t+=" Le minimum est au bord : la résonance est peut-être hors de la bande "+
+      "simulée. Élargissez-la avant de conclure.";
+  /* Le rendement et le gain se calculent sur la puissance ACCEPTÉE, et elle
+     est ici minuscule : ce sont des différences de grands nombres presque
+     égaux. */
+  if(r.nf2ff&&(r.nf2ff.rendement!=null||r.nf2ff.gain_dbi!=null))
+    t+=" Le gain et le rendement rendus ne veulent rien dire : presque toute "+
+      "la puissance revient au générateur, et ce qu'il en reste est du bruit "+
+      "de calcul.";
+  return t;
+}
+
 function antVerdictTexte(r,bp,nf){
   const dits=[];
   /* UN PANNEAU VIDE DOIT DIRE POURQUOI IL EST VIDE, et c'est le premier avis :
@@ -390,7 +464,14 @@ function antVerdictTexte(r,bp,nf){
     dits.push({rang:"attention",t:"Le S₁₁ repasse au-dessus de −10 dB à "+
       "l'intérieur de la plage : il y a plusieurs résonances, et la largeur "+
       "affichée est celle de l'enveloppe, pas d'une bande utilisable."});
-  if(Math.abs(r.f0-ANT.bande.fcible)/ANT.bande.fcible>0.02)
+  const res=antResonance(r);
+  if(!res.reelle)
+    dits.push({rang:"grave",t:antResonanceTexte(r,res)});
+  else if(res.bord)
+    dits.push({rang:"attention",t:"Le minimum du S₁₁ tombe au bord de la "+
+      "bande simulée : la vraie résonance est peut-être au-delà. Élargissez "+
+      "la bande de ce côté avant de lire l'écart à la cible."});
+  else if(Math.abs(r.f0-ANT.bande.fcible)/ANT.bande.fcible>0.02)
     dits.push({rang:"info",t:"La résonance est à "+aF(r.f0)+", la cible était "+
       aF(ANT.bande.fcible)+" — soit "+
       aNb(100*(r.f0-ANT.bande.fcible)/ANT.bande.fcible,1)+" % d'écart. "+
@@ -410,7 +491,7 @@ function antVerdictTexte(r,bp,nf){
       "la directivité est ressortie indéfinie. La cause habituelle est une "+
       "boîte de champ lointain qui n'a rien enregistré — vérifiez que la "+
       "marge d'air laisse de la place entre l'antenne et la PML."});
-  if(nf&&nf.rendement!=null&&nf.rendement<0.5)
+  if(nf&&nf.rendement!=null&&nf.rendement<0.5&&res.reelle)
     dits.push({rang:"attention",t:"Moins de la moitié de la puissance acceptée "+
       "est rayonnée : le reste part en pertes dans le cuivre et le "+
       "diélectrique. Un S₁₁ profond n'y change rien — il dit que l'antenne "+

@@ -276,6 +276,7 @@ function antBasculerVueMaillage(force){
   }else{
     if(typeof dessiner==="function")dessiner();
   }
+  if(typeof ant3dMailleUI==="function")ant3dMailleUI();
 }
 
 /* -------------------------------------------------------------------------
@@ -304,6 +305,17 @@ function antPeindrePort(c,dpr){
     c.lineWidth=p.excite?1.8:1.4;
     if(!p.excite)c.setLineDash([3,3]);
     c.beginPath(); c.arc(s.x,s.y,R,0,2*Math.PI); c.stroke();
+    /* Un port dans le plan enjambe un écart : ses deux bornes se montrent,
+       et c'est en les voyant tomber l'une sur la pastille, l'autre sur la
+       masse, qu'on sait qu'il est bien posé. */
+    if((p.dir==="x"||p.dir==="y")&&p.ecart>0&&p.type!=="coaxial"){
+      const e=p.ecart/2, ux=p.dir==="x"?e:0, uy=p.dir==="y"?e:0;
+      const a=w2s(p.x-ux,p.y-uy), b=w2s(p.x+ux,p.y+uy);
+      c.save(); c.setLineDash([]); c.lineWidth=2.5; c.fillStyle=c.strokeStyle;
+      c.beginPath(); c.moveTo(a.x,a.y); c.lineTo(b.x,b.y); c.stroke();
+      for(const m of [a,b]){ c.beginPath(); c.arc(m.x,m.y,2.5,0,2*Math.PI); c.fill(); }
+      c.restore();
+    }
     c.beginPath();
     c.moveTo(s.x-R*1.7,s.y); c.lineTo(s.x+R*1.7,s.y);
     c.moveTo(s.x,s.y-R*1.7); c.lineTo(s.x,s.y+R*1.7);
@@ -331,7 +343,10 @@ function antPeindrePort(c,dpr){
     c.textBaseline="top";
     const nom=(ANT.ports.length>1?"port "+(i+1)+" ":"port ");
     const txt=p.de&&p.a
-      ? (nom+p.de+" → "+p.a+(p.excite?"":" (en charge)"))
+      ? (nom+(p.broche?p.broche.ref+"."+p.broche.num+" · ":"")+
+         ((p.dir==="x"||p.dir==="y")&&p.type!=="coaxial"
+           ? p.de+" (dans le plan)" : p.de+" → "+p.a)+
+         (p.excite?"":" (en charge)"))
       : (nom+"(couches à choisir)");
     c.fillText(txt,s.x+R*1.9,s.y+4);
     c.restore();
@@ -373,6 +388,14 @@ function antPosePortInstaller(){
    plan de masse le plus proche en dessous. C'est la configuration de toutes
    les antennes imprimées ; les deux listes restent là pour les autres. */
 function antPortEn(wx,wy){
+  /* Posé à la main : il n'est plus accroché à sa broche, s'il l'était. Le
+     verdict du panneau proposera de l'y raccrocher s'il tombe sur une. */
+  /* L'orientation dans le plan venait de la broche, pas d'un choix : elle
+     s'en va avec elle. */
+  if(ANT.port.broche){
+    ANT.port.dir="z";
+    if(typeof antPortDecrocher==="function")antPortDecrocher(ANT.port);
+  }
   ANT.port.x=+wx.toFixed(4);
   ANT.port.y=+wy.toFixed(4);
   ANT.port.pose=true;

@@ -21,6 +21,16 @@
 .vb.on{background:var(--blue-deep);border-color:var(--blue);color:#fff}
 .vsep{width:1px;height:16px;background:var(--border2)}
 .vhint{font-size:10.5px;color:var(--txt-dim);font-family:var(--mono)}
+/* les coupes du maillage en 3D : la couleur d'un plan est celle de sa normale */
+.maille3d{display:flex;align-items:center;gap:4px;padding-left:6px;border-left:1px solid var(--border2)}
+.maille3d[hidden]{display:none}
+.maille3d .vb{padding:2px 7px;font-size:11px}
+.maille3d .vb[disabled]{opacity:.35;cursor:default}
+#bMaille_xy.on{background:rgba(63,160,234,.25);border-color:#3fa0ea}
+#bMaille_xz.on{background:rgba(76,195,138,.22);border-color:#4cc38a}
+#bMaille_yz.on{background:rgba(232,68,58,.22);border-color:#e8443a}
+.maille3d .vb.actif{box-shadow:0 0 0 1px #fff inset}
+#maille3dPos{width:110px;accent-color:var(--blue)}
 #vue3d{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 #vue3d:active{cursor:grabbing}
 #vue3d.pano{cursor:move}
@@ -145,6 +155,20 @@ input.auto{color:var(--txt-dim)}
   color:var(--txt-dim);
 }
 .recap .alerte{color:var(--yellow)}
+
+/* ---------- le banc de vitesse (35-fils.js) ---------- */
+.fils-banc{margin-top:10px;font-family:var(--mono);font-size:11px;color:var(--txt-dim)}
+.fils-l{display:grid;grid-template-columns:34px 1fr 90px 60px;gap:8px;align-items:center;
+  padding:2px 0}
+.fils-l.tete{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase}
+.fils-n{text-align:right}
+.fils-v,.fils-g{text-align:right}
+.fils-barre{height:8px;background:var(--border);border-radius:2px;overflow:hidden}
+.fils-barre i{display:block;height:100%;background:var(--blue);transition:width .3s}
+.fils-l.best .fils-barre i{background:var(--green)}
+.fils-l.best .fils-v,.fils-l.best .fils-g{color:var(--green)}
+.fils-l.regle .fils-n{font-weight:700;color:var(--txt)}
+.fils-l.attente{opacity:.5}
 
 /* ---------- l'empilage ---------- */
 table.empilage{width:100%;border-collapse:collapse;font-size:11.5px}

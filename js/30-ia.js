@@ -1448,7 +1448,14 @@
 
     /* -- 8. ce que le résultat dit du réglage ---------------------------- */
     const r = resultatCourant();
-    if(r && isFinite(r.f0)){
+    /* UN MINIMUM DE BRUIT N'EST PAS UNE RÉSONANCE : sans creux sous −3 dB,
+       aucun des conseils ci-dessous — écart à la cible, bord de bande,
+       adaptation — ne porte sur l'antenne. C'est le port qu'il faut regarder. */
+    const reso = (r && typeof antResonance === "function") ? antResonance(r) : null;
+    if(r && isFinite(r.f0) && reso && !reso.reelle)
+      dire("grave", "Aucune résonance dans la bande",
+           antResonanceTexte(r, reso));
+    else if(r && isFinite(r.f0)){
       if(r.f0 <= b.f1 * 1.02 || r.f0 >= b.f2 * 0.98)
         dire("grave", "La résonance est au bord de la bande simulée",
              "Le minimum de S11 tombe à " + fHz(r.f0) + ", c'est-à-dire sur "+

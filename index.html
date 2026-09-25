@@ -76,6 +76,16 @@
         <button class="vb on" id="bVue2d" title="Vue de dessus, couche par couche">2D</button>
         <button class="vb" id="bVue3d" title="Aperçu 3D du modèle qui part au solveur">3D</button>
         <button class="vb" id="bVueMaillage" title="Afficher la grille de maillage FDTD (lignes Yee)">Maillage</button>
+        <!-- Les coupes du maillage en 3D : un plan par normale, déplaçable
+             ligne à ligne, et le volume entier en pâle. -->
+        <span class="maille3d" id="maille3d" hidden>
+          <button class="vb" id="bMaille_xy" title="Coupe XY (normale Z) — clic : curseur sur cette coupe, second clic : la masquer">XY</button>
+          <button class="vb" id="bMaille_xz" title="Coupe XZ (normale Y) — clic : curseur sur cette coupe, second clic : la masquer">XZ</button>
+          <button class="vb" id="bMaille_yz" title="Coupe YZ (normale X) — clic : curseur sur cette coupe, second clic : la masquer">YZ</button>
+          <button class="vb" id="bMaille_vol" title="Toutes les lignes du volume, dans les trois sens">Vol</button>
+          <input type="range" id="maille3dPos" min="0" max="0" step="1" value="0" title="Déplacer la coupe active, ligne de maillage par ligne">
+          <span class="vhint" id="maille3dTxt"></span>
+        </span>
         <span class="vsep"></span>
         <span class="vhint" id="vueHint">—</span>
       </div>
@@ -475,6 +485,7 @@
 <script src="js/13-assistant.js"></script>
 <script src="js/14-apercu3d.js"></script>
 <script src="js/15-overlay2d.js"></script>
+<script src="js/36-port-broche.js"></script>
 <script src="js/16-resultats.js"></script>
 <script src="js/17-objets.js"></script>
 <!-- 33 : les pièces importées (STEP, STL) de l'étape « La boîte ». Il
@@ -501,6 +512,7 @@
 <script src="js/26-exemple.js"></script>
 <script src="js/27-apercu-motif.js"></script>
 <script src="js/29-tableau-s.js"></script>
+<script src="js/35-fils.js"></script>
 <!-- 30 lit tout ce qui précède et n'écrit que par la liste blanche qu'il
      porte : il vient donc après tout le monde parmi les modules métier, et
      avant 28 qui, lui, enveloppe les fonctions de pose. -->

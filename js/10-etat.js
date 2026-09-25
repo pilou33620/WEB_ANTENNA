@@ -244,7 +244,10 @@ function antPortNeuf(exc){
              l'antenne. Zéro veut dire « non déclarée », et c'est le défaut :
              l'impédance est alors lue là où le port est posé, sans rien
              ajouter. Voir `_ligne_alim` dans python/openems_modele.py. */
-          ligne_d:0, ligne_w:0};
+          ligne_d:0, ligne_w:0,
+          /* La broche de composant où le port est accroché, {ref, num}, ou
+             null pour un port posé à la main. Voir 36-port-broche.js. */
+          broche:null};
 }
 
 Object.defineProperty(ANT,"port",{
@@ -295,6 +298,10 @@ function antPortDoc(p,i){
   const d={type:p.type||"localise", nom:"port "+(i+1),
            dir:p.dir, x:p.x, y:p.y, w:p.w, l:p.l, ecart:p.ecart,
            R:p.R, de:p.de, a:p.a, excite:!!p.excite, pose:!!p.pose};
+  /* Pour mémoire seulement : le serveur n'en fait rien — ce que la broche
+     remplace a déjà été retiré du cuivre envoyé —, mais le rapport et le
+     script disent ainsi où est le port en des termes qu'on relit. */
+  if(p.broche)d.broche=p.broche.ref+"."+p.broche.num;
   if(p.type==="coaxial"){
     d.ra=p.ra; d.rb=p.rb; d.er=p.er;
     d.ep_gaine=p.ep_gaine; d.longueur=p.longueur;

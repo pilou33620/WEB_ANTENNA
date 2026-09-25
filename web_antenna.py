@@ -371,9 +371,38 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         try:
             d = openems_antenne.debit()
             if d.get("mesure"):
-                projet.debit_noter(d["mcps"])
+                projet.debit_noter(d["mcps_brut"], d.get("fils") or 0)
+            # LE BANC DE VITESSE PREND LE MEME CHEMIN, et pour la meme raison :
+            # il finit dans un fil d'openems_run, qui ne sait pas ou l'on range.
+            b = openems_antenne.fils().get("banc")
+            if b:
+                projet.banc_noter(b)
         except Exception:                              # noqa: BLE001
             pass
+
+    def _oe_fils(self):
+        """Pose le nombre de fils des prochains calculs, et le range.
+
+        UN NOMBRE, DANS L'ADRESSE, BORNE PAR LE MODELE : rien d'autre ne
+        passe. 0 rend le choix a openEMS.
+        """
+        self._oe()
+        brut = (self._params().get("n") or [""])[0]
+        try:
+            n = int(brut)
+        except ValueError:
+            raise Refus(400, "Nombre de fils illisible : %r" % brut[:20])
+        out = openems_antenne.regler_fils(n)
+        if projet is not None:
+            projet.fils_noter(out["regle"])
+        return out
+
+    def _oe_banc(self):
+        self._oe()
+        try:
+            return openems_antenne.lancer_banc()
+        except openems_antenne.ErreurModele as exc:
+            raise Refus(409, self._detail(exc))
 
     def _oe_voir(self, action):
         """Ouvre les champs d'une simulation : ParaView, ou le dossier.
@@ -712,6 +741,7 @@ class Poste(http.server.SimpleHTTPRequestHandler):
            "/api/openems/lancer", "/api/openems/arreter",
            "/api/openems/journal", "/api/openems/paraview",
            "/api/openems/dossier",
+           "/api/openems/fils", "/api/openems/banc/lancer",
            "/api/openems/champs", "/api/openems/champ",
            "/api/projet", "/api/projet/ouvrir", "/api/projet/racine",
            "/api/projet/enregistrer", "/api/projet/fermer",
@@ -797,6 +827,12 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             return
         if route == "/api/openems/arreter":
             self._api(self._oe_arreter)
+            return
+        if route == "/api/openems/fils":
+            self._api(self._oe_fils)
+            return
+        if route == "/api/openems/banc/lancer":
+            self._api(self._oe_banc)
             return
         if route == "/api/openems/paraview":
             self._api(lambda: self._oe_voir(openems_antenne.paraview))
@@ -1265,7 +1301,11 @@ def main(argv=None):
         try:
             v = projet.debit_lu()
             if v > 0:
-                openems_antenne.debit_noter(v)
+                openems_antenne.debit_noter(v, projet.debit_fils_lu())
+            # LES FILS ET LE BANC AVANT LE DEBIT ANNONCE : c'est avec eux
+            # que le debit se ramene au reglage du poste.
+            openems_antenne.regler_fils(projet.fils_lu())
+            openems_antenne.banc_noter(projet.banc_lu())
         except Exception:                              # noqa: BLE001
             pass
 
@@ -1313,6 +1353,11 @@ def main(argv=None):
               % (d["mcps"],
                  ("mesure sur %d calcul(s) de ce poste" % d["n"])
                  if d["mesure"] else "suppose : aucun calcul n'a encore fini"))
+        f = openems_antenne.fils()
+        print("  Fils de calcul    %s  (%d coeurs logiques%s)"
+              % (f["regle"] or "au choix d'openEMS", f["coeurs"],
+                 (", meilleur au banc : %d" % f["meilleur"])
+                 if f["meilleur"] else ", banc de vitesse jamais passe"))
     print()
     print("  Ctrl+C pour arreter.")
     print()

@@ -22,10 +22,12 @@
 #            lancer_balayage, lancer_tableau_s, journal, arreter, liste,
 #            paraview, dossier, dossier_calculs, archiver_calcul,
 #            identifiant_neuf,
-#            debit, debit_noter,
+#            debit, debit_noter, fils, regler_fils, banc_noter, lancer_banc,
 #            champs, champ
 # ==========================================================================
 """Porte d'entree de l'outil antenne : preparation, script, execution."""
+
+import os
 
 import openems_modele
 import openems_pieces
@@ -83,6 +85,7 @@ def etat():
 
     solveur = openems_run.etat()
     out["lancer"] = bool(solveur.get("dispo"))
+    out["fils"] = fils()
     out["solveur"] = solveur
     out["paraview"] = openems_run.chemin_paraview()
     if not out["lancer"]:
@@ -268,16 +271,56 @@ def debit():
     poste : c'est lui qui fait le pont, parce que projet.py ne sait pas
     qu'openEMS existe et qu'openems_run ne sait pas ce qu'est un projet.
     """
+    # `mcps_brut` ET NON `mcps` VA DANS LES REGLAGES : `mcps` est ramene au
+    # nombre de fils du moment, et le ranger puis le ramener une seconde fois
+    # au redemarrage compterait le gain deux fois.
     return {"mcps": openems_modele.debit_suppose(),
+            "mcps_brut": openems_modele.debit_mesure(),
+            "fils": openems_modele.debit_fils(),
             "mesure": openems_modele.debit_mesure() is not None,
             "n": openems_modele.debit_n()}
 
 
-def debit_noter(mcps):
+def debit_noter(mcps, fils_mesure=0):
     """Recolle un debit retenu d'une session precedente. Sans effet s'il est
     nul ou hors des bornes du plausible — un reglage abime ne doit pas faire
     annoncer des heures pour une minute."""
-    return openems_modele.noter_debit(mcps)
+    return openems_modele.noter_debit(mcps, fils_mesure)
+
+
+def fils():
+    """Le reglage des fils de calcul, et ce que le banc en sait.
+
+    Le serveur le range dans les reglages du poste, comme le debit : c'est
+    une propriete de la machine, pas de l'antenne.
+    """
+    coeurs = os.cpu_count() or 0
+    return {"regle": openems_modele.fils_regle(),
+            "coeurs": coeurs,
+            "max": openems_modele.FILS_MAX,
+            "banc": {str(k): v for k, v in openems_modele.banc().items()},
+            "meilleur": openems_modele.banc_meilleur(),
+            "essais": (openems_run.fils_a_essayer(coeurs)
+                       if openems_run is not None else [])}
+
+
+def regler_fils(n):
+    openems_modele.regler_fils(n)
+    return fils()
+
+
+def banc_noter(mesures):
+    """Recolle un banc de vitesse d'une session precedente."""
+    openems_modele.noter_banc(mesures)
+    return fils()
+
+
+def lancer_banc():
+    """Demarre le banc de vitesse : une boite vide, un essai par nombre de
+    fils. Rend la vue de la tache, que la page suit comme un calcul."""
+    if openems_run is None:
+        raise ErreurModele("Execution indisponible : %s" % ERREUR_RUN)
+    return openems_run.lancer_banc()
 
 
 def dossier_calculs(chemin):

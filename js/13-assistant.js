@@ -345,6 +345,8 @@ function antEtapeActualiser(etapeId,corps){
   }else if(etapeId==="calcul"){
     const nEl=corps.querySelector("#antNmaxNote");
     if(nEl)nEl.innerHTML=antNmaxNoteHtml(m);
+    /* Le bouton du banc s'éteint pendant un calcul et se rallume après. */
+    if(typeof antFilsRafraichir==="function")antFilsRafraichir();
   }
   /* LES CHAMPS CALCULÉS EN DERNIER, ET À CHAQUE PASSAGE : ce sont les seuls
      dont la valeur affichée est produite par le modèle. Les laisser au rendu
@@ -444,7 +446,9 @@ function antDebitDit(e){
   const d=aNb(e.mcps_suppose,1)+" Mcellules/s";
   return e.mcps_mesure
     ? ("Débit mesuré sur ce poste : "+d+
-       " (médiane de "+e.mcps_n+" calcul(s) terminé(s)). La durée reste un "+
+       " (médiane de "+e.mcps_n+" calcul(s) terminé(s)"+
+       (e.mcps_ramene?", ramenée à "+e.fils+" fils par le banc de vitesse":"")+
+       "). La durée reste un "+
        "ordre de grandeur : le maillage suivant n'a pas la même empreinte.")
     : ("Ordre de grandeur : débit supposé de "+d+", faute d'un calcul "+
        "terminé sur ce poste. "+
@@ -959,11 +963,13 @@ ${ANT.ports.length>1?`<div class="champ">
     </select></span>
 </div>
 
+${coax||typeof antPortBrocheHtml!=="function"?"":antPortBrocheHtml()}
+
 <div class="champ">
   <button class="tb ${ANT.posePort?"on":""}" id="bPosePort">
     ${ANT.posePort?"◉ Cliquez le point d'alimentation sur la carte…":"⌖ Poser le port sur la carte"}
   </button>
-  <p class="note">Cliquer vaut mieux que saisir : l'assistant prend alors la
+  <p class="note">${coax?"Cliquer":"Ou à la main : cliquer"} vaut mieux que saisir : l'assistant prend alors la
      largeur de la piste sous le curseur, et vérifie que le point est bien sur
      le cuivre retenu.</p>
 </div>
@@ -1071,7 +1077,8 @@ ${(p.ligne_d>0&&p.ligne_w>0)?(function(){
 
 <div id="antPortRecap">
   ${antPortRecapHtml()}
-</div>`;
+</div>
+${typeof antPortVerdictHtml==="function"?antPortVerdictHtml():""}`;
 };
 
 function antPortRecapHtml(){
@@ -1123,9 +1130,15 @@ ANT_LIER.port=function(box){
   const n=function(id,cle,min){
     antLierNombre(box.querySelector(id), ANT.port, cle, {
       min: min!=null?min:-Infinity,
-      apres: ()=>{ ANT.port.pose=true; }
+      apres: ()=>{
+        ANT.port.pose=true;
+        /* Une cote retouchée à la main déplace le port hors de sa broche. */
+        if((cle==="x"||cle==="y")&&typeof antPortDecrocher==="function")
+          antPortDecrocher(ANT.port);
+      }
     });
   };
+  if(typeof antPortBrocheLier==="function")antPortBrocheLier(box);
   n("#antPx","x"); n("#antPy","y"); n("#antPw","w",0.001);
   n("#antPl","l",0.001); n("#antPR","R",1);
   n("#antPra","ra",0.001); n("#antPrb","rb",0.001); n("#antPer","er",1);
@@ -1354,6 +1367,7 @@ ANT_CORPS.calcul=function(){
 ${typeof antChampsHtml==="function"?antChampsHtml():""}
 ${typeof antBalayageHtml==="function"?antBalayageHtml():""}
 ${typeof antTableauSHtml==="function"?antTableauSHtml():""}
+${typeof antFilsHtml==="function"?antFilsHtml():""}
 
 <div class="champ actions">
   <button class="tb" id="bScript2">⤓ Écrire le script Python</button>
@@ -1419,6 +1433,7 @@ ANT_LIER.calcul=function(box){
   if(typeof antChampsLier==="function")antChampsLier(box);
   if(typeof antBalayageLier==="function")antBalayageLier(box);
   if(typeof antTableauSLier==="function")antTableauSLier(box);
+  if(typeof antFilsLier==="function")antFilsLier(box);
   if(typeof antVoirLier==="function")antVoirLier(box);
   /* LES DOSSIERS DE CALCUL SE BRANCHENT À PART, et c'est voulu : le bloc
      « voir les champs » ne s'affiche qu'une fois un calcul terminé dans la
@@ -1519,6 +1534,7 @@ function antJournalRendre(){
     '<span class="mes">pas <b>'+aEnt(a.pas||0)+'</b></span>'+
     '<span class="mes">énergie <b>'+(a.energie_dB==null?"—":aNb(a.energie_dB,1)+" dB")+'</b></span>'+
     '<span class="mes">'+aNb(a.vitesse||0,1)+' MC/s</span>'+
+    (a.fils?'<span class="mes">'+a.fils+' fil'+(a.fils>1?"s":"")+'</span>':"")+
     '<span class="mes">'+antDuree(t.duree||0)+'</span>'+
     /* LE TEMPS RESTANT, ET CE QUI LE COMMANDE. « 12 min » tout court laisse
        croire a une promesse ; ce qu'on annonce est une extrapolation de la
@@ -1671,6 +1687,10 @@ function antBoutonsEtat(){
           '<span>Pas : <b>'+aEnt(av.pas||0)+'</b></span>'+
           '<span>Énergie : <b>'+(av.energie_dB!=null?aNb(av.energie_dB,1)+' dB':'—')+'</b></span>'+
           '<span>Vitesse : <b>'+aNb(av.vitesse||0,1)+' MC/s</b></span>'+
+          /* LES FILS QU'OPENEMS EMPLOIE VRAIMENT, lus dans son journal. En
+             « Auto » ils changent pendant les premières secondes — c'est son
+             tâtonnement —, et c'est ici qu'on voit où il s'est arrêté. */
+          (av.fils?'<span>Fils : <b>'+av.fils+'</b></span>':'')+
           '<span>Durée : <b>'+antDuree(t.duree||0)+'</b></span>'+
         '</div>'+
         /* LE POURQUOI, LÀ OÙ ON REGARDE. Il était dans le panneau « Journal

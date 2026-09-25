@@ -299,7 +299,11 @@ function mdlPlanContient(g,x,y){
 }
 /* Le contour d'un seul plan, pour le souligner au survol. */
 function mdlCheminPlan(g){
-  if(g._p)return g._p;
+  /* `instanceof` ET NON la seule présence : un Path2D passé par JSON revient
+     en `{}` — c'est ce que gardaient les projets enregistrés avant que
+     `prjCarte` ne retire ce cache — et tracer `{}` lève une exception qui
+     arrête le dessin de la carte en plein milieu, surimpression comprise. */
+  if(g._p instanceof Path2D)return g._p;
   const p=new Path2D();
   for(const ct of g.g){
     mdlPolyDans(p,ct.o);

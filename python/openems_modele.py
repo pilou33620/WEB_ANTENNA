@@ -37,6 +37,7 @@ en millimetres et en hertz -- la page ne convertit rien, c'est ici que les
 pouces d'un fichier IPC-2581 en pouces sont ramenes au millimetre.
 """
 
+import bisect
 import copy
 import math
 
@@ -345,10 +346,18 @@ MCPS_MIN = 0.05
 MCPS_MAX = 5000.0
 MCPS_GARDE = 5                       # combien de calculs entrent dans la mediane
 
+# Chaque entree est (debit, fils) : le debit d'un calcul termine et le nombre
+# de fils qu'openEMS y a VRAIMENT employes (0 quand le journal ne l'a pas dit).
 _MCPS_VUS = []
 
 
-def noter_debit(mcps):
+def _mediane(t):
+    t = sorted(t)
+    n = len(t)
+    return t[n // 2] if n % 2 else 0.5 * (t[n // 2 - 1] + t[n // 2])
+
+
+def noter_debit(mcps, fils=0):
     """Retient le debit d'un calcul termine. Rend le debit retenu, ou None."""
     try:
         v = float(mcps)
@@ -356,7 +365,11 @@ def noter_debit(mcps):
         return debit_mesure()
     if not (MCPS_MIN <= v <= MCPS_MAX):
         return debit_mesure()
-    _MCPS_VUS.append(v)
+    try:
+        f = max(0, int(fils or 0))
+    except (TypeError, ValueError):
+        f = 0
+    _MCPS_VUS.append((v, f))
     del _MCPS_VUS[:-MCPS_GARDE]
     return debit_mesure()
 
@@ -370,9 +383,13 @@ def debit_mesure():
     """La mediane des derniers calculs, ou None si aucun n'a encore fini."""
     if not _MCPS_VUS:
         return None
-    t = sorted(_MCPS_VUS)
-    n = len(t)
-    return t[n // 2] if n % 2 else 0.5 * (t[n // 2 - 1] + t[n // 2])
+    return _mediane([v for v, _f in _MCPS_VUS])
+
+
+def debit_fils():
+    """Les fils du dernier calcul retenu (0 : inconnus). Le serveur les range
+    avec le debit, pour que la mise a l'echelle survive au redemarrage."""
+    return _MCPS_VUS[-1][1] if _MCPS_VUS else 0
 
 
 def debit_n():
@@ -381,8 +398,123 @@ def debit_n():
 
 
 def debit_suppose():
-    """Le debit sur lequel les durees sont annoncees."""
-    return debit_mesure() or MCPS
+    """Le debit sur lequel les durees sont annoncees.
+
+    RAMENE AU NOMBRE DE FILS REGLE quand le banc de vitesse permet de le
+    faire. Un calcul mesure a 27 MC/s sur deux fils ne dit pas ce que donnera
+    le suivant sur huit : sans cette mise a l'echelle, changer le reglage
+    laisserait la duree annoncee exactement ou elle etait, et l'on ne verrait
+    pas ce qu'il rapporte. Chaque calcul retenu est ramene a part, avec SES
+    fils ; la mediane porte sur les valeurs ramenees.
+    """
+    if not _MCPS_VUS:
+        return MCPS
+    return _mediane([v * facteur_fils(f) for v, f in _MCPS_VUS])
+
+
+# ==========================================================================
+# Les fils de calcul
+# --------------------------------------------------------------------------
+# OPENEMS NE PREND PAS TOUS LES COEURS DE LUI-MEME, et c'est ce qui a fait
+# tourner une carte de 10,8 millions de cellules a 7 % du processeur. Sans
+# `numThreads`, il part d'UN fil et en ajoute un tant que la vitesse monte :
+#
+#     Multithreaded engine using 1 threads. Utilization: (201)
+#     Multithreaded engine using 2 threads. Utilization: (101;100)
+#     Multithreaded engine using 3 threads. Utilization: (67;67;67)
+#
+# Le tatonnement s'arrete au premier palier qui ne gagne rien -- et le bruit
+# d'une mesure de quelques secondes suffit a l'arreter a deux ou trois fils.
+#
+# POURQUOI CE N'EST PAS « TOUS LES COEURS ». Le FDTD est borne par la memoire,
+# pas par le calcul : chaque pas relit tout le maillage pour tres peu
+# d'operations. Sur un poste a dix coeurs, une boite de 2,9 millions de
+# cellules a donne 121 MC/s sur un fil, 215 sur deux, 243 sur huit -- et 223
+# sur douze. Au-dela du debit de la memoire, un fil de plus ne fait qu'en
+# disputer la bande passante aux autres. La bonne valeur se MESURE : c'est
+# le travail du banc de vitesse (openems_run.lancer_banc), dont le resultat
+# est range ici.
+#
+# LE REGLAGE EST UNE PROPRIETE DU POSTE, pas du projet : la meme carte n'a pas
+# le meme optimum sur un portable et sur une station. Le serveur le range avec
+# le debit, dans les reglages du poste.
+# ==========================================================================
+FILS_MAX = 256
+
+_FILS = 0                # 0 : openEMS choisit (son tatonnement)
+_BANC = {}               # fils -> MC/s mesures par le banc
+
+
+def regler_fils(n):
+    """Pose le nombre de fils des prochains calculs. 0 rend la main a openEMS."""
+    global _FILS
+    try:
+        v = int(n)
+    except (TypeError, ValueError):
+        v = 0
+    _FILS = max(0, min(FILS_MAX, v))
+    return _FILS
+
+
+def fils_regle():
+    return _FILS
+
+
+def noter_banc(mesures):
+    """Retient un banc de vitesse : {fils: MC/s}. Les valeurs hors du
+    plausible sont ecartees, comme pour le debit."""
+    propre = {}
+    for k, v in (mesures or {}).items():
+        try:
+            f, x = int(k), float(v)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= f <= FILS_MAX and MCPS_MIN <= x <= MCPS_MAX:
+            propre[f] = x
+    _BANC.clear()
+    _BANC.update(propre)
+    return dict(_BANC)
+
+
+def banc():
+    return dict(_BANC)
+
+
+def banc_meilleur():
+    """Le nombre de fils le plus rapide au banc, ou 0 sans banc.
+
+    A VITESSE EGALE A 3 % PRES, LE PLUS PETIT GAGNE : l'ecart est dans le
+    bruit de la mesure, et un fil de moins laisse un coeur au reste du poste.
+    """
+    if not _BANC:
+        return 0
+    top = max(_BANC.values())
+    return min(f for f, v in _BANC.items() if v >= 0.97 * top)
+
+
+def _banc_a(f):
+    """Le debit du banc a `f` fils, interpole entre deux mesures voisines."""
+    ks = sorted(_BANC)
+    if f <= ks[0]:
+        return _BANC[ks[0]]
+    if f >= ks[-1]:
+        return _BANC[ks[-1]]
+    for a, b in zip(ks, ks[1:]):
+        if a <= f <= b:
+            return _BANC[a] + (_BANC[b] - _BANC[a]) * (f - a) / float(b - a)
+    return _BANC[ks[-1]]
+
+
+def facteur_fils(fils_mesure):
+    """De combien un debit mesure a `fils_mesure` fils change au reglage.
+
+    1.0 quand on ne sait pas : pas de banc, fils de la mesure inconnus, ou
+    reglage laisse a openEMS -- son tatonnement ne se predit pas.
+    """
+    if not _BANC or _FILS <= 0 or not fils_mesure or fils_mesure <= 0:
+        return 1.0
+    ref = _banc_a(fils_mesure)
+    return _banc_a(_FILS) / ref if ref > 0 else 1.0
 
 
 class ErreurModele(Exception):
@@ -2693,6 +2825,12 @@ def _coller_ports(modele):
                  ("z1", mz), ("z2", mz)]
         if "x" in p:
             cotes += [("x", mx), ("y", my)]
+        # LE CENTRE D'UN PORT DANS LE PLAN EST AU MILIEU DE SON ECART, pas sur
+        # une ligne : ce sont ses deux bornes, x1/x2 ou y1/y2, qui y tombent.
+        # Le coller deplacait le centre d'une demi-fente et criait a la face
+        # perdue -- 0,1075 mm sur le point de test de P01x274PCB-C.xml.
+        if not p.get("coax") and p.get("dir") in ("x", "y"):
+            cotes = [cv for cv in cotes if cv[0] != p["dir"]]
         for cle, lignes in cotes:
             v = _coller(lignes, p[cle])
             pire = max(pire, abs(v - p[cle]))
@@ -3123,6 +3261,10 @@ def _estimation(mx, my, mz, res_die):
         "mcps_suppose": debit_suppose(),
         "mcps_mesure": debit_mesure() is not None,
         "mcps_n": debit_n(),
+        # Les fils avec lesquels ce debit est annonce, et s'il a ete ramene a
+        # ce reglage par le banc de vitesse (voir `debit_suppose`).
+        "fils": _FILS,
+        "mcps_ramene": any(facteur_fils(f) != 1.0 for _v, f in _MCPS_VUS),
     }
 
 
@@ -3295,6 +3437,10 @@ def normaliser(doc):
             # resolu plus bas, une fois le pas de temps connu.
             "nmax": int(_nb_pos(arret.get("nmax"), 0)),
         },
+        # Les fils de calcul passes a openEMS (`numThreads`). Reglage du
+        # POSTE et non du document -- voir « Les fils de calcul » plus haut.
+        # 0 laisse openEMS tatonner.
+        "fils": _FILS,
         "nf2ff": {
             "actif": bool(nf2ff.get("actif")),
             # Les angles sont en degres dans le document, en radians nulle
@@ -3331,11 +3477,19 @@ def normaliser(doc):
 
     mx, my, mz = _mailler(modele, bande, res_air, res_die)
     modele["maillage"] = {"x": mx, "y": my, "z": mz}
+    # LES ECARTS QUE CETTE GRILLE SOUDERAIT, ouverts avant tout le reste : le
+    # collage des ports, l'estimation et le pas de temps doivent voir la
+    # grille finale. `mx` et `my` sont completes EN PLACE.
+    # Voir `_ouvrir_ecarts`.
+    modele["ecarts_ouverts"] = _ouvrir_ecarts(modele)
     # LES COTES DES PORTS, COLLEES SUR LES LIGNES DE MAILLAGE. Un ecart de
     # quatre microns suffit a ce qu'une boite d'excitation plate n'excite plus
     # rien du tout, sans autre signe qu'un avertissement noye au demarrage et
     # une energie nulle. Voir `_coller_ports`.
     modele["ports_colles_mm"] = _coller_ports(modele)
+    # APRES LE MAILLAGE, ET SUR LUI : un ecart n'est franc ou soude que selon
+    # les lignes qui tombent dedans. Voir `_ponts_de_maille`.
+    modele["ponts_maille"] = _ponts_de_maille(modele)
     modele["estimation"] = _estimation(mx, my, mz, res_die)
     # QUI FABRIQUE LA PLUS PETITE CELLULE -- la question que l'avis et le
     # rapport posaient chacun de son cote, et a laquelle le modele repond
@@ -3425,6 +3579,28 @@ def _coupable_cellule(m):
         # faux des que la paire venait d'un port ou d'une primitive.
         if out["pincee"]:
             out["quoi"] = "lignes"
+        # LA GRILLE A PU CHANGER APRES `_maillage` : `_ouvrir_ecarts` y pose
+        # ses lignes, et la pincee notee plus haut decrit alors une grille qui
+        # n'existe plus. On relit la vraie.
+        posees = set(round(v, 9) for v in ((m.get("ecarts_ouverts") or {})
+                                           .get("lignes") or {}).get(out["axe"], ()))
+        t = m["maillage"][out["axe"]]
+        if posees and len(t) > 1:
+            k = min(range(len(t) - 1), key=lambda i: t[i + 1] - t[i])
+            a, b = t[k], t[k + 1]
+            if round(a, 9) in posees or round(b, 9) in posees:
+                ancienne = out["pincee"] or {}
+
+                def rang(v):
+                    if round(v, 9) in posees:
+                        return "ecart"
+                    for cle in ("a", "b"):
+                        if ancienne.get(cle) is not None                                 and abs(ancienne[cle] - v) < 1e-9:
+                            return ancienne["rang_" + cle]
+                    return "grille"
+                out["pincee"] = {"a": a, "b": b, "mm": b - a,
+                                 "rang_a": rang(a), "rang_b": rang(b)}
+                out["quoi"] = "lignes"
         return out
     noms_rev = set(r["nom"] for r in m["revetements"])
     for d in m["dielectriques"]:
@@ -3494,6 +3670,11 @@ def _cause_cellule(m):
                     "rayonne pas, ou marquez « ignore » le corps en cause",
         "remplissage": "une ligne reguliere de la grille. Le pas vise la "
                        "commande",
+        "ecart": "une ligne posee dans un ecart antenne-masse que la grille "
+                 "aurait soude (voir l'avis des ecarts ouverts). C'est le prix "
+                 "d'un resultat juste ; l'ecart dessine est a revoir si ce "
+                 "prix est trop haut",
+        "grille": "une ligne deja presente, voisine de la precedente",
     }
     rangs = sorted(set([p["rang_a"], p["rang_b"]]))
     return ("Cause : les lignes %s = %.4f et %s = %.4f mm, distantes de "
@@ -3585,6 +3766,492 @@ def _avis_ports_court_circuit(m):
     return out
 
 
+# ==========================================================================
+# L'ecart que le maillage referme
+# --------------------------------------------------------------------------
+# DEUX CUIVRES SEPARES SUR LE DESSIN PEUVENT N'EN FAIRE QU'UN DANS LE SOLVEUR.
+# openEMS decide arete par arete : une arete de la grille est du metal quand
+# son milieu tombe dans un polygone de metal. Deux aretes de metal qui
+# partagent un noeud forment un conducteur continu ; un noeud qui sert a la
+# fois une arete de l'antenne et une arete de la masse les SOUDE, quel que
+# soit l'ecart dessine. Il suffit pour cela qu'aucune ligne de maillage ne
+# tombe dans l'ecart.
+#
+# Le cas qui l'a fait ecrire, sur P01x274PCB-C.xml : la pastille RF du point
+# de test PTST401 (1,2 mm) dans sa reserve du plan de masse, a 0,21 mm du
+# bord, sur les deux couches internes, sous une maille de 0,43 mm ; et ses
+# deux broches de masse a 0,38 mm, sur les quatre couches. Le port voyait
+# une self de 0,9 nH -- le trou metallise de la pastille --, et le calcul a
+# tourne une heure trois quarts pour rendre un S11 plat a 0 dB, que rien ne
+# distinguait d'une antenne desaccordee.
+#
+# LE TEST REJOUE LA REGLE, IL NE LA DEVINE PAS. Comparer l'ecart a « la
+# taille de la maille » se tromperait dans les deux sens : un ecart de 0,2 mm
+# est franc si une ligne tombe dedans, et un de 0,4 mm soude si aucune n'y
+# tombe. On pose donc les aretes de la VRAIE grille au voisinage de chaque
+# bord d'antenne, et l'on cherche un noeud partage. Au voisinage seulement :
+# un pont est forcement a moins d'une maille d'un bord, et le cout reste
+# proportionnel au perimetre de l'antenne, pas a la surface de la carte.
+#
+# UN CONTACT DESSINE N'EST PAS UN PONT. La patte d'un IFA touche la masse, et
+# c'est voulu : un noeud partage la ou l'ecart dessine est nul n'apprend
+# rien, et il est ecarte.
+PONT_CONTACT_MM = 0.001          # en dessous, le cuivre se touche sur le dessin
+PONT_ARETES_MAX = 400000         # borne du travail, pour une selection enorme
+
+
+class _Seau:
+    """Des objets ranges par case d'une grille grossiere, selon leur boite :
+    ne parcourir, pour un point, que ce qui peut le contenir."""
+
+    def __init__(self, pas):
+        self.pas = pas
+        self.cases = {}
+
+    def _plage(self, x0, y0, x1, y1):
+        p = self.pas
+        for i in range(int(math.floor(x0 / p)), int(math.floor(x1 / p)) + 1):
+            for j in range(int(math.floor(y0 / p)), int(math.floor(y1 / p)) + 1):
+                yield (i, j)
+
+    def poser(self, boite, objet):
+        for k in self._plage(*boite):
+            self.cases.setdefault(k, []).append(objet)
+
+    def autour(self, x, y, r=0.0):
+        vus = set()
+        for k in self._plage(x - r, y - r, x + r, y + r):
+            for o in self.cases.get(k, ()):
+                if id(o) not in vus:
+                    vus.add(id(o))
+                    yield o
+
+
+def _proj_point_seg(px, py, a, b):
+    """Le point du segment [a, b] le plus proche de (px, py)."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    l2 = dx * dx + dy * dy
+    t = 0.0 if l2 <= 0 else max(0.0, min(1.0, ((px - a[0]) * dx
+                                               + (py - a[1]) * dy) / l2))
+    return (a[0] + t * dx, a[1] + t * dy)
+
+
+def _proches_seg_seg(a, b, c, d):
+    """Distance entre deux segments, et les deux points qui la realisent --
+    le premier sur [a, b], le second sur [c, d]. Nulle s'ils se coupent."""
+    def orient(p, q, r):
+        return (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0])
+    o1, o2 = orient(a, b, c), orient(a, b, d)
+    o3, o4 = orient(c, d, a), orient(c, d, b)
+    if ((o1 > 0) != (o2 > 0)) and ((o3 > 0) != (o4 > 0)) \
+            and o1 != 0 and o2 != 0 and o3 != 0 and o4 != 0:
+        return 0.0, a, a
+    paires = [(_proj_point_seg(c[0], c[1], a, b), c),
+              (_proj_point_seg(d[0], d[1], a, b), d),
+              (a, _proj_point_seg(a[0], a[1], c, d)),
+              (b, _proj_point_seg(b[0], b[1], c, d))]
+    p, q = min(paires, key=lambda pq: math.hypot(pq[0][0] - pq[1][0],
+                                                   pq[0][1] - pq[1][1]))
+    return math.hypot(p[0] - q[0], p[1] - q[1]), p, q
+
+
+def _ponts_de_maille(m, grappes=True):
+    """Les endroits ou la grille soude le cuivre de l'antenne a celui de la
+    masse, couche par couche. Rend une liste de sites, du plus etroit au plus
+    large : {couche, x, y, ecart, cx, cy}.
+
+    Muet quand la masse n'est pas connue (aucun polygone marque « m ») : sur
+    un fichier sans connectivite, tout le cuivre est dans le meme sac, et la
+    question n'a pas de reponse -- comme pour `_avis_ports_court_circuit`.
+    """
+    if not any(q.get("m") for b in m["cuivre"] for q in b["polys"]):
+        return []
+    mx = m["maillage"]["x"]
+    my = m["maillage"]["y"]
+    if len(mx) < 2 or len(my) < 2:
+        return []
+    # Un pont est a moins d'une maille d'un bord d'antenne : une et demie
+    # laisse de la place a une cellule plus large que le pas du dielectrique.
+    portee = 1.5 * m["resolution"]["die"]
+    pas = max(portee, 0.5)
+
+    sites = []
+    budget = [PONT_ARETES_MAX]
+    for b in m["cuivre"]:
+        ant = [q for q in b["polys"] if not q.get("m") and not q.get("mixte")]
+        mas = [q for q in b["polys"] if q.get("m") and not q.get("mixte")]
+        if not ant or not mas:
+            continue
+        sites.extend(_ponts_couche(b["couche"], ant, mas, mx, my, portee, pas,
+                                   budget, grappes))
+        if budget[0] <= 0:
+            break
+    sites.sort(key=lambda s: s["ecart"])
+    return sites
+
+
+def _ponts_couche(couche, ant, mas, mx, my, portee, pas, budget, grappes=True):
+    """`_ponts_de_maille` sur une couche."""
+    def ranger(polys):
+        seau_s, seau_a = _Seau(pas), _Seau(pas)
+        for q in polys:
+            s = _Surface(q, pas)
+            seau_s.poser(s.boite, s)
+            for anneau in [q["o"]] + list(q.get("t") or ()):
+                n = len(anneau)
+                for k in range(n):
+                    a, c = anneau[k], anneau[(k + 1) % n]
+                    seau_a.poser((min(a[0], c[0]), min(a[1], c[1]),
+                                  max(a[0], c[0]), max(a[1], c[1])), (a, c))
+        return seau_s, seau_a
+
+    s_ant, a_ant = ranger(ant)
+    s_mas, a_mas = ranger(mas)
+
+    def dedans(seau, x, y):
+        for s in seau.autour(x, y):
+            bx = s.boite
+            if bx[0] <= x <= bx[2] and bx[1] <= y <= bx[3] and s._dedans(x, y):
+                return True
+        return False
+
+    # LES ARETES A EXAMINER : celles qui passent a moins de `portee` d'un bord
+    # d'antenne. Chaque bord est decoupe en troncons de `portee` au plus, pour
+    # qu'un long bord en biais n'embrasse pas un carre de la carte entiere.
+    aretes = set()
+    for q in ant:
+        for anneau in [q["o"]] + list(q.get("t") or ()):
+            n = len(anneau)
+            for k in range(n):
+                a, c = anneau[k], anneau[(k + 1) % n]
+                lg = math.hypot(c[0] - a[0], c[1] - a[1])
+                morceaux = max(1, int(math.ceil(lg / portee)))
+                for t in range(morceaux):
+                    u0, u1 = t / morceaux, (t + 1) / morceaux
+                    x0 = a[0] + (c[0] - a[0]) * u0
+                    y0 = a[1] + (c[1] - a[1]) * u0
+                    x1 = a[0] + (c[0] - a[0]) * u1
+                    y1 = a[1] + (c[1] - a[1]) * u1
+                    i0 = max(0, bisect.bisect_left(mx, min(x0, x1) - portee) - 1)
+                    i1 = min(len(mx) - 1, bisect.bisect_right(mx, max(x0, x1) + portee))
+                    j0 = max(0, bisect.bisect_left(my, min(y0, y1) - portee) - 1)
+                    j1 = min(len(my) - 1, bisect.bisect_right(my, max(y0, y1) + portee))
+                    for i in range(i0, i1 + 1):
+                        for j in range(j0, j1 + 1):
+                            aretes.add((i, j))
+                    if len(aretes) > budget[0]:
+                        break
+
+    # Chaque noeud (i, j) porte deux aretes : vers (i+1, j) et vers (i, j+1).
+    n_ant, n_mas, recouvre = set(), set(), set()
+    # Les aretes de metal de chaque noeud, pour `_ouvrir_ecarts` : c'est l'une
+    # d'elles qu'il coupe quand les lignes au tiers n'ont pas suffi.
+    bords_a, bords_m = {}, {}
+    for i, j in aretes:
+        voisins = []
+        if i + 1 < len(mx):
+            voisins.append(((i + 1, j), ((mx[i] + mx[i + 1]) / 2.0, my[j])))
+        if j + 1 < len(my):
+            voisins.append(((i, j + 1), (mx[i], (my[j] + my[j + 1]) / 2.0)))
+        for fin, milieu in voisins:
+            da = dedans(s_ant, *milieu)
+            dm = dedans(s_mas, *milieu)
+            if da and dm:
+                recouvre.update(((i, j), fin))
+            elif da:
+                n_ant.update(((i, j), fin))
+                bords_a.setdefault((i, j), []).append(fin)
+                bords_a.setdefault(fin, []).append((i, j))
+            elif dm:
+                n_mas.update(((i, j), fin))
+                bords_m.setdefault((i, j), []).append(fin)
+                bords_m.setdefault(fin, []).append((i, j))
+    budget[0] -= len(aretes)
+
+    ponts = sorted((n_ant & n_mas) - recouvre)
+    if not ponts:
+        return []
+
+    # Un site par grappe : les noeuds d'un meme ecart se suivent le long du
+    # bord, et en faire autant de lignes noierait l'avis.
+    out = []
+    for i, j in ponts:
+        x, y = mx[i], my[j]
+        if grappes and any(abs(x - s["x"]) <= 2 * portee and abs(y - s["y"]) <= 2 * portee
+               and s["couche"] == couche for s in out):
+            continue
+        # L'ECART DESSINE, au voisinage du noeud : la plus courte distance entre
+        # un bord d'antenne et un bord de masse. Nulle, c'est un contact voulu.
+        # Les deux points qui le realisent disent aussi OU le couper : c'est
+        # entre eux que `_ouvrir_ecarts` pose ses lignes.
+        proche = min((_proches_seg_seg(sa[0], sa[1], sm[0], sm[1])
+                      for sa in a_ant.autour(x, y, portee)
+                      for sm in a_mas.autour(x, y, portee)),
+                     key=lambda r: r[0], default=None)
+        if proche is None or proche[0] < PONT_CONTACT_MM:
+            continue
+        ecart = proche[0]
+        # OU COUPER, EN CE NOEUD-LA : le pied du noeud sur le bord d'antenne,
+        # puis le point de masse en face. Les deux points les plus proches de
+        # tout le voisinage ne vont pas : le long d'un ecart droit, tous se
+        # valent, et le calcul rendait un coin de la pastille a 1,2 mm du
+        # noeud soude -- des lignes posees ailleurs que la ou il fallait.
+        pa, pm, g = None, None, None
+        for sa in a_ant.autour(x, y, portee):
+            fa = _proj_point_seg(x, y, sa[0], sa[1])
+            for sm in a_mas.autour(x, y, portee):
+                fm = _proj_point_seg(fa[0], fa[1], sm[0], sm[1])
+                d = math.hypot(fm[0] - fa[0], fm[1] - fa[1]) \
+                    + math.hypot(fa[0] - x, fa[1] - y)
+                if g is None or d < g:
+                    pa, pm, g = fa, fm, d
+        cx = max(mx[i] - mx[i - 1] if i > 0 else 0.0,
+                 mx[i + 1] - mx[i] if i + 1 < len(mx) else 0.0)
+        cy = max(my[j] - my[j - 1] if j > 0 else 0.0,
+                 my[j + 1] - my[j] if j + 1 < len(my) else 0.0)
+        site = {"couche": couche, "x": x, "y": y, "ecart": ecart,
+                "cx": cx, "cy": cy,
+                "pa": [pa[0], pa[1]], "pm": [pm[0], pm[1]]}
+        if not grappes:
+            # Pour couper : les autres bouts des aretes de metal du noeud, et
+            # la distance du noeud a chacun des deux cuivres (nulle dedans).
+            def autre(n):
+                return ("x", mx[n[0]]) if n[1] == j else ("y", my[n[1]])
+            site["bords_a"] = [autre(n) for n in bords_a.get((i, j), ())]
+            site["bords_m"] = [autre(n) for n in bords_m.get((i, j), ())]
+            def dist(seau_s, seau_a):
+                if dedans(seau_s, x, y):
+                    return 0.0
+                return min((math.hypot(*(lambda f: (f[0] - x, f[1] - y))(
+                    _proj_point_seg(x, y, sg[0], sg[1])))
+                    for sg in seau_a.autour(x, y, portee)), default=portee)
+            site["da"] = dist(s_ant, a_ant)
+            site["dm"] = dist(s_mas, a_mas)
+        out.append(site)
+    return out
+
+
+# ==========================================================================
+# Ouvrir les ecarts soudes : deux lignes dans l'ecart, et seulement la
+# --------------------------------------------------------------------------
+# AFFINER TOUTE LA CARTE POUR UN ECART DE 0,21 mm COUTERAIT DES JOURS. Ce qu'il
+# faut, c'est qu'aucune arete de la grille n'enjambe l'ecart avec son milieu
+# dans le metal ; deux lignes y suffisent, posees au tiers et aux deux tiers :
+# l'arete qui les joint a son milieu au milieu de l'ecart -- dans le vide --,
+# et chacune des deux lignes ne peut plus toucher qu'un seul des deux cuivres.
+# UNE seule ligne au milieu ne suffit pas, et c'est verifie : ses deux aretes
+# voisines peuvent avoir chacune leur milieu dans un metal different, et le
+# noeud du milieu soude alors les deux.
+#
+# DANS L'AXE OU L'ECART EST LE PLUS LARGE -- en travers de lui. Un ecart en
+# biais (deux pastilles rondes en diagonale) recoit les deux axes.
+#
+# LE PRIX EST DIT, PAS CACHE : ces lignes font des cellules du tiers de
+# l'ecart, et c'est la plus petite cellule qui fixe le pas de temps de tout le
+# calcul. L'avis le chiffre. En dessous de ECART_OUVRABLE_MM, on n'ouvre pas :
+# un ecart de dix microns est un reste d'export, pas une fente, et l'ouvrir
+# diviserait le pas de temps par vingt.
+#
+# LE CONTROLE EST REJOUE APRES CHAQUE TOUR, sur la grille enrichie : une ligne
+# posee pour un ecart peut en souder un autre a cote, ou n'avoir pas suffi a
+# un ecart en biais. Au bout de ECARTS_TOURS, ce qui reste est rendu tel quel
+# a `_avis_ponts_de_maille`.
+ECART_OUVRABLE_MM = 0.02
+ECARTS_TOURS = 8
+
+
+def _inserer(t, c, marge, bilan=None, axe=None):
+    """Insere la ligne c dans la liste triee t, sauf si une ligne est deja a
+    moins de `marge` : elle fait l'affaire, et une seconde a cote ne ferait
+    qu'une cellule-copeau. Le bilan garde la trace de chaque ligne posee :
+    `_coupable_cellule` doit pouvoir dire qu'une cellule mince vient d'ici."""
+    k = bisect.bisect_left(t, c)
+    if (k < len(t) and t[k] - c < marge) or (k > 0 and c - t[k - 1] < marge):
+        return False
+    t.insert(k, c)
+    if bilan is not None:
+        bilan[axe] += 1
+        bilan["lignes"][axe].append(c)
+    return True
+
+
+def _meilleures_coupes(t, a, b):
+    """Les deux lignes a poser dans l'ecart ]a, b[, placees pour que la plus
+    petite cellule qui en sort soit la plus large possible.
+
+    AU TIERS ET AUX DEUX TIERS, C'EST L'IDEAL SUR UNE GRILLE VIDE. Sur la
+    vraie, une ligne voisine tombe souvent juste a cote -- l'arete du cuivre,
+    une ligne d'affinage --, et la ligne au tiers faisait avec elle une
+    cellule de 0,03 mm, soit un pas de temps divise par trois pour tout le
+    calcul (P01x274PCB-C.xml). On essaie donc une grille de positions, une de
+    chaque cote du milieu, et l'on garde le couple qui ecarte le plus toutes
+    les lignes les unes des autres. Une ligne deja DANS l'ecart compte : elle
+    peut tenir lieu de l'une des deux.
+    """
+    g = b - a
+    k0 = bisect.bisect_left(t, a - g)
+    k1 = bisect.bisect_right(t, b + g)
+    voisines = t[max(0, k0 - 1):k1 + 1]
+    dedans = [v for v in voisines if a < v < b]
+    n = 12
+    gauche = [a + g * (0.08 + 0.40 * i / n) for i in range(n + 1)]
+    droite = [a + g * (0.52 + 0.40 * i / n) for i in range(n + 1)]
+    meilleur, score = None, -1.0
+    for c1 in gauche:
+        for c2 in droite:
+            pos = sorted(voisines + [c1, c2])
+            d = min(pos[i + 1] - pos[i] for i in range(len(pos) - 1))
+            if d > score:
+                meilleur, score = (c1, c2), d
+    # Une seule ligne manque quand une autre est deja dans l'ecart, loin de
+    # ses bords : on ne pose que celle de l'autre cote.
+    for v in dedans:
+        cote = [c for c in (droite if v < a + g / 2.0 else gauche)]
+        for c in cote:
+            pos = sorted(voisines + [c])
+            d = min(pos[i + 1] - pos[i] for i in range(len(pos) - 1))
+            if d > score:
+                meilleur, score = (c,), d
+    return meilleur or ()
+
+
+def _lignes_au_tiers(s, lignes, bilan):
+    """Premier remede : deux lignes au tiers et aux deux tiers de l'ecart, en
+    travers de lui -- dans l'axe ou il est le plus large, les deux s'il est
+    en biais."""
+    (ax, ay), (bx, by) = s["pa"], s["pm"]
+    dx, dy = abs(bx - ax), abs(by - ay)
+    if 0.4 < dx / max(dx + dy, 1e-12) < 0.6:
+        axes = ("x", "y")
+    else:
+        axes = ("x",) if dx >= dy else ("y",)
+    neuf = False
+    for axe in axes:
+        a, b = (min(ax, bx), max(ax, bx)) if axe == "x"             else (min(ay, by), max(ay, by))
+        g = b - a
+        if g < ECART_OUVRABLE_MM:
+            continue
+        for c in _meilleures_coupes(lignes[axe], a, b):
+            if _inserer(lignes[axe], c, g / 12.0, bilan, axe):
+                neuf = True
+    return neuf
+
+
+def _couper_arete(s, lignes, bilan):
+    """Second remede, quand le noeud reste soude malgre les lignes au tiers --
+    un ecart courbe, une couronne mince autour d'une pastille ronde, que des
+    lignes droites traversent en biais. On COUPE EN DEUX les aretes de metal
+    du noeud, du cote du cuivre le plus eloigne de lui : une arete n'atteint
+    le metal que si son milieu y tombe, et chaque coupure divise sa portee
+    par deux. Le noeud etant dans l'ecart a une distance non nulle de ce
+    cuivre-la, quelques coupures suffisent a l'en detacher. Du cote du cuivre
+    le plus proche -- ou il est dedans --, couper ne servirait a rien."""
+    bords = s["bords_a"] if s["da"] >= s["dm"] else s["bords_m"]
+    neuf = False
+    for axe, autre in bords:
+        ici = s["x"] if axe == "x" else s["y"]
+        c = (ici + autre) / 2.0
+        if abs(autre - ici) / 2.0 < ECART_OUVRABLE_MM / 4.0:
+            continue
+        if _inserer(lignes[axe], c, ECART_OUVRABLE_MM / 4.0, bilan, axe):
+            neuf = True
+    return neuf
+
+
+def _ouvrir_ecarts(m):
+    """Pose des lignes dans les ecarts que la grille soude. Modifie
+    m["maillage"] en place ; rend le bilan {x, y, sites}."""
+    lignes = {"x": m["maillage"]["x"], "y": m["maillage"]["y"]}
+    bilan = {"x": 0, "y": 0, "sites": 0, "plus_petit_ecart": None,
+             "lignes": {"x": [], "y": []}}
+    deja = set()
+    # Le compte annonce est celui des GRAPPES, comme dans l'avis des ponts :
+    # un ecart le long d'un bord soude une dizaine de noeuds, c'est un ecart.
+    bilan["sites"] = len(_ponts_de_maille(m))
+    if not bilan["sites"]:
+        return bilan
+    for _ in range(ECARTS_TOURS):
+        # TOUS LES NOEUDS, PAS UN PAR GRAPPE : le representant d'une grappe
+        # est souvent un coin, et c'est le long du bord que l'ecart se coupe.
+        sites = _ponts_de_maille(m, grappes=False)
+        neuf = False
+        for s in sites:
+            if s["ecart"] < ECART_OUVRABLE_MM:
+                continue
+            cle = (s["couche"], round(s["x"], 3), round(s["y"], 3))
+            # Les lignes au tiers d'abord ; si elles sont deja la, ou si le
+            # noeud a survecu a un tour, on coupe ses aretes.
+            if cle in deja or not _lignes_au_tiers(s, lignes, bilan):
+                neuf |= _couper_arete(s, lignes, bilan)
+            else:
+                neuf = True
+            deja.add(cle)
+            e = bilan["plus_petit_ecart"]
+            bilan["plus_petit_ecart"] = s["ecart"] if e is None else min(e, s["ecart"])
+        if not neuf:
+            break
+    return bilan
+
+
+def _avis_ecarts_ouverts(m):
+    b = m.get("ecarts_ouverts") or {}
+    n = b.get("x", 0) + b.get("y", 0)
+    if not n:
+        return []
+    pc = m["estimation"]["plus_petite_cellule_mm"]
+    return [{
+        "rang": "info",
+        "titre": "%d ecart(s) antenne-masse ouvert(s) par le maillage"
+                 % b["sites"],
+        "texte": "Ils etaient plus etroits que la moitie d'une cellule : sans "
+                 "ligne dedans, openEMS aurait soude l'antenne a la masse. "
+                 "%d ligne(s) en x et %d en y y ont ete posees, deux par "
+                 "ecart, placees pour garder les cellules les plus larges "
+                 "possible ; le plus etroit fait %.3f mm. "
+                 "Le prix : la plus petite cellule fait maintenant %.3f x %.3f "
+                 "mm dans le plan, et le pas de temps de tout le calcul la suit."
+                 % (b["x"], b["y"], b["plus_petit_ecart"] or 0.0, pc[0], pc[1]),
+    }]
+
+
+def _avis_ponts_de_maille(m):
+    sites = m.get("ponts_maille") or []
+    if not sites:
+        return []
+    s = sites[0]
+    autres = sites[1:4]
+    texte = ("Sur « %s », en (%.3f ; %.3f) mm, l'antenne et la masse sont "
+             "separees de %.3f mm sur le dessin, et la grille y fait %.3f x "
+             "%.3f mm : aucune ligne ne tombe dans l'ecart, les deux cuivres "
+             "partagent un noeud, et openEMS les soude."
+             % (s["couche"], s["x"], s["y"], s["ecart"], s["cx"], s["cy"]))
+    if autres:
+        texte += " Aussi : " + " ; ".join(
+            "« %s » (%.2f ; %.2f), %.3f mm" % (o["couche"], o["x"], o["y"],
+                                                o["ecart"]) for o in autres)
+        if len(sites) > 4:
+            texte += " ; et %d autre(s)" % (len(sites) - 4)
+        texte += "."
+    texte += (" Le maillage n'a pas pu l'ouvrir lui-meme (ecart de moins de "
+              "%.3f mm, ou lignes ajoutees sans effet)." % ECART_OUVRABLE_MM)
+    texte += (" Si ce cuivre est relie au port, le port verra un court-circuit : "
+              "un S11 plat pres de 0 dB, une impedance d'entree de quelques "
+              "ohms inductifs -- et le calcul ira au bout sans rien dire. Un "
+              "morceau isole (la piste qui repartait vers la radio, derriere "
+              "un port pose sur une broche) n'est que mis a la masse, sans "
+              "consequence sur l'alimentation. Si ce cuivre n'est pas l'antenne "
+              "(pastille d'un connecteur, d'un point de test), retirez-le de la "
+              "selection ou posez le port ailleurs ; sinon affinez le maillage "
+              "jusqu'a %.3f mm au plus a cet endroit."
+              % (s["ecart"] / 2.0))
+    return [{
+        "rang": "grave",
+        "titre": "Le maillage soude l'antenne a la masse (%d endroit%s)"
+                 % (len(sites), "s" if len(sites) > 1 else ""),
+        "texte": texte,
+    }]
+
+
 def _avis(m):
     """Les remarques de l'assistant : ce qui passera, ce qui coincera.
 
@@ -3656,7 +4323,11 @@ def _avis(m):
                      "parce que le nombre de pas suit le pas de temps."
                      % (_duree_texte(secondes), est["cellules"] / 1e6,
                         "{:,}".format(m["arret"]["nmax"]).replace(",", " "),
-                        "mesure sur ce poste" if est.get("mcps_mesure")
+                        ("mesure sur ce poste" + (" et ramene a %d fils"
+                                                  % est["fils"]
+                                                  if est.get("mcps_ramene")
+                                                  else ""))
+                        if est.get("mcps_mesure")
                         else "suppose", est.get("mcps_suppose") or MCPS),
         })
 
@@ -3840,6 +4511,8 @@ def _avis(m):
             })
 
     out.extend(_avis_ports_court_circuit(m))
+    out.extend(_avis_ecarts_ouverts(m))
+    out.extend(_avis_ponts_de_maille(m))
 
     # -- les pertes dielectriques -----------------------------------------
     p = m["pertes"]

@@ -1675,6 +1675,98 @@ openems_modele.oublier_debit()
 
 # --------------------------------------------------------------------------
 print()
+print("16 bis. Les fils de calcul, et le banc de vitesse")
+# CE QUE CETTE SECTION PROTEGE. Sans `numThreads`, openEMS tatonne a partir
+# d'UN fil et s'arrete souvent a deux ou trois : une carte de 10,8 millions de
+# cellules a tourne des heures a 7 % du processeur. Le reglage doit partir
+# au solveur, la duree annoncee doit le suivre -- sans quoi on ne verrait pas
+# ce qu'il rapporte --, et le banc doit etre lu tel que son script l'ecrit.
+verifie("le reglage des fils est borne",
+        openems_modele.regler_fils(-3) == 0 and
+        openems_modele.regler_fils(10 ** 6) == openems_modele.FILS_MAX and
+        openems_modele.regler_fils("vite") == 0)
+
+openems_modele.regler_fils(6)
+_m_fils = openems_modele.normaliser(document())
+_s_fils = openems_script.generer(_m_fils)
+verifie("le nombre de fils regle part au solveur",
+        _m_fils["fils"] == 6 and "fils      = 6\n" in _s_fils and
+        "numThreads=fils" in _s_fils)
+compile(_s_fils, "antenne.py", "exec")
+openems_modele.regler_fils(0)
+_s_auto = openems_script.generer(openems_modele.normaliser(document()))
+verifie("a zero, le choix reste a openEMS, et le script le dit",
+        "fils      = 0" in _s_auto and "numThreads=fils" in _s_auto)
+_s_banc = openems_script.generer_banc([1, 2, 4])
+compile(_s_banc, "banc.py", "exec")
+verifie("le script du banc compile, et impose ses fils a chaque essai",
+        "numThreads=n" in _s_banc and "FILS    = [1, 2, 4]" in _s_banc)
+
+# LA DUREE SUIT LE REGLAGE, par le rapport que le banc a mesure. Un calcul
+# fait sur deux fils a 27 MC/s, un banc qui dit 180 MC/s a deux fils et 250 a
+# huit : sur huit fils, on annonce 27 x 250 / 180.
+openems_modele.oublier_debit()
+openems_modele.noter_banc({"1": 100, "2": 180, "4": 245, "8": 250,
+                           "x": 3, "3": -1, "5": 1e9})
+verifie("le banc ecarte ce qui n'est pas une mesure",
+        sorted(openems_modele.banc()) == [1, 2, 4, 8])
+openems_modele.noter_debit(27.0, 2)
+openems_modele.regler_fils(8)
+verifie("un debit mesure sur 2 fils est ramene a 8 par le banc",
+        abs(openems_modele.debit_suppose() - 27.0 * 250 / 180) < 1e-6,
+        "%.2f" % openems_modele.debit_suppose())
+_m_fils = openems_modele.normaliser(document())
+verifie("l'estimation dit qu'elle a ete ramenee, et a combien de fils",
+        _m_fils["estimation"]["mcps_ramene"] is True and
+        _m_fils["estimation"]["fils"] == 8)
+openems_modele.regler_fils(3)
+verifie("entre deux mesures du banc, on interpole",
+        abs(openems_modele.debit_suppose() - 27.0 * 212.5 / 180) < 1e-6,
+        "%.2f" % openems_modele.debit_suppose())
+openems_modele.regler_fils(0)
+verifie("en « Auto », rien n'est ramene : le tatonnement ne se predit pas",
+        openems_modele.debit_suppose() == 27.0)
+verifie("a 3 % pres, le plus petit nombre de fils gagne",
+        openems_modele.banc_meilleur() == 4, str(openems_modele.banc_meilleur()))
+
+if _run is not None:
+    # Les lignes telles qu'openEMS 0.0.36 les ecrit pendant son tatonnement.
+    _t = _run.Tache("essai-fils", ".", {"arret": {"nmax": 10000}})
+    for _l in ("Multithreaded operator using 12 threads.",
+               "Multithreaded engine using 1 threads. Utilization: (201)",
+               "Multithreaded engine using 2 threads. Utilization: (101;100)",
+               "Multithreaded engine using 3 threads. Utilization: (67;67;67)"):
+        _t._ajouter(_l)
+    verifie("les fils vraiment employes se lisent dans le journal",
+            _t.avancement["fils"] == 3, str(_t.avancement["fils"]))
+    _b = _run.TacheBanc("essai-banc", ".", [1, 2, 4, 8])
+    for _l in ("Banc : 1 fil(s) -> 74.3 MCells/s",
+               "Banc : 2 fil(s) -> echec",
+               "Banc : 4 fil(s) -> 141.1 MCells/s"):
+        _b._ajouter(_l)
+    _vb = _b.vue()
+    verifie("le banc se lit essai par essai, echecs compris",
+            _vb["banc"]["mesures"] == {"1": 74.3, "4": 141.1} and
+            abs(_vb["avancement"]["pourcent"] - 75.0) < 1e-9 and
+            _vb["genre"] == "banc")
+    verifie("les paliers du banc s'arretent au nombre de coeurs",
+            _run.fils_a_essayer(12) == [1, 2, 3, 4, 6, 8, 12] and
+            _run.fils_a_essayer(1) == [1])
+    # Le banc ne note PAS de debit : une boite vide irait deux a quatre fois
+    # plus vite qu'une antenne.
+    openems_modele.oublier_debit()
+    _b.resultat = {"banc": {"1": 74.3, "4": 141.1}}
+    _b._noter_debit()
+    verifie("le banc range sa table, et ne touche pas au debit des antennes",
+            openems_modele.debit_mesure() is None and
+            sorted(openems_modele.banc()) == [1, 4])
+
+openems_modele.regler_fils(0)
+openems_modele.noter_banc({})
+openems_modele.oublier_debit()
+
+# --------------------------------------------------------------------------
+print()
 print("17. La facture du maillage : la plus petite cellule, et ce qu'elle coute")
 # CE QUE CETTE SECTION PROTEGE, ET POURQUOI ELLE EXISTE. Une carte relais
 # 868 MHz a demande cinq heures de calcul pour un S11 a -10,9 dB, et rien dans
@@ -2072,6 +2164,88 @@ _dn = json.loads(json.dumps(_dc))
 _dn["cuivre"][1]["polys"][0].pop("m")
 verifie("sans masse connue (fichier sans nets) : on se tait",
         not _court(_dn))
+
+# --------------------------------------------------------------------------
+print()
+print("20 bis. L'ecart que le maillage referme")
+# LE CAS VU SUR P01x274PCB-C.xml, SUITE : la pastille RF du point de test dans
+# sa reserve du plan de masse, a 0,21 mm du bord. Sur le dessin, deux
+# conducteurs ; dans la grille, un seul des qu'une arete a cheval sur l'ecart
+# a son milieu dans le metal. La regle est rejouee sur la vraie grille : ici
+# 0,3 mm autour de la pastille.
+
+
+def _rond(cx, cy, r, n=32):
+    out = []
+    for k in range(n):
+        a = 2 * math.pi * k / n
+        out += [cx + r * math.cos(a), cy + r * math.sin(a)]
+    return out
+
+
+def _pastille_dans_reserve(ecart, forme="rond"):
+    doc = json.loads(json.dumps(_d))
+    plan = doc["cuivre"][1]["polys"][0]
+    if forme == "rond":
+        plan["t"] = [_rond(10.0, 10.0, 0.6 + ecart)]
+        doc["cuivre"][1]["polys"].append({"o": _rond(10.0, 10.0, 0.6)})
+    else:
+        plan["t"] = [rect(9.4 - ecart, 9.4 - ecart, 1.2 + 2 * ecart,
+                          1.2 + 2 * ecart)]
+        doc["cuivre"][1]["polys"].append({"o": rect(9.4, 9.4, 1.2, 1.2)})
+    m = openems_modele.normaliser(doc)
+    return m, [a for a in m["avis"] if "soude" in a["titre"]]
+
+
+_m = openems_modele.normaliser(_d)
+verifie("antenne dessus, masse dessous : aucun pont", not _m["ponts_maille"],
+        _m["ponts_maille"])
+for _forme in ("rond", "carre"):
+    # Le maillage OUVRE l'ecart lui-meme : deux lignes dedans, et plus de pont.
+    _m, _av = _pastille_dans_reserve(0.1, _forme)
+    _eo = _m["ecarts_ouverts"]
+    verifie("pastille %s a 0,1 mm de la masse, grille de 0,3 mm : ecart "
+            "ouvert par le maillage" % _forme,
+            _eo["x"] + _eo["y"] >= 2 and not _m["ponts_maille"] and not _av,
+            (_eo, _m["ponts_maille"]))
+    verifie("... l'ecart dessine est rendu, et non la maille (%s)" % _forme,
+            abs(_eo["plus_petit_ecart"] - 0.1) < 0.005, _eo)
+    verifie("... et le prix est dit : une cellule du tiers de l'ecart (%s)"
+            % _forme,
+            min(_m["estimation"]["plus_petite_cellule_mm"][:2]) < 0.05
+            and any("ouvert" in a["titre"] for a in _m["avis"]),
+            _m["estimation"]["plus_petite_cellule_mm"])
+    # Ce que le controle dit SANS l'ouverture : zero tour, et le pont reste,
+    # annonce en avis grave. C'est ce que la grille faisait avant.
+    _tours = openems_modele.ECARTS_TOURS
+    openems_modele.ECARTS_TOURS = 0
+    try:
+        _m2, _av2 = _pastille_dans_reserve(0.1, _forme)
+    finally:
+        openems_modele.ECARTS_TOURS = _tours
+    verifie("... sans ouverture, le pont est la, en avis grave (%s)" % _forme,
+            _m2["ponts_maille"] and _m2["ponts_maille"][0]["couche"] == "BOTTOM"
+            and len(_av2) == 1 and _av2[0]["rang"] == "grave",
+            (_m2["ponts_maille"][:1], _av2))
+    _m, _av = _pastille_dans_reserve(0.21, _forme)
+    verifie("pastille %s a 0,21 mm, grille de 0,3 mm : une ligne tombe "
+            "dedans, rien a dire" % _forme, not _av, _m["ponts_maille"])
+
+# Une languette d'antenne qui TOUCHE la masse (la patte d'un IFA) : le contact
+# est dessine, pas fabrique par la grille.
+_di = json.loads(json.dumps(_d))
+_di["cuivre"][1]["polys"][0]["t"] = [rect(5, 5, 10, 10)]
+_di["cuivre"][1]["polys"].append({"o": rect(5, 9, 6, 1)})
+_m = openems_modele.normaliser(_di)
+verifie("une patte qui touche la masse n'est pas un pont",
+        not _m["ponts_maille"], _m["ponts_maille"])
+
+_dn = json.loads(json.dumps(_d))
+_dn["cuivre"][1]["polys"][0].pop("m")
+_dn["cuivre"][1]["polys"][0]["t"] = [_rond(10.0, 10.0, 0.7)]
+_dn["cuivre"][1]["polys"].append({"o": _rond(10.0, 10.0, 0.6)})
+verifie("sans masse connue : on se tait",
+        not openems_modele.normaliser(_dn)["ponts_maille"])
 
 # --------------------------------------------------------------------------
 print()

@@ -49,7 +49,8 @@
 # Fonctions : etat, definir_racine, liste, ouvrir, enregistrer, ouvert,
 #            fermer, dossier_calculs, calculs, importer_calcul,
 #            ouvrir_explorateur,
-#            debit_lu, debit_noter
+#            debit_lu, debit_noter, debit_fils_lu, fils_lu, fils_noter,
+#            banc_lu, banc_noter
 # ==========================================================================
 """Les projets sur le disque : ou on les range, et comment on les reprend."""
 
@@ -718,22 +719,76 @@ def debit_lu():
         return 0.0
 
 
-def debit_noter(valeur):
+def debit_noter(valeur, fils=0):
     """Range le debit. Un profil en lecture seule ne fait pas echouer l'appel.
 
     Rien n'est reecrit quand la valeur n'a pas bouge : cette fonction est
     appelee a chaque calcul termine, et un fichier de reglages reecrit pour
     rien est un fichier de reglages qu'on finit par trouver corrompu apres
     une coupure de courant.
+
+    `fils` : avec combien de fils ce debit a ete mesure (0 : on ne sait pas).
     """
     try:
         v = float(valeur)
+        f = max(0, int(fils or 0))
     except (TypeError, ValueError):
         return 0.0
-    if v <= 0 or abs(v - debit_lu()) < 1e-9:
+    if v <= 0:
         return debit_lu()
-    _config_ecrire("debit_mcps", v)
+    if abs(v - debit_lu()) >= 1e-9:
+        _config_ecrire("debit_mcps", v)
+    if f != debit_fils_lu():
+        _config_ecrire("debit_fils", f)
     return v
+
+
+def debit_fils_lu():
+    """Les fils avec lesquels le debit retenu a ete mesure, ou 0."""
+    try:
+        return max(0, int(_config_lire().get("debit_fils") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+# ==========================================================================
+# Les fils de calcul, et le banc de vitesse
+# --------------------------------------------------------------------------
+# MEME RAISON QUE LE DEBIT : c'est le poste qui a un bon nombre de fils, pas
+# l'antenne. Ce module range deux nombres et une table sans savoir ce
+# qu'ils mesurent.
+# ==========================================================================
+def fils_lu():
+    """Le nombre de fils regle sur ce poste, ou 0 (au solveur de choisir)."""
+    try:
+        return max(0, int(_config_lire().get("fils") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def fils_noter(n):
+    try:
+        v = max(0, int(n))
+    except (TypeError, ValueError):
+        return fils_lu()
+    if v != fils_lu():
+        _config_ecrire("fils", v)
+    return v
+
+
+def banc_lu():
+    """La derniere table du banc de vitesse, {fils: MC/s}, ou {}."""
+    d = _config_lire().get("banc_fils")
+    return d if isinstance(d, dict) else {}
+
+
+def banc_noter(table):
+    if not isinstance(table, dict) or not table:
+        return banc_lu()
+    propre = {str(k): v for k, v in table.items()}
+    if propre != banc_lu():
+        _config_ecrire("banc_fils", propre)
+    return propre
 
 
 # ==========================================================================

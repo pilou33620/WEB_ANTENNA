@@ -245,6 +245,9 @@ function rapCollecterDonnees(){
     d.ports.push({
       n: p.n != null ? p.n : (i + 1),
       nom: p.nom || ("Port " + (i + 1)),
+      /* La broche vient de la page : le serveur ne la renvoie pas. */
+      broche: (ANT.ports && ANT.ports[i] && ANT.ports[i].broche)
+        ? ANT.ports[i].broche.ref + "." + ANT.ports[i].broche.num : "",
       type: p.type || "localise",
       excite: !!p.excite,
       x: p.x || 0,
@@ -326,7 +329,14 @@ function rapCollecterDonnees(){
       nf2ff: res.nf2ff || null,
       diagnostic: res.diagnostic || null
     };
-    if(res.f0 && d.solver.fcible > 0){
+    /* PAS D'ÉCART À LA CIBLE SANS RÉSONANCE : sur une courbe plate, f₀ n'est
+       que l'argument d'un minimum de bruit, et « +10 % vs cible » envoyait
+       allonger un brin que le port ne voyait pas. Voir `antResonance`. */
+    d.resultat.resonance = (typeof antResonance === "function")
+      ? antResonance(res) : {reelle: true, bord: false, panne: ""};
+    if(!d.resultat.resonance.reelle && res.f0 != null && typeof antResonanceTexte === "function")
+      d.resultat.resonance.texte = antResonanceTexte(res, d.resultat.resonance);
+    if(res.f0 && d.solver.fcible > 0 && d.resultat.resonance.reelle){
       d.resultat.ecart_cible_pct = 100 * (res.f0 - d.solver.fcible) / d.solver.fcible;
     }
   }
@@ -532,6 +542,22 @@ function rapDiagnostiquer(d){
     });
   }
 
+  // Diagnostic 7 bis : Pas de résonance du tout
+  if(d.resultat && d.resultat.resonance && !d.resultat.resonance.reelle && d.resultat.f0 != null){
+    const rz = d.resultat.resonance;
+    diags.push({
+      id: "sans_resonance",
+      titre: "Aucune résonance dans la bande (S11 minimal = " + rapNb(d.resultat.s11_min_db, 2) + " dB)",
+      rang: "crit",
+      desc: rz.texte || "Le S11 ne descend jamais sous −3 dB : la fréquence affichée n'est pas une résonance.",
+      conseil: rz.panne === "court"
+        ? "Cherchez ce qui relie les deux bornes du port : le cuivre sous lui, un trou métallisé, ou un écart plus étroit qu'une demi-maille (avis « Le maillage soude l'antenne à la masse »). Posez le port sur une broche à l'étape « Le port » pour qu'il soit vérifié avant le calcul."
+        : (rz.panne === "ouvert"
+          ? "Vérifiez que chaque borne du port touche du cuivre retenu, et que ce cuivre n'est pas plus fin que la maille."
+          : "Élargissez la bande simulée : la résonance est peut-être au-delà.")
+    });
+  }
+
   // Diagnostic 8 : Écart à la fréquence cible
   if(d.resultat && d.resultat.ecart_cible_pct != null){
     const ec = d.resultat.ecart_cible_pct;
@@ -577,14 +603,15 @@ function rapGenererHtml(d, diags){
   const statutTxt = hasCrit ? "Anomalies critiques" : (hasWarn ? "Points de vigilance" : (res ? "Simulation conforme" : "Modèle prêt"));
 
   let h = '';
+  const sansReso = !!(res && res.resonance && !res.resonance.reelle && res.f0 != null);
 
   // 1. KPIs / Synthèse immédiate
   h += '<div class="rap-sec">';
   h += '  <div class="rap-kpis">';
   h += '    <div class="rap-kpi accent">';
   h += '      <span class="rap-kpi-lbl">Résonance f₀</span>';
-  h += '      <span class="rap-kpi-val">' + (res ? rapFmtHz(res.f0) : "—") + '</span>';
-  h += '      <span class="rap-kpi-detail">' + (res && res.ecart_cible_pct != null ? (res.ecart_cible_pct >= 0 ? "+" : "") + rapNb(res.ecart_cible_pct, 2) + " % vs cible" : "Cible : " + rapFmtHz(d.solver.fcible)) + '</span>';
+  h += '      <span class="rap-kpi-val">' + (sansReso ? "aucune" : (res ? rapFmtHz(res.f0) : "—")) + '</span>';
+  h += '      <span class="rap-kpi-detail">' + (sansReso ? "S₁₁ jamais sous −3 dB" : res && res.ecart_cible_pct != null ? (res.ecart_cible_pct >= 0 ? "+" : "") + rapNb(res.ecart_cible_pct, 2) + " % vs cible" : "Cible : " + rapFmtHz(d.solver.fcible)) + '</span>';
   h += '    </div>';
   h += '    <div class="rap-kpi ' + (res && res.s11_min_db < -10 ? "ok" : (res ? "warn" : "")) + '">';
   h += '      <span class="rap-kpi-lbl">S₁₁ minimal</span>';
@@ -598,8 +625,13 @@ function rapGenererHtml(d, diags){
   h += '    </div>';
   h += '    <div class="rap-kpi ' + (nf && nf.rendement != null && nf.rendement >= 0.6 ? "ok" : (nf ? "warn" : "")) + '">';
   h += '      <span class="rap-kpi-lbl">Rendement / Gain</span>';
+  if(sansReso && nf){
+    h += '      <span class="rap-kpi-val">non mesurable</span>';
+    h += '      <span class="rap-kpi-detail">Puissance acceptée trop faible</span>';
+  }else{
   h += '      <span class="rap-kpi-val">' + (nf && nf.gain_dbi != null ? rapNb(nf.gain_dbi, 2) + " dBi" : (nf && nf.dmax_dbi != null ? rapNb(nf.dmax_dbi, 2) + " dBi" : "—")) + '</span>';
   h += '      <span class="rap-kpi-detail">' + (nf && nf.rendement != null ? "Rendement : " + rapNb(nf.rendement * 100, 1) + " %" : (d.solver.nf2ff_actif ? "NF2FF actif" : "NF2FF inactif")) + '</span>';
+  }
   h += '    </div>';
   h += '  </div>';
   h += '</div>';
@@ -737,7 +769,7 @@ function rapGenererHtml(d, diags){
       h += '          <td class="highlight">' + rapEscHtml(p.nom) + '</td>';
       h += '          <td><span class="rap-badge-mini ' + (p.excite ? "rap-badge-cuivre" : "rap-badge-die") + '">' + (p.excite ? "EXCITÉ" : "CHARGE 50 Ω") + '</span></td>';
       h += '          <td>' + (p.type === "coaxial" ? "Coaxial (ra=" + rapNb(p.ra, 3) + ", rb=" + rapNb(p.rb, 3) + " mm)" : "Localisé (" + rapNb(p.w, 2) + "×" + rapNb(p.l, 2) + " mm)") + '</td>';
-      h += '          <td class="num mono">' + rapNb(p.x, 3) + ', ' + rapNb(p.y, 3) + ' mm</td>';
+      h += '          <td class="num mono">' + rapNb(p.x, 3) + ', ' + rapNb(p.y, 3) + ' mm' + (p.broche ? ' — broche ' + rapEscHtml(p.broche) : '') + '</td>';
       h += '          <td>' + rapEscHtml(p.de) + ' → ' + rapEscHtml(p.a) + ' (' + p.dir + ')</td>';
       h += '          <td>' + (p.ligne && p.ligne.d > 0 ? "Ruban d=" + rapNb(p.ligne.d, 2) + " mm (w=" + rapNb(p.ligne.w, 2) + " mm)" : "Aucun") + '</td>';
       h += '        </tr>';
@@ -795,7 +827,7 @@ function rapGenererHtml(d, diags){
     h += '    <div class="rap-table-wrap">';
     h += '      <table class="rap-table">';
     h += '        <tbody>';
-    h += '          <tr><td>Fréquence de résonance f₀</td><td class="highlight mono">' + rapFmtHz(res.f0) + '</td></tr>';
+    h += '          <tr><td>Fréquence de résonance f₀</td><td class="highlight mono">' + (sansReso ? "aucune — minimum de S₁₁ à " + rapFmtHz(res.f0) : rapFmtHz(res.f0)) + '</td></tr>';
     h += '          <tr><td>Coefficient de réflexion |S₁₁| min</td><td class="highlight mono">' + rapNb(res.s11_min_db, 2) + ' dB</td></tr>';
     h += '          <tr><td>Impédance au port Z₀</td><td class="mono">' + rapNb(res.z0_re, 2) + ' ' + (res.z0_im >= 0 ? "+" : "−") + rapNb(Math.abs(res.z0_im), 2) + 'j Ω</td></tr>';
     if(res.z0_pied_re != null){
@@ -810,8 +842,8 @@ function rapGenererHtml(d, diags){
     h += '        <tbody>';
     if(nf){
       h += '          <tr><td>Directivité maximale Dₘₐₓ</td><td class="mono highlight">' + (nf.dmax_dbi != null ? rapNb(nf.dmax_dbi, 2) + " dBi" : "Indéfinie") + '</td></tr>';
-      h += '          <tr><td>Gain réalisé maximal G</td><td class="mono highlight">' + (nf.gain_dbi != null ? rapNb(nf.gain_dbi, 2) + " dBi" : "—") + '</td></tr>';
-      h += '          <tr><td>Rendement de rayonnement η</td><td class="mono">' + (nf.rendement != null ? rapNb(nf.rendement * 100, 1) + " %" : "—") + '</td></tr>';
+      h += '          <tr><td>Gain réalisé maximal G</td><td class="mono highlight">' + (sansReso ? "non mesurable" : nf.gain_dbi != null ? rapNb(nf.gain_dbi, 2) + " dBi" : "—") + '</td></tr>';
+      h += '          <tr><td>Rendement de rayonnement η</td><td class="mono">' + (sansReso ? "non mesurable" : nf.rendement != null ? rapNb(nf.rendement * 100, 1) + " %" : "—") + '</td></tr>';
       h += '          <tr><td>Puissance rayonnée P_rad</td><td class="mono">' + (nf.prad != null ? rapNb(nf.prad, 4) + " W" : "—") + '</td></tr>';
     } else {
       h += '          <tr><td>Champ lointain (NF2FF)</td><td>Non calculé pour cette simulation.</td></tr>';
@@ -868,8 +900,12 @@ function rapGenererMarkdown(d, diags){
 
   // 1. Synthèse
   L.push("## 1. Synthèse & Indicateurs Clés");
+  const sansReso = !!(res && res.resonance && !res.resonance.reelle && res.f0 != null);
   if(res){
-    L.push("- Fréquence de résonance f0 : " + rapFmtHz(res.f0) + (res.ecart_cible_pct != null ? " (" + (res.ecart_cible_pct >= 0 ? "+" : "") + rapNb(res.ecart_cible_pct, 2) + " % vs cible)" : ""));
+    if(sansReso)
+      L.push("- Fréquence de résonance f0 : aucune — le S11 ne descend jamais sous -3 dB (minimum à " + rapFmtHz(res.f0) + ")");
+    else
+      L.push("- Fréquence de résonance f0 : " + rapFmtHz(res.f0) + (res.ecart_cible_pct != null ? " (" + (res.ecart_cible_pct >= 0 ? "+" : "") + rapNb(res.ecart_cible_pct, 2) + " % vs cible)" : ""));
     L.push("- S11 minimal : " + rapNb(res.s11_min_db, 2) + " dB");
     L.push("- Impédance d'entrée Zin(f0) : " + rapNb(res.z0_re, 1) + (res.z0_im >= 0 ? "+" : "−") + rapNb(Math.abs(res.z0_im), 1) + "j Ω");
     if(res.z0_pied_re != null){
@@ -878,8 +914,13 @@ function rapGenererMarkdown(d, diags){
     L.push("- Bande passante (-10 dB) : " + (bp && bp.existe ? rapFmtHz(bp.f1) + " à " + rapFmtHz(bp.f2) + " (" + rapNb(bp.largeur / 1e6, 1) + " MHz, " + rapNb(bp.relative, 2) + " %)" : "Aucune résonance sous -10 dB"));
     if(nf){
       L.push("- Directivité maximale : " + (nf.dmax_dbi != null ? rapNb(nf.dmax_dbi, 2) + " dBi" : "Indéfinie"));
-      if(nf.gain_dbi != null) L.push("- Gain réalisé : " + rapNb(nf.gain_dbi, 2) + " dBi");
-      if(nf.rendement != null) L.push("- Rendement de rayonnement : " + rapNb(nf.rendement * 100, 1) + " %");
+      if(sansReso){
+        if(nf.gain_dbi != null || nf.rendement != null)
+          L.push("- Gain réalisé et rendement : non mesurables (puissance acceptée trop faible)");
+      }else{
+        if(nf.gain_dbi != null) L.push("- Gain réalisé : " + rapNb(nf.gain_dbi, 2) + " dBi");
+        if(nf.rendement != null) L.push("- Rendement de rayonnement : " + rapNb(nf.rendement * 100, 1) + " %");
+      }
     }
   } else {
     L.push("- Simulation non exécutée.");
@@ -922,7 +963,7 @@ function rapGenererMarkdown(d, diags){
   // 5. Ports
   L.push("## 5. Ports & Excitation");
   d.ports.forEach(function(p){
-    L.push("- Port " + p.n + " (" + p.nom + ") : " + (p.excite ? "EXCITÉ" : "CHARGE 50 Ω") + ", type " + p.type + ", position (" + rapNb(p.x, 3) + ", " + rapNb(p.y, 3) + " mm), de " + p.de + " à " + p.a);
+    L.push("- Port " + p.n + " (" + p.nom + ") : " + (p.excite ? "EXCITÉ" : "CHARGE 50 Ω") + ", type " + p.type + ", position (" + rapNb(p.x, 3) + ", " + rapNb(p.y, 3) + " mm)" + (p.broche ? " sur la broche " + p.broche : "") + ", " + ((p.dir === "x" || p.dir === "y") && p.type !== "coaxial" ? "dans le plan de " + p.de + " (" + p.dir + ")" : "de " + p.de + " à " + p.a));
   });
   L.push("");
 

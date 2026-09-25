@@ -17,7 +17,7 @@
 #   ce que l'assistant a devine -- marge d'air, pas de maillage, largeur de
 #   l'impulsion -- y est ecrit en clair, avec la raison en commentaire.
 #
-# Fonctions : generer
+# Fonctions : generer, generer_banc
 # ==========================================================================
 """Traduit un modele normalise en script openEMS autonome.
 
@@ -277,15 +277,23 @@ def _bloc_pieces(m):
     return "".join(t)
 
 
-def generer(m, chemin_openems=None, dossier_sim=None):
-    """Modele normalise -> texte du script. Rien n'est ecrit sur le disque."""
-    b = m["bande"]
-    box = m["boite"]
-    est = m["estimation"]
-    res = m["resolution"]
-    port = m["port"]
-    maille = m["maillage"]
+def _bloc_fils(fils):
+    """La ligne `fils = N` du script, avec ce qu'elle veut dire."""
+    t = ("# LES FILS DE CALCUL (numThreads). A zero, openEMS part d'UN fil et en\n"
+         "# ajoute tant que la vitesse monte : le tatonnement s'arrete souvent a\n"
+         "# deux ou trois, quel que soit le nombre de coeurs. Le FDTD est borne\n"
+         "# par la memoire : au-dela de quelques fils, un de plus ne gagne rien\n"
+         "# et peut meme ralentir. Le banc de vitesse de l'outil mesure le bon\n"
+         "# nombre pour CE poste -- sur un autre, ce n'est plus le meme.\n")
+    if fils > 0:
+        t += "fils      = %d\n\n" % fils
+    else:
+        t += "fils      = 0           # 0 : openEMS choisit\n\n"
+    return t
 
+
+def _preambule_dll(chemin_openems):
+    """La recherche des DLL d'openEMS, en tete de chaque script."""
     candidats = []
     if chemin_openems:
         candidats.append("        r%r," % chemin_openems)
@@ -331,6 +339,19 @@ def generer(m, chemin_openems=None, dossier_sim=None):
         "                    pass\n\n"
         % liste_candidats
     )
+    return dll
+
+
+def generer(m, chemin_openems=None, dossier_sim=None):
+    """Modele normalise -> texte du script. Rien n'est ecrit sur le disque."""
+    b = m["bande"]
+    box = m["boite"]
+    est = m["estimation"]
+    res = m["resolution"]
+    port = m["port"]
+    maille = m["maillage"]
+
+    dll = _preambule_dll(chemin_openems)
 
     sim = dossier_sim or os.path.join("~", "openems_antenne")
 
@@ -378,6 +399,7 @@ def generer(m, chemin_openems=None, dossier_sim=None):
     a("# nom long, et l'assertion tombe sur une AssertionError nue, sans\n")
     a("# message, avant meme que la simulation ne commence.\n")
     a("dossier   = os.path.realpath(os.path.expanduser(r%r))\n\n" % sim)
+    a(_bloc_fils(m.get("fils") or 0))
 
     a("# --------------------------------------------------------------------\n")
     a("# 1. Le solveur\n")
@@ -660,7 +682,7 @@ def generer(m, chemin_openems=None, dossier_sim=None):
     a("CSX.Write2XML(os.path.join(dossier, 'antenne.xml'))\n")
     if pertes.get("actif"):
         a(_bloc_debye(m, pertes))
-    a("FDTD.Run(dossier, verbose=3, cleanup=False)\n\n")
+    a("FDTD.Run(dossier, verbose=3, cleanup=False, numThreads=fils)\n\n")
 
     a("# --------------------------------------------------------------------\n")
     a("# 9. Depouillement\n")
@@ -1133,4 +1155,104 @@ def _bloc_dumps(m):
           % (v, _f(d["x1"]), _f(d["y1"]), _f(d["z1"]),
              _f(d["x2"]), _f(d["y2"]), _f(d["z2"])))
     a("\n")
+    return "".join(t)
+
+
+# ==========================================================================
+# Le banc de vitesse
+# --------------------------------------------------------------------------
+# UNE BOITE VIDE, LE MEME NOMBRE DE PAS, UN NOMBRE DE FILS DIFFERENT A CHAQUE
+# FOIS. Ce qu'on veut savoir n'est pas la vitesse d'une antenne, c'est la
+# FORME de la courbe vitesse / fils sur ce poste : ou elle plafonne, et si
+# elle redescend. Une boite vide la donne en une minute, la ou l'antenne
+# elle-meme demanderait un quart d'heure de maillage par essai.
+#
+# ASSEZ GROSSE POUR SORTIR DES CACHES. Une boite qui tiendrait dans le cache
+# du processeur irait plus vite par cellule que n'importe quelle vraie carte,
+# et son optimum serait celui d'un autre regime : trois millions de cellules
+# pesent trois cents megaoctets, tres loin de tout cache.
+#
+# UN PROCESSUS PAR ESSAI. Chaque essai relance ce meme script avec un nombre
+# de fils en argument : un solveur en C++ qui garderait un etat d'un Run au
+# suivant fausserait le deuxieme essai, et l'on ne verrait pas lequel. Le
+# processus parent ne fait que compter.
+#
+# Les valeurs absolues sont plus hautes que sur une vraie antenne (ni PML, ni
+# materiaux, ni enregistrements) : ce sont les RAPPORTS qui servent.
+# ==========================================================================
+BANC_LIGNES = (180, 180, 90)          # 181 x 181 x 91 lignes : ~2,9 M cellules
+BANC_PAS = 300
+
+
+def generer_banc(fils, chemin_openems=None, dossier_sim=None):
+    """Le script du banc de vitesse, pour la liste de fils donnee."""
+    nx, ny, nz = BANC_LIGNES
+    sim = dossier_sim or os.path.join("~", "openems_banc")
+    t = []
+    a = t.append
+    a('#!/usr/bin/python3\n')
+    a('# -*- coding: utf-8 -*-\n')
+    a('"""Banc de vitesse openEMS : la meme boite vide, un nombre de fils\n')
+    a("different a chaque essai. Produit par l'outil « Antenne openEMS ».\n\n")
+    a("Sans argument, il lance un essai par nombre de fils et ecrit\n")
+    a("resultats.json ; avec un nombre en argument, il fait cet essai-la.\n")
+    a('"""\n\n')
+    a("import json\n")
+    a("import os\n")
+    a("import re\n")
+    a("import subprocess\n")
+    a("import sys\n\n")
+    a(_preambule_dll(chemin_openems))
+    a("FILS    = %r\n" % list(fils))
+    a("LIGNES  = %r\n" % (BANC_LIGNES,))
+    a("PAS     = %d\n" % BANC_PAS)
+    a("dossier = os.path.realpath(os.path.expanduser(r%r))\n\n" % sim)
+    a("\n")
+    a("def essai(n):\n")
+    a("    import numpy as np\n")
+    a("    from CSXCAD import ContinuousStructure\n")
+    a("    from openEMS import openEMS\n")
+    a("    FDTD = openEMS(NrTS=PAS, EndCriteria=0)\n")
+    a("    FDTD.SetGaussExcite(2e9, 1e9)\n")
+    a("    FDTD.SetBoundaryCond(['PEC'] * 6)\n")
+    a("    CSX = ContinuousStructure()\n")
+    a("    FDTD.SetCSX(CSX)\n")
+    a("    mesh = CSX.GetGrid()\n")
+    a("    mesh.SetDeltaUnit(1e-3)\n")
+    a("    mesh.SetLines('x', np.linspace(0, %d, %d))\n" % (nx, nx + 1))
+    a("    mesh.SetLines('y', np.linspace(0, %d, %d))\n" % (ny, ny + 1))
+    a("    mesh.SetLines('z', np.linspace(0, %d, %d))\n" % (nz, nz + 1))
+    a("    FDTD.AddLumpedPort(1, 50, [%d, %d, 0], [%d, %d, 4], 'z', excite=1)\n"
+      % (nx // 2, ny // 2, nx // 2, ny // 2))
+    a("    FDTD.Run(os.path.join(dossier, 'fils_%d' % n), verbose=1,\n")
+    a("             cleanup=True, numThreads=n)\n\n\n")
+    a("def tout():\n")
+    a("    if not os.path.isdir(dossier):\n")
+    a("        os.makedirs(dossier)\n")
+    a("    mesures = {}\n")
+    a("    for n in FILS:\n")
+    a("        p = subprocess.run([sys.executable, '-u', os.path.abspath(__file__),\n")
+    a("                            str(n)], cwd=dossier, stdout=subprocess.PIPE,\n")
+    a("                           stderr=subprocess.STDOUT, text=True,\n")
+    a("                           errors='replace')\n")
+    a("        # « Speed: 243.1 MCells/s » : la vitesse de la boucle FDTD seule,\n")
+    a("        # montage du maillage exclu.\n")
+    a("        m = re.findall(r'Speed:\s*([\d.]+)\s*MCells/s', p.stdout)\n")
+    a("        if p.returncode != 0 or not m:\n")
+    a("            print('Banc : %d fil(s) -> echec' % n)\n")
+    a("            print(p.stdout[-2000:])\n")
+    a("            continue\n")
+    a("        mesures[n] = float(m[-1])\n")
+    a("        print('Banc : %d fil(s) -> %.1f MCells/s' % (n, mesures[n]))\n")
+    a("    if not mesures:\n")
+    a("        sys.exit(\"Aucun essai n'a abouti.\")\n")
+    a("    with open(os.path.join(dossier, 'resultats.json'), 'w') as f:\n")
+    a("        json.dump({'banc': {str(k): v for k, v in mesures.items()},\n")
+    a("                   'cellules': %d, 'pas': PAS}, f, indent=1)\n\n\n"
+      % ((nx) * (ny) * (nz)))
+    a("if __name__ == '__main__':\n")
+    a("    if len(sys.argv) > 1:\n")
+    a("        essai(int(sys.argv[1]))\n")
+    a("    else:\n")
+    a("        tout()\n")
     return "".join(t)

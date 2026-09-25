@@ -26,7 +26,8 @@
 #   passage des resultats par un fichier JSON. C'est un prix derisoire devant
 #   une simulation qui dure des minutes.
 #
-# Fonctions : etat, lancer, lancer_balayage, lancer_tableau_s, journal,
+# Fonctions : etat, lancer, lancer_balayage, lancer_tableau_s, lancer_banc,
+#            fils_a_essayer, journal,
 #            resultat, arreter, nettoyer, definir_racine_calculs,
 #            identifiant_neuf, archiver,
 #            dossier_de
@@ -231,6 +232,12 @@ _RE_PAS = re.compile(r"Timestep:?\s+(\d+)")
 # quand on la regarde le plus.
 _RE_ENERGIE = re.compile(r"Energy:\s*~?([\d.eE+-]+)\s*\(\s*(-?\s*[\d.]+)\s*dB")
 _RE_VITESSE = re.compile(r"Speed:\s*([\d.]+)\s*MC/s")
+# « Multithreaded engine using 3 threads. » -- une ligne par palier quand
+# openEMS tatonne (reglage a 0), une seule quand le nombre est impose. La
+# derniere dit avec combien de fils le calcul tourne vraiment.
+_RE_FILS = re.compile(r"Multithreaded engine using\s+(\d+)\s+thread")
+# La ligne que le script du banc de vitesse ecrit apres chaque essai.
+_RE_BANC = re.compile(r"Banc : (\d+) fil\(s\) -> ([\d.]+) MCells/s")
 
 
 def _ordonnee(points, x):
@@ -268,7 +275,8 @@ class Tache(object):
         self.etat = "prepare"          # prepare | calcule | fini | echoue | arrete
         self.journal = []
         self.avancement = {"pas": 0, "pourcent": 0.0, "energie_dB": None,
-                           "vitesse": 0.0, "restant_s": None, "cause": ""}
+                           "vitesse": 0.0, "restant_s": None, "cause": "",
+                           "fils": 0}
         # L'historique (instant, pas, energie en dB) des dernieres lignes
         # d'avancement. Il sert a estimer le temps restant -- voir `_reste`.
         self._hist = []
@@ -325,6 +333,9 @@ class Tache(object):
                     del self._brute[:200]
             except ValueError:
                 pass
+        m = _RE_FILS.search(ligne)
+        if m:
+            self.avancement["fils"] = int(m.group(1))
         m = _RE_VITESSE.search(ligne)
         if m:
             try:
@@ -528,7 +539,10 @@ class Tache(object):
         t = sorted(v)
         n = len(t)
         med = t[n // 2] if n % 2 else 0.5 * (t[n // 2 - 1] + t[n // 2])
-        openems_modele.noter_debit(med)
+        # AVEC LES FILS QUI L'ONT DONNEE : c'est ce qui permet de ramener
+        # cette vitesse a un autre reglage (voir openems_modele.debit_suppose).
+        openems_modele.noter_debit(med, self.avancement.get("fils")
+                                   or self.modele.get("fils") or 0)
 
     def _repartir_energie(self):
         """La courbe d'energie repart a zero : elle decrit UNE simulation.
@@ -831,7 +845,7 @@ class TacheBalayage(Tache):
             self.modele = m
             self.avancement = {"pas": 0, "pourcent": 0.0, "energie_dB": None,
                                "vitesse": 0.0, "point": i + 1,
-                               "points": len(self.points)}
+                               "points": len(self.points), "fils": 0}
             self._repartir_energie()
             pt["etat"] = "calcule"
             self._ajouter("")
@@ -1148,6 +1162,75 @@ def _reciprocite(s):
 
 
 # ==========================================================================
+# Le banc de vitesse
+# ==========================================================================
+# Une tache comme les autres -- un script, un journal, un resultats.json --
+# dont le « resultat » est une table fils -> MC/s. Voir
+# openems_script.generer_banc pour ce qu'elle fait tourner, et
+# openems_modele « Les fils de calcul » pour ce qu'on en fait.
+class TacheBanc(Tache):
+    """Le banc de vitesse : la meme boite vide, un essai par nombre de fils."""
+
+    def __init__(self, ident, dossier, fils):
+        super().__init__(ident, dossier, {})
+        self.essais = list(fils)
+        self.mesures = {}
+        self.faits = 0
+
+    def _ajouter(self, ligne):
+        super()._ajouter(ligne)
+        if not ligne.startswith("Banc : "):
+            return
+        self.faits += 1
+        m = _RE_BANC.search(ligne)
+        if m:
+            f, v = int(m.group(1)), float(m.group(2))
+            self.mesures[f] = v
+            self.avancement["fils"] = f
+            self.avancement["vitesse"] = v
+        self.avancement["pourcent"] = (100.0 * self.faits
+                                       / max(1, len(self.essais)))
+
+    def vue(self, depuis=0):
+        out = super().vue(depuis)
+        out["genre"] = "banc"
+        out["banc"] = {"essais": self.essais,
+                       "mesures": {str(k): v for k, v in self.mesures.items()}}
+        return out
+
+    def diagnostic_energie(self):
+        # Une boite vide fermee en PEC n'a pas d'energie qui descende : il
+        # n'y a rien a diagnostiquer, et le message des antennes serait faux.
+        return None
+
+    def _noter_debit(self):
+        """Ce que le banc a appris du poste : la table entiere.
+
+        LE DEBIT, LUI, N'EST PAS NOTE. Une boite vide va bien plus vite
+        qu'une antenne -- ni PML, ni materiaux, ni enregistrements : 182 MC/s
+        contre 20 pour un patch sur le meme poste, a huit fils --, et la
+        melanger aux vrais calculs ferait annoncer des durees d'antenne au
+        rythme d'une boite vide. Seuls les RAPPORTS servent.
+        """
+        r = self.resultat if isinstance(self.resultat, dict) else {}
+        openems_modele.noter_banc(r.get("banc") or {})
+
+
+def fils_a_essayer(coeurs=None):
+    """Les nombres de fils que le banc essaie sur ce poste.
+
+    PAS TOUS : de un a trente-deux fils, cela ferait trente-deux essais pour
+    une courbe qui plafonne vers quatre ou huit. On prend les paliers
+    usuels, et le nombre de coeurs logiques en dernier -- c'est lui qu'on
+    serait tente de mettre, et c'est lui qu'il faut avoir mesure pour le
+    deconseiller.
+    """
+    n = coeurs or os.cpu_count() or 4
+    paliers = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64]
+    return sorted(set([p for p in paliers if p < n] + [n]))
+
+
+# ==========================================================================
 # Le registre des taches
 # ==========================================================================
 _TACHES = {}
@@ -1373,6 +1456,7 @@ def _exiger_solveur():
 def lancer(modele):
     """Demarre une simulation. Rend la vue initiale de la tache."""
     _exiger_solveur()
+    _exiger_libre()
     _oublier_les_vieilles()
     ident, dossier = _dossier_neuf()
     script = openems_script.generer(modele, chemin_openems=dossier_openems(),
@@ -1392,6 +1476,7 @@ def lancer_balayage(bal):
     Ici on ne fait plus que les faire tourner.
     """
     _exiger_solveur()
+    _exiger_libre()
     _oublier_les_vieilles()
     ident, dossier = _dossier_neuf()
     tache = TacheBalayage(ident, dossier, bal)
@@ -1408,12 +1493,65 @@ def lancer_tableau_s(ts):
     les N colonnes et refuse l'ensemble si l'une d'elles ne tient pas debout.
     """
     _exiger_solveur()
+    _exiger_libre()
     _oublier_les_vieilles()
     ident, dossier = _dossier_neuf()
     tache = TacheTableauS(ident, dossier, ts)
     with _VERROU:
         _TACHES[ident] = tache
     tache.demarrer_tout()
+    return tache.vue()
+
+
+def _en_cours():
+    """La tache qui calcule en ce moment, ou None."""
+    with _VERROU:
+        for t in _TACHES.values():
+            if t.etat in ("prepare", "calcule"):
+                return t
+    return None
+
+
+def _exiger_libre(pour_banc=False):
+    """Refuse de superposer un banc et un calcul.
+
+    UN BANC MESURE LE POSTE, ET UN POSTE OCCUPE SE MESURE MAL. Lance pendant
+    une simulation, il partagerait la memoire avec elle et trouverait un
+    optimum qui n'est pas le bon ; une simulation lancee pendant le banc
+    fausserait tous les essais qui restent. Deux simulations ensemble, en
+    revanche, restent permises comme avant : c'est un choix de l'utilisateur.
+    """
+    t = _en_cours()
+    if t is None:
+        return
+    if pour_banc:
+        raise openems_modele.ErreurModele(
+            "Un calcul tourne deja : le banc de vitesse le mesurerait en meme "
+            "temps que le poste.",
+            "Attendez la fin du calcul, ou arretez-le, puis relancez le banc.")
+    if isinstance(t, TacheBanc):
+        raise openems_modele.ErreurModele(
+            "Le banc de vitesse tourne : une simulation lancee maintenant "
+            "fausserait ses mesures.",
+            "Il dure une a deux minutes. Attendez sa fin, ou arretez-le.")
+
+
+def lancer_banc():
+    """Demarre le banc de vitesse. Rend la vue initiale de la tache."""
+    _exiger_solveur()
+    _exiger_libre(pour_banc=True)
+    _oublier_les_vieilles()
+    ident = identifiant_neuf()
+    # DANS LE DOSSIER TEMPORAIRE, jamais dans le projet : ce ne sont pas des
+    # calculs de l'antenne, et ils n'ont rien a faire dans sa liste.
+    dossier = os.path.join(_base_temporaire(), "banc_" + ident)
+    os.makedirs(dossier, exist_ok=True)
+    fils = fils_a_essayer()
+    tache = TacheBanc(ident, dossier, fils)
+    with _VERROU:
+        _TACHES[ident] = tache
+    tache.demarrer(openems_script.generer_banc(
+        fils, chemin_openems=dossier_openems(), dossier_sim=dossier))
     return tache.vue()
 
 

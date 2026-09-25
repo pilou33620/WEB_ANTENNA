@@ -217,11 +217,13 @@ function prjAffichage(){
 
 /* Le document de la carte, tel qu'il est arrivé du serveur. Même nettoyage
    que l'export .json de 06-ouverture.js : les champs calculés à l'affichage
-   se recalculent en une passe, et les garder doublerait le fichier. */
+   se recalculent en une passe, et les garder doublerait le fichier. `_p`
+   est un Path2D : JSON n'en garde qu'un `{}`, qui ferait planter le survol
+   du plan une fois le projet rouvert. */
 function prjCarte(){
   if(!V.modele)return null;
   return JSON.parse(JSON.stringify(V.modele,function(cle,valeur){
-    return (cle==="boite"||cle==="_b")?undefined:valeur;
+    return (cle==="boite"||cle==="_b"||cle==="_p")?undefined:valeur;
   }));
 }
 
