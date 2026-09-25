@@ -708,6 +708,20 @@ function antAngles(R){
   });
 }
 
+/* UN QUART DE TOUR AUTOUR DE L'AXE FIXE, ET NON +90 SUR UN ANGLE. Les trois
+   angles se composent Rz·Ry·Rx : ajouter 90° à X tournait donc la pièce
+   autour de SON axe X — déjà emporté par la rotation Z —, et ajouter 90° à Y
+   autour d'un axe qui n'était ni l'un ni l'autre. Après deux clics, « ↻ X »
+   tournait autour de Y à l'écran. Ici le quart de tour s'applique APRÈS la
+   rotation existante (Q·R), autour de l'axe X, Y ou Z qu'on voit dans la vue,
+   et les trois angles sont relus de la matrice obtenue. */
+function antQuartDeTour(rotation,axe){
+  const q=[0,0,0]; q[axe]=90;
+  const Q=antRotation(q), R=antRotation(rotation);
+  const QR=[0,1,2].map(i=>[0,1,2].map(j=>Q[i][0]*R[0][j]+Q[i][1]*R[1][j]+Q[i][2]*R[2][j]));
+  return antAngles(QR);
+}
+
 /* La position et la rotation d'une pièce VUES DE LA CARTE : ce que reçoit le
    serveur. Rb^T·Rp pour la rotation ; pour la position, l'image du centre
    de la pièce ramenée dans le repère de la carte. */
@@ -1235,7 +1249,7 @@ function antPiecesLier(box){
     el.onclick=function(){
       const r=antCarteRepere(), k=+el.dataset.carteTourner;
       if(typeof plMemoriser==="function")plMemoriser(ANT_CARTE_PIECE);
-      r.rotation[k]=((Math.round(r.rotation[k])+90)%360+360)%360;
+      r.rotation=antQuartDeTour(r.rotation,k);
       antPiecesRafraichir(); antMaj(true);
       if(ANT.vue==="3d"&&typeof ant3dMaj==="function")ant3dMaj();
     };
@@ -1279,7 +1293,8 @@ function antPiecesLier(box){
       const p=ANT.pieces[+el.dataset.p];
       if(!p)return;
       const k=+el.dataset.pTourner;
-      p.rotation[k]=((Math.round(p.rotation[k])+90)%360+360)%360;
+      if(typeof plMemoriser==="function")plMemoriser(p);
+      p.rotation=antQuartDeTour(p.rotation,k);
       antPiecesRafraichir(); antMaj(true);
     };
   });
@@ -1390,7 +1405,16 @@ function antPieces3d(m,racine,cx,cy,cz){
   for(const sp of (m.pieces||[])){
     const p=ANT.pieces.find(q=>q.id===sp.id);
     if(!p)continue;
-    const M=new THREE.Matrix4().fromArray(sp.matrice);
+    /* LA MATRICE DU SERVEUR PEUT ÊTRE EN RETARD D'UN GESTE. Tourner ou
+       déplacer la carte redessine tout de suite avec la NOUVELLE carte, alors
+       que la réponse du serveur — la pièce vue de la carte — date encore de
+       l'ANCIENNE : B_neuf·M_vieux faisait tourner le boîtier avec la carte,
+       à l'envers, jusqu'à la réponse. Tant qu'elle ne correspond pas à la
+       place demandée, on prend celle calculée ici, même formule. */
+    const attendu=antPieceMatriceCarte(p);
+    const echelle=Math.max(1,...attendu.map(Math.abs));
+    const aJour=sp.matrice.length===16&&sp.matrice.every((v,i)=>Math.abs(v-attendu[i])<=1e-5*echelle);
+    const M=new THREE.Matrix4().fromArray(aJour?sp.matrice:attendu);
     /* Le serveur a placé la pièce DANS LE REPÈRE DE LA CARTE ; la carte est
        elle-même placée dans l'assemblage : B·M. */
     M.premultiply(new THREE.Matrix4().fromArray(antCarteMatrice()));

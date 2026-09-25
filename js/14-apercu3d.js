@@ -365,8 +365,10 @@ function ant3dTaille(){
 }
 
 function ant3dDessiner(){
-  if(ANT3D.pret&&ANT3D.scene&&ANT3D.cam)
-    ANT3D.rendu.render(ANT3D.scene,ANT3D.cam);
+  if(!(ANT3D.pret&&ANT3D.scene&&ANT3D.cam))return;
+  /* Le manipulateur garde la même taille à l'écran quel que soit le zoom. */
+  if(typeof antPlaceAvantRendu==="function")antPlaceAvantRendu();
+  ANT3D.rendu.render(ANT3D.scene,ANT3D.cam);
 }
 
 /* --------------------------------------------------------------------------

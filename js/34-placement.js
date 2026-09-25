@@ -29,7 +29,8 @@
                 viser le milieu d'un disque donne son centre.
 
    Le clavier, pièce choisie et vue 3D ouverte : flèches (Maj : ×10), Page
-   haut/bas pour Z, G pour déplacer, X/Y/Z pour l'axe, Échap pour lâcher,
+   haut/bas pour Z, G pour déplacer, X/Y/Z pour l'axe, M pour le manipulateur
+   (flèches et anneaux, voir plus bas), Échap pour lâcher,
    Ctrl+Z pour annuler.
    ============================================================================= */
 
@@ -39,6 +40,10 @@ const PL={
   mode:"choisir",      // choisir | deplacer | accrocher
   axe:"xy",            // xy | x | y | z
   pas:0,               // pas de grille, en unité de la carte ; 0 = libre
+  manip:true,          // le manipulateur : trois flèches et trois anneaux
+  pasAngle:15,         // pas des anneaux, en degrés ; 0 = libre
+  gizmo:null,          // son groupe dans la scène
+  survolManip:null,    // la poignée sous le curseur
   acc:"ff",            // pp : point → point · ff : face → face · pf : point → face
   orienter:true,       // face → face : tourner la pièce pour mettre les faces en regard
   centrer:false,       // face → face : amener aussi le centre sur le centre
@@ -518,15 +523,16 @@ function plGlisser(e){
   ANT3D.cam.updateMatrixWorld();
   PL_RAYON.setFromCamera({x:n.x,y:n.y},ANT3D.cam);
   const o=PL_RAYON.ray.origin, d=PL_RAYON.ray.direction, h=g.h;
+  const axe=g.axe||PL.axe;
   let delta=[0,0,0];
-  if(PL.axe==="xy"){
+  if(axe==="xy"){
     if(Math.abs(d.z)<1e-6)return;
     const s=(h.z-o.z)/d.z;
     if(s<0)return;
     delta=[o.x+s*d.x-h.x, o.y+s*d.y-h.y, 0];
   }else{
     /* Le point de l'axe le plus proche du rayon de la souris. */
-    const u=new THREE.Vector3(PL.axe==="x"?1:0,PL.axe==="y"?1:0,PL.axe==="z"?1:0);
+    const u=new THREE.Vector3(axe==="x"?1:0,axe==="y"?1:0,axe==="z"?1:0);
     const w0=new THREE.Vector3().subVectors(h,o);
     const b=u.dot(d), den=1-b*b;
     if(Math.abs(den)<1e-6)return;
@@ -539,6 +545,7 @@ function plGlisser(e){
   g.pos=pos;
   const T=new THREE.Matrix4().makeTranslation(reel[0],reel[1],reel[2]);
   for(const x of g.maillages)x.o.matrix.copy(x.m0).premultiply(T);
+  if(PL.gizmo&&g.gizmo0)PL.gizmo.position.copy(g.gizmo0).add(new THREE.Vector3(reel[0],reel[1],reel[2]));
   ant3dDessiner();
   plAide("Δ "+["x","y","z"].map((a,i)=>a+" "+(reel[i]>=0?"+":"")+aNb(reel[i]/k,3)).join(" · ")+
     " "+antUnite()+" — lâcher pour poser");
@@ -548,9 +555,221 @@ function plGlisserFin(){
   const g=PL.glisse;
   PL.glisse=null;
   if(!g)return;
+  if(g.rot){ plTournerFin(g); return; }
   if(g.pos.every((v,i)=>v===g.pos0[i])){ antPlaceBarre(); return; }
   plMemoriser(g.p);
   g.p.position=g.pos;
+  plApres();
+}
+
+/* ==========================================================================
+   Le manipulateur
+   --------------------------------------------------------------------------
+   TROIS FLÈCHES ET TROIS ANNEAUX, au centre de la pièce choisie, en mode
+   Déplacer. Une flèche fait glisser la pièce le long de son axe ; un anneau
+   la fait tourner autour de l'axe qu'il entoure — X rouge, Y vert, Z bleu,
+   les axes FIXES de la vue, comme les boutons ↻ de la fiche.
+
+   LE PIVOT EST LE CENTRE DE LA PIÈCE, et c'est ce qui rend l'anneau simple :
+   la pièce est placée par p' = R·(p − c) + c + t, son centre visible est
+   donc c + t. Tourner de Q autour de ce point donne Q·R·(p − c) + c + t : la
+   position ne change pas, seule la rotation devient Q·R.
+
+   Le manipulateur est dessiné par-dessus tout (sans test de profondeur) :
+   la pièce est souvent DANS un boîtier, et une poignée cachée ne sert à rien.
+   Sa taille est fixe à l'écran (voir `antPlaceAvantRendu`).
+   ========================================================================== */
+const PL_AXES=[{a:"x", v:[1,0,0], coul:0xe8443a},
+               {a:"y", v:[0,1,0], coul:0x4cc38a},
+               {a:"z", v:[0,0,1], coul:0x3fa0ea}];
+
+/* Le centre visible de la pièce, en mm dans l'assemblage : c + t. */
+function plPivot(p){
+  const c=antPieceCentre(p), k=antKmm();
+  return new THREE.Vector3(c[0]+p.position[0]*k, c[1]+p.position[1]*k, c[2]+p.position[2]*k);
+}
+
+function plManipCreer(){
+  const g=new THREE.Group();
+  g.renderOrder=20;
+  const trait=function(geo,coul){
+    return new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:coul, depthTest:false,
+      depthWrite:false, transparent:true, opacity:0.95}));
+  };
+  /* Les zones de prise, plus épaisses que ce qu'on voit : une poignée de
+     deux pixels ne se saisit pas. Invisibles, mais touchées par le rayon. */
+  const prise=function(geo){
+    return new THREE.Mesh(geo,new THREE.MeshBasicMaterial({transparent:true, opacity:0,
+      depthTest:false, depthWrite:false, colorWrite:false}));
+  };
+  const haut=new THREE.Vector3(0,1,0);
+  for(const ax of PL_AXES){
+    const v=new THREE.Vector3(...ax.v);
+    const qFleche=new THREE.Quaternion().setFromUnitVectors(haut,v);
+    /* La flèche : unité 1 = la taille du manipulateur. */
+    const tige=trait(new THREE.CylinderGeometry(0.014,0.014,0.8,8).translate(0,0.4,0),ax.coul);
+    const cone=trait(new THREE.ConeGeometry(0.055,0.2,16).translate(0,0.9,0),ax.coul);
+    const pf=prise(new THREE.CylinderGeometry(0.07,0.07,1,8).translate(0,0.5,0));
+    /* L'anneau : un tore dans le plan perpendiculaire à l'axe. */
+    const qAnneau=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1),v);
+    const anneau=trait(new THREE.TorusGeometry(0.62,0.012,8,72),ax.coul);
+    const pa=prise(new THREE.TorusGeometry(0.62,0.06,8,72));
+    for(const o of [tige,cone,pf])o.quaternion.copy(qFleche);
+    for(const o of [anneau,pa])o.quaternion.copy(qAnneau);
+    for(const o of [tige,cone,anneau,pf,pa])o.renderOrder=20;
+    pf.userData.poignee={genre:"fleche", axe:ax.a, vus:[tige,cone], coul:ax.coul};
+    pa.userData.poignee={genre:"anneau", axe:ax.a, vus:[anneau], coul:ax.coul};
+    g.add(tige,cone,anneau,pf,pa);
+  }
+  /* Une bille au centre : le pivot, là où la pièce tourne. */
+  const bille=trait(new THREE.SphereGeometry(0.035,12,8),0xf2c744);
+  bille.renderOrder=20;
+  g.add(bille);
+  return g;
+}
+
+/* Montrer, cacher, poser le manipulateur là où est la pièce choisie. */
+function plManip(){
+  if(!ANT3D.pret||typeof THREE==="undefined")return;
+  const p=plPiece(PL.sel);
+  const voir=PL.manip&&PL.mode==="deplacer"&&!!p&&ANT.vue==="3d";
+  if(!voir&&!PL.gizmo)return;
+  if(!PL.gizmo){ PL.gizmo=plManipCreer(); ANT3D.scene.add(PL.gizmo); }
+  if(PL.gizmo.parent!==ANT3D.scene)ANT3D.scene.add(PL.gizmo);
+  const avant=PL.gizmo.visible;
+  PL.gizmo.visible=voir;
+  if(voir)PL.gizmo.position.copy(plScene(plPivot(p)));
+  else PL.survolManip=null;
+  plManipCouleurs();
+  if(avant||voir)ant3dDessiner();
+}
+
+function plManipCouleurs(){
+  if(!PL.gizmo)return;
+  const actif=(PL.glisse&&PL.glisse.poignee)||PL.survolManip;
+  PL.gizmo.traverse(function(o){
+    const h=o.userData&&o.userData.poignee;
+    if(!h)return;
+    for(const v of h.vus)v.material.color.setHex(h===actif?0xf2c744:h.coul);
+  });
+}
+
+/* Taille constante à l'écran : environ un septième de la hauteur de vue. */
+function antPlaceAvantRendu(){
+  const g=PL.gizmo;
+  if(!g||!g.visible)return;
+  const cam=ANT3D.cam;
+  const d=cam.position.distanceTo(g.position);
+  const s=Math.max(1e-6,d*Math.tan(cam.fov*Math.PI/360)*0.3);
+  g.scale.setScalar(s);
+}
+
+/* La poignée sous le curseur, ou rien. */
+function plManipViser(e){
+  const g=PL.gizmo;
+  if(!g||!g.visible||!PL_RAYON)return null;
+  const n=plNdc(e);
+  ANT3D.cam.updateMatrixWorld();
+  antPlaceAvantRendu();
+  g.updateMatrixWorld(true);
+  PL_RAYON.setFromCamera({x:n.x,y:n.y},ANT3D.cam);
+  const prises=g.children.filter(o=>o.userData.poignee);
+  const hits=PL_RAYON.intersectObjects(prises,false);
+  /* Une flèche passe devant son anneau au croisement : la flèche l'emporte. */
+  const f=hits.find(h=>h.object.userData.poignee.genre==="fleche");
+  const h=f||hits[0];
+  return h?Object.assign({point:h.point},h.object.userData.poignee,{objet:h.object}):null;
+}
+
+function plManipDebut(e){
+  if(!PL.manip)return false;
+  const h=plManipViser(e);
+  if(!h)return false;
+  const p=plPiece(PL.sel);
+  if(!p)return false;
+  const maillages=[];
+  if(PL.sel==="carte")maillages.push({o:ANT3D.racine, m0:ANT3D.racine.matrix.clone()});
+  else ANT3D.monde.traverse(function(o){
+    if(o.isMesh&&o.userData.piece===PL.sel)maillages.push({o:o, m0:o.matrix.clone()});
+  });
+  const base={p:p, maillages:maillages, pos0:p.position.slice(), pos:p.position.slice(),
+              gizmo0:PL.gizmo.position.clone()};
+  /* La poignée garde sa couleur « prise » pendant tout le geste. */
+  const poignee=h.objet.userData.poignee;
+  if(h.genre==="fleche"){
+    PL.glisse=Object.assign(base,{h:h.point.clone(), axe:h.axe, poignee:poignee});
+  }else{
+    const u=new THREE.Vector3(...PL_AXES.find(x=>x.a===h.axe).v);
+    const vue=new THREE.Vector3().subVectors(ANT3D.cam.position,PL.gizmo.position).normalize();
+    PL.glisse=Object.assign(base,{rot:true, axe:h.axe, u:u, poignee:poignee, angle:0,
+      /* Anneau vu de face ou de biais : l'angle se mesure DANS SON PLAN, et
+         un quart de tour à la souris est un quart de tour de la pièce. Vu
+         par la tranche, ce plan se réduit à un trait : on prend alors
+         l'angle à l'écran, faute de mieux. */
+      dansPlan:Math.abs(vue.dot(u))>0.2, rot0:p.rotation.slice()});
+    PL.glisse.a0=plAngleAnneau(e,PL.glisse);
+  }
+  plManipCouleurs();
+  document.getElementById("vue3d").style.cursor="grabbing";
+  return true;
+}
+
+/* L'angle du curseur autour du pivot, compté positivement autour de l'axe
+   de l'anneau (règle de la main droite). */
+function plAngleAnneau(e,g){
+  const C=PL.gizmo.position, u=g.u;
+  const n=plNdc(e);
+  if(g.dansPlan){
+    ANT3D.cam.updateMatrixWorld();
+    PL_RAYON.setFromCamera({x:n.x,y:n.y},ANT3D.cam);
+    const p=PL_RAYON.ray.intersectPlane(new THREE.Plane().setFromNormalAndCoplanarPoint(u,C),
+                                        new THREE.Vector3());
+    if(p){
+      /* Une base du plan de l'anneau : e1, puis e2 = u × e1. */
+      const e1=new THREE.Vector3(u.z,u.x,u.y);
+      const e2=new THREE.Vector3().crossVectors(u,e1);
+      const v=p.sub(C);
+      return Math.atan2(v.dot(e2),v.dot(e1));
+    }
+  }
+  /* À l'écran, le sens trigonométrique est positif autour de l'axe qui
+     POINTE VERS NOUS ; s'il s'éloigne, le sens s'inverse. */
+  const c=C.clone().project(ANT3D.cam);
+  const cx=(c.x+1)/2*n.w, cy=(1-c.y)/2*n.h;
+  const versNous=u.dot(new THREE.Vector3().subVectors(ANT3D.cam.position,C))>=0;
+  return Math.atan2(-(n.py-cy),n.px-cx)*(versNous?1:-1);
+}
+
+function plTourner(e){
+  const g=PL.glisse;
+  const C=PL.gizmo.position, u=g.u;
+  /* Déroulé : on cumule les petits pas, pour suivre les tours complets au
+     lieu de sauter de +180° à −180°. */
+  const a=plAngleAnneau(e,g), d=a-g.a0;
+  g.a0=a;
+  g.brut=(g.brut||0)+Math.atan2(Math.sin(d),Math.cos(d));
+  let deg=g.brut*180/Math.PI;
+  const pas=e.shiftKey?1:PL.pasAngle;
+  if(pas>0)deg=Math.round(deg/pas)*pas;
+  g.angle=deg;
+  const Q=new THREE.Matrix4().makeRotationAxis(u,deg*Math.PI/180);
+  const T=new THREE.Matrix4().makeTranslation(C.x,C.y,C.z).multiply(Q)
+    .multiply(new THREE.Matrix4().makeTranslation(-C.x,-C.y,-C.z));
+  for(const x of g.maillages)x.o.matrix.copy(x.m0).premultiply(T);
+  ant3dDessiner();
+  plAide("rotation autour de "+g.axe.toUpperCase()+" : "+(deg>=0?"+":"")+aNb(deg,1)+"°"+
+    (pas>0?" (pas "+pas+"°, Maj : 1°)":"")+" — lâcher pour poser");
+}
+
+function plTournerFin(g){
+  plManipCouleurs();
+  const deg=((g.angle%360)+360)%360;
+  if(!deg){ plManip(); antPlaceBarre(); return; }
+  const q=[0,0,0]; q["xyz".indexOf(g.axe)]=g.angle;
+  const Q=antRotation(q), R=antRotation(g.rot0);
+  const QR=[0,1,2].map(i=>[0,1,2].map(j=>Q[i][0]*R[0][j]+Q[i][1]*R[1][j]+Q[i][2]*R[2][j]));
+  plMemoriser(g.p);
+  g.p.rotation=antAngles(QR);
   plApres();
 }
 
@@ -561,17 +780,20 @@ function antPlacePointeur(quoi,e){
   if(!ANT3D.pret||!V.modele)return false;
   if(quoi==="down"){
     if(e.button!==0)return false;
-    if(PL.mode==="deplacer"&&PL.sel)return plGlisserDebut(e);
+    if(PL.mode==="deplacer"&&PL.sel)return plManipDebut(e)||plGlisserDebut(e);
     return false;
   }
-  if(quoi==="glisse"){ if(PL.glisse)plGlisser(e); return true; }
+  if(quoi==="glisse"){ if(PL.glisse)(PL.glisse.rot?plTourner:plGlisser)(e); return true; }
   if(quoi==="up"){ plGlisserFin(); return true; }
   if(quoi==="survol"){
     const cv=document.getElementById("vue3d");
     if(PL.mode==="deplacer"){
-      /* Le curseur dit ce que fera le bouton : saisir la pièce, ou tourner. */
-      const sur=!!PL.sel&&plViser(e,o=>plIdDe(o)===PL.sel).length>0;
-      cv.style.cursor=sur?"move":"";
+      /* Le curseur dit ce que fera le bouton : saisir une poignée, la
+         pièce, ou tourner la vue. */
+      const h=plManipViser(e);
+      if(h!==PL.survolManip){ PL.survolManip=h; plManipCouleurs(); ant3dDessiner(); }
+      const sur=!!h||(!!PL.sel&&plViser(e,o=>plIdDe(o)===PL.sel).length>0);
+      cv.style.cursor=h?"grab":(sur?"move":"");
       return false;
     }
     cv.style.cursor=(PL.mode==="accrocher")?"crosshair":"";
@@ -671,6 +893,7 @@ window.addEventListener("keydown",function(e){
   if(!p)return;
   const kl=String(k).toLowerCase();
   if(kl==="g"){ prendre(); PL.mode=(PL.mode==="deplacer")?"choisir":"deplacer"; antPlaceBarre(); return; }
+  if(kl==="m"){ prendre(); PL.manip=!PL.manip; PL.mode="deplacer"; antPlaceBarre(); return; }
   if(kl==="x"||kl==="y"||kl==="z"){
     prendre(); PL.axe=(PL.axe===kl)?"xy":kl; PL.mode="deplacer"; antPlaceBarre(); return;
   }
@@ -702,6 +925,7 @@ function antPlaceBarre(){
   if(!montrer){
     if(b)b.hidden=true;
     if(PL.mode==="accrocher"||PL.source){ PL.source=null; PL.survol=null; plMarques(); }
+    plManip();
     return;
   }
   if(!b){
@@ -729,7 +953,12 @@ function antPlaceBarre(){
         bt("data-pl-axe","z","Z","Glisser le long de Z (touche Z)",PL.axe==="z")+
         '<label class="pl-pas">pas <select id="plPas">'+
         [0,0.01,0.1,0.5,1,5].map(v=>'<option value="'+v+'"'+(PL.pas===v?" selected":"")+'>'+
-          (v?mdlNb(v)+" "+antUnite():"libre")+'</option>').join("")+'</select></label>';
+          (v?mdlNb(v)+" "+antUnite():"libre")+'</option>').join("")+'</select></label>'+
+        '<span class="vsep"></span>'+
+        bt("data-pl-manip","1","✥ flèches + anneaux","Le manipulateur : flèches pour glisser le long d'un axe, anneaux pour tourner autour (touche M)",PL.manip)+
+        (PL.manip?'<label class="pl-pas" title="Pas de rotation des anneaux ; Maj pendant le geste : 1°">pas ∠ <select id="plPasAngle">'+
+          [0,1,5,15,45,90].map(v=>'<option value="'+v+'"'+(PL.pasAngle===v?" selected":"")+'>'+
+            (v?v+"°":"libre")+'</option>').join("")+'</select></label>':"");
     }else if(PL.mode==="accrocher"){
       outils=bt("data-pl-acc","ff","face → face","Une face de la pièce contre une face de la cible",PL.acc==="ff")+
         bt("data-pl-acc","pp","point → point","Un point de la pièce sur un point de la cible",PL.acc==="pp")+
@@ -784,12 +1013,14 @@ function antPlaceBarre(){
     PL.mode=el.dataset.plMode; PL.source=null; PL.survol=null; plMarques(); ant3dDessiner(); antPlaceBarre();
   });
   b.querySelectorAll("[data-pl-axe]").forEach(el=>el.onclick=function(){ PL.axe=el.dataset.plAxe; antPlaceBarre(); });
+  b.querySelectorAll("[data-pl-manip]").forEach(el=>el.onclick=function(){ PL.manip=!PL.manip; antPlaceBarre(); });
   b.querySelectorAll("[data-pl-acc]").forEach(el=>el.onclick=function(){
     PL.acc=el.dataset.plAcc; PL.source=null; PL.survol=null; plMarques(); ant3dDessiner(); antPlaceBarre();
   });
   b.querySelectorAll("[data-pl-rendu]").forEach(el=>el.onclick=function(){ PL.rendu=el.dataset.plRendu; refaire(); });
   const lier=function(sel,ev,fn){ const el=q(sel); if(el)el[ev]=function(){ fn(el); }; };
   lier("#plPas","onchange",el=>{ PL.pas=+el.value||0; antPlaceBarre(); });
+  lier("#plPasAngle","onchange",el=>{ PL.pasAngle=+el.value||0; antPlaceBarre(); });
   lier("#plOrienter","onchange",el=>{ PL.orienter=el.checked; });
   lier("#plCentrer","onchange",el=>{ PL.centrer=el.checked; });
   lier("#plCadrer","onclick",()=>{ if(PL.sel)antPlaceCadrer(PL.sel); });
@@ -814,6 +1045,7 @@ function antPlaceBarre(){
     if(typeof antPiecesRafraichir==="function")antPiecesRafraichir();
     antPlaceVisibilite();
   });
+  plManip();
 }
 
 function plAideTexte(){
@@ -822,7 +1054,8 @@ function plAideTexte(){
   if(!ANT.pieces.length)return local+"La carte telle qu'elle est — contour, cuivre, composants (hauteurs supposées). Importez un boîtier à l'étape « Autour ».";
   if(PL.mode==="accrocher")return local+plEtape()+". Maj : viser à travers la première paroi. Échap : recommencer.";
   if(PL.mode==="deplacer")return local+(PL.sel
-    ? "Glissez la pièce choisie ; ailleurs, la vue tourne. Flèches, Page haut/bas : pas à pas (Maj ×10)."
+    ? (PL.manip?"Flèche : glisser le long de l'axe · anneau : tourner autour (Maj : 1°) · ":"")+
+      "Glissez la pièce choisie ; ailleurs, la vue tourne. Flèches, Page haut/bas : pas à pas (Maj ×10)."
     : "Choisissez d'abord une pièce d'un clic.");
   return local+"Cliquez une pièce pour la choisir ; recliquez au même endroit pour celle de derrière.";
 }
