@@ -405,9 +405,22 @@ function ant3dMaj(){
      32 bits est relative, pas absolue. */
   const cx=(m.boite.x1+m.boite.x2)/2, cy=(m.boite.y1+m.boite.y2)/2,
         cz=(m.boite.z1+m.boite.z2)/2;
+  const ancien=ANT3D.centre, rayon0=ANT3D.rayon;
   ANT3D.centre={x:cx,y:cy,z:cz};
   ANT3D.rayon=Math.max(1e-6,0.5*Math.hypot(
     m.boite.x2-m.boite.x1, m.boite.y2-m.boite.y1, m.boite.z2-m.boite.z1));
+  /* LA CAMÉRA RESTE OÙ ELLE EST DANS LE MONDE. La boîte de calcul enveloppe
+     les pièces : en poser une plus loin l'agrandit, et son centre — l'origine
+     de la scène — se déplace. Sans compensation, la caméra, qui vit en
+     coordonnées de scène, suivait ce centre : la pièce qu'on venait de poser
+     semblait rester sur place et c'était la boîte, la carte et tout le reste
+     qui sautaient, avec un zoom qui changeait. On ramène donc le point visé
+     et la distance de vue en millimètres, avant et après. */
+  if(ancien){
+    const o=ANT3D.orbite;
+    o.cx+=ancien.x-cx; o.cy+=ancien.y-cy; o.cz+=ancien.z-cz;
+    o.dist*=rayon0/ANT3D.rayon;
+  }
   const T=function(x,y,z){ return [x-cx,y-cy,z-cz]; };
 
   ant3dSubstrat(m,T);
