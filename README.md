@@ -17,10 +17,11 @@ Interface en HTML / CSS / JavaScript, traitement en Python.
 
 ## Prérequis & Démarrage rapide
 
-L'outil nécessite trois éléments essentiels :
+L'outil nécessite deux éléments essentiels :
 1. **Les binaires openEMS (`openEMS/`)** contenant le solveur, ses DLL (`CSXCAD.dll`, `openEMS.exe`) et les roues Python dans `openEMS/python/`.
 2. **L'environnement virtuel Python (`env/`)** créé impérativement avec **Python 3.10 ou 3.11 (64 bits)** avec les dépendances (`pip install -r requirements.txt`).
-3. **ParaView** (facultatif). Les champs s'affichent et s'animent désormais **dans l'outil** (panneau « Champs ») : ParaView ne sert plus qu'à ce qu'une carte plane ne montre pas — coupe oblique, lignes de champ, rendu volumique.
+
+Les champs s'affichent et s'animent **dans l'outil** (panneau « Champs ») : aucun visualiseur externe n'est nécessaire.
 
 *(Voir la section détaillée [Installation complète des prérequis](#installation-complète-des-prérequis) en bas de page pour les liens de téléchargement).*
 
@@ -110,7 +111,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── 29-tableau-s.js     le tableau S complet, et son fichier Touchstone
 │   ├── 30-ia.js            l'assistant IA : vérification locale, et le modèle si on veut
 │   ├── 31-rapport.js       le rapport d'ingénierie (avec charge cellules × nmax et localisation de la plus petite cellule)
-│   ├── 32-visionneuse.js   la carte de champ animée, lue dans les .vtr — sans ParaView
+│   ├── 32-visionneuse.js   la carte de champ animée, lue dans les .vtr
 │   ├── 33-pieces.js        les pièces importées (STEP, STL) : boîtier, piles, une matière par corps
 │   ├── 34-placement.js     les placer à la souris en 3D : choisir, glisser, accrocher face contre face
 │   ├── travailleur-occt.js le lecteur STEP/IGES/BREP, dans un fil à part
@@ -135,8 +136,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── banc-polygones.js   le découpage des découpes, cas dégénérés compris
 │   └── banc-interface.js   ports, balayage, unités, liste blanche de l'IA, classification nets, robustesse
 ├── env/                    l'environnement virtuel Python (dépendances pip)
-├── openEMS/                les binaires du solveur (à télécharger, voir « Installation »)
-└── ParaView-…/             le visualiseur 3D externe (à télécharger, facultatif)
+└── openEMS/                les binaires du solveur (à télécharger, voir « Installation »)
 ```
 
 ## Ce que le serveur fait, et pourquoi il existe
@@ -216,7 +216,7 @@ Tant qu'aucun projet n'est ouvert, openEMS écrit dans le dossier temporaire du
 système : c'est le bon endroit pour un essai qu'on ne gardera pas. Dès qu'un
 projet est ouvert, les dossiers de calcul vont dans `calculs/`. Ce n'est pas un
 détail de rangement : un enregistrement de champ fait des centaines de
-méga-octets de `.vtr` que ParaView relit, et les laisser dans `TEMP` revient à
+méga-octets de `.vtr` que la visionneuse relit, et les laisser dans `TEMP` revient à
 les perdre au premier nettoyage de disque, sans que rien ne l'annonce.
 
 **Et si le calcul a été lancé avant d'avoir nommé le projet ?** C'est le cas
@@ -232,7 +232,7 @@ Trois bornes, et elles comptent : le déplacement ne part **que** d'un dossier
 que le serveur a lui-même créé (la page n'envoie jamais un chemin, seulement
 un identifiant de simulation), il **refuse** de bouger un calcul qui tourne
 encore, et il **n'écrase jamais** un dossier déjà rangé. Si le déplacement
-échoue — disque plein, fichier tenu ouvert par ParaView —, le projet est
+échoue — disque plein, fichier tenu ouvert par un autre programme —, le projet est
 enregistré quand même et l'outil dit ce qui n'a pas pu être rangé : les
 courbes ne se perdent pas parce que les champs ont résisté.
 
@@ -1063,9 +1063,8 @@ d'essai. Le mode **temporel** rend un fichier **par pas de temps**, des
 dizaines de milliers, et remplit un disque en quelques minutes ; il ne sert
 qu'à faire une animation, et son poids est annoncé avant. Les fichiers sont
 des `.vtr`, et **l'outil les lit lui-même** : le bouton « Voir les champs »
-ouvre le panneau **Champs**, qui affiche la carte et **l'anime**. Les boutons
-« ParaView » et « Ouvrir le dossier » restent à côté, pour ce que la carte
-plane ne montre pas.
+ouvre le panneau **Champs**, qui affiche la carte et **l'anime**. Le bouton
+« Ouvrir le dossier » reste à côté, pour lire les `.vtr` avec un autre outil.
 
 Un S₁₁ dit que l'antenne résonne à 2,37 GHz ; il ne dit pas **pourquoi**. La
 carte du courant de surface, elle, le montre d'un coup d'œil — et bien mieux
@@ -1369,7 +1368,18 @@ donnent, et l'encombrement de la carte. On retouche une cote, le dessin se
 refait à la frappe, la résonance estimée suit. Rien n'entre dans le dessin
 tant qu'on n'a pas pressé « Dessiner ce motif » — et ce qui entre alors est
 exactement ce qui était montré, port compris : l'aperçu et la pose lisent le
-même tracé.
+même tracé. « ▶ Dessiner et simuler » fait les deux d'un coup : il pose le
+motif, puis lance openEMS sur la bande ±15 % autour de la fréquence visée.
+
+**La largeur de piste max**, à côté de la fréquence visée, borne les largeurs
+que les motifs proposent — ligne d'alimentation, bras, brin — et les
+longueurs se calculent **ensuite** sur les largeurs bornées : le bras d'un
+IFA plus fin est recompté pour que le développé reste le quart d'onde, une
+ligne plus étroite garde sa demi-onde guidée. Quand la borne passe sous la
+largeur 50 Ω, la fiche dit l'impédance réelle de la ligne (par exemple
+72 Ω pour 1,5 mm sur FR-4 1,6 mm) : le port ne sera plus adapté par
+construction. Une largeur tapée à la main au-delà de la borne n'est pas
+rabotée, elle est signalée. Champ vide : aucune borne.
 
 **TOUTE longueur réglable est portée sur le dessin, et elle y porte la lettre
 de son champ.** Neuf cotes pour un F inversé, dix pour un MIFA : les grandes
@@ -2153,29 +2163,6 @@ pip install -r requirements.txt
 ```
 
 > **Bascule automatique dans `env/` :** `web_antenna.py` détecte automatiquement si vous le lancez depuis une invite ordinaire avec le Python système. S'il trouve `env/` à la racine, il se relance de lui-même avec l'interpréteur de l'environnement virtuel.
-
----
-
-### 3. Visualisation des champs avec ParaView (`ParaView-…/`)
-
-**Facultatif.** Les champs s'affichent et s'animent dans l'outil lui-même
-(panneau « Champs », voir plus haut) : rien à installer pour la question de
-tous les jours — « où passe le courant ? ». ParaView reste utile pour ce
-qu'une carte plane ne montre pas : isosurfaces, coupes obliques, lignes de
-champ, rendu volumique.
-
-1. **Télécharger ParaView pour Windows** :
-   - Téléchargement sur le site officiel : [paraview.org/download](https://www.paraview.org/download/)
-   - Vous pouvez choisir l'archive portable `.zip` (ex: `ParaView-6.x.x-Windows-…-AMD64.zip`) ou l'installateur `.exe`.
-2. **Intégration** (deux options au choix) :
-   - **Mode portable (sans droits admin)** : Décompressez simplement l'archive dans le répertoire racine du projet (ex. `ParaView-6.1.1-Windows-Python3.12-msvc2017-AMD64/`). `openems_run.py` détecte automatiquement tout dossier commençant par `paraview` à la racine et localise `bin/paraview.exe`.
-   - **Mode standard** : Installez-le dans `C:\Program Files\ParaView …` ou assurez-vous que `paraview` est présent dans votre `PATH`.
-
-Au démarrage du serveur, si ParaView est détecté, la console affiche son chemin :
-```text
-  ParaView          C:\...\ParaView-6.1.1-...\bin\paraview.exe
-```
-Dans l'interface web, le bouton **ParaView** du panneau des champs s'active automatiquement pour ouvrir directement les fichiers `.vtr` de la simulation sélectionnée.
 
 ---
 

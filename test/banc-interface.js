@@ -511,6 +511,42 @@ verifie("reposer une cote sur la valeur du calcul n'est pas une reprise",
         CON.gabaritTouche.L===undefined);
 conGabaritPoser("patch",null);
 
+/* -- la largeur de piste maximale ---------------------------------------- */
+/* LA BORNE DOIT PASSER AVANT LE CALCUL DES LONGUEURS, pas apres : un IFA dont
+   on rabote le bras sans recompter le developpe resonne a cote. On verifie
+   donc que chaque piste est bornee ET que la resonance annoncee pour les
+   cotes bornees retombe toujours sur la frequence visee. */
+CON.wmax=0.4;
+const cb=conContexte();
+verifie("la borne de piste rabote la ligne 50 ohms du contexte",
+        cb.wf===0.4&&cb.wf50>0.4, "wf="+cb.wf+" wf50="+cb.wf50);
+CON_GABARITS.forEach(function(g){
+  const d=conGabaritDefauts(g,cb);
+  const trop=g.champs.filter(ch=>ch.piste&&d[ch.id]>0.4+1e-9).map(ch=>ch.id);
+  verifie("aucune piste du motif "+g.id+" ne depasse la borne",
+          trop.length===0, trop.join(","));
+});
+const pIfaB=conGabaritDefauts(CON_MOTIF_IFA,cb);
+const tIfaB=CON_MOTIF_IFA.tracer(cb,pIfaB);
+verifie("l'IFA borne resonne toujours a la frequence visee",
+        Math.abs(tIfaB.calcul.festim-cb.f)/cb.f<0.005,
+        (tIfaB.calcul.festim/1e9).toFixed(4)+" GHz, wb="+pIfaB.wb);
+const pLigB=conGabaritDefauts(CON_MOTIF_LIGNE,cb);
+const tLigB=CON_MOTIF_LIGNE.tracer(cb,pLigB);
+verifie("la ligne etroite garde sa demi-onde guidee a la frequence visee",
+        Math.abs(tLigB.calcul.festim-cb.f)/cb.f<0.005,
+        (tLigB.calcul.festim/1e9).toFixed(4)+" GHz");
+const fB=conGabaritFiche(CON_MOTIF_PATCH,cb,conGabaritDefauts(CON_MOTIF_PATCH,cb),
+  CON_MOTIF_PATCH.tracer(cb,conGabaritDefauts(CON_MOTIF_PATCH,cb)));
+verifie("la fiche dit que la ligne n'est plus a 50 ohms",
+        fB.lignes.some(l=>/sous sa largeur 50/.test(l[0])));
+verifie("une piste reprise a la main au-dela de la borne est signalee, pas rabotee",
+        conPistesHorsBorne(CON_MOTIF_PATCH,cb,{wf:1.2}).length===1&&
+        conGabaritCotes(CON_MOTIF_PATCH,cb,{wf:1.2}).wf===1.2);
+CON.wmax=0;
+verifie("sans borne, la ligne revient a sa largeur 50 ohms",
+        conContexte().wf===conContexte().wf50);
+
 /* -- l'apercu ne dessine rien -------------------------------------------- */
 /* C'EST LA GARANTIE DE TOUT LE MODE : regarder un motif ne doit pas effacer
    le travail en cours. On compte les formes avant et apres avoir rendu les
@@ -2808,6 +2844,28 @@ charger("36-port-verdict.js");
   verifie("port dans le plan : une borne sur l'antenne, l'autre sur la masse",
           b[0].touche==="antenne"&&b[1].touche==="masse"&&
           Math.abs(b[0].x-5)<1e-9&&Math.abs(b[1].x-5.2)<1e-9, JSON.stringify(b));
+
+  /* Le coaxial : l'âme sur l'antenne, la gaine sur la masse, tout autour. */
+  CU={blocs:[{couche:"L1",polys:[R(0,0,10,20)]},
+             {couche:"L2",polys:[R(-10,-10,30,30,true)]}],vias:[]};
+  const cx=(o)=>port(Object.assign({type:"coaxial",x:5,y:10,ra:0.635,rb:2.05,
+                                    ep_gaine:0.3},o));
+  v=antPortVerdict(cx());
+  verifie("coaxial franc : âme sur l'antenne, gaine sur la masse",
+          v.length===2&&v.every(d=>d.ok===true), JSON.stringify(v));
+  v=antPortVerdict(cx({x:15}));
+  verifie("coaxial hors de l'antenne : l'âme dans le vide, ✗",
+          graves(v).some(t=>/Âme sur « L1 » : dans le vide/.test(t)),
+          JSON.stringify(v));
+  v=antPortVerdict(cx({y:28.5}));
+  verifie("coaxial au bord du plan : la gaine ne touche la masse qu'en partie",
+          avertis(v).some(t=>/qu'en partie|sur une partie/.test(t)),
+          JSON.stringify(v));
+  CU.blocs[1]={couche:"L2",polys:[R(-10,-10,30,30,true,[[0,5,10,15]])]};
+  v=antPortVerdict(cx());
+  verifie("coaxial dans une réserve de masse : la gaine dans le vide, ✗",
+          graves(v).some(t=>/aucun cuivre retenu sur son tour/.test(t)),
+          JSON.stringify(v));
 
   /* La recherche qui echoue ne garde rien du clic precedent. */
   Object.assign(ANT.port,{pose:true,type:"localise",de:"L1",a:"L3",

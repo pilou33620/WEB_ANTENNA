@@ -1287,6 +1287,10 @@ function antMaillageNoteHtml(m,k){
   let quoi="λ/20";
   if(d.bornee)quoi="le plafond de lignes — le cuivre en demanderait plus";
   else if(w&&die!=null&&Math.abs(die-w/4)<1e-9)quoi="la largeur du cuivre";
+  /* Le fond ne suit le cuivre que jusqu'au quart de λ/20 : plus fin, c'est
+     aux bandes de le résoudre, en travers de lui seul (FOND_DIVISEUR_MAX). */
+  else if(w&&d.fond_min&&die!=null&&Math.abs(die-d.fond_min)<1e-9&&w/4<die)
+    quoi="le quart de λ/20 — le cuivre plus fin est affiné en bandes";
   const impose=d.saisi||d.saisi_air;
 
   /* LE FOND N'EST PLUS TOUT LE MAILLAGE, et l'afficher seul serait mentir par

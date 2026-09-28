@@ -73,6 +73,9 @@ function oePost(route,doc){
    la pire réponse qu'une interface puisse faire. */
 async function oeEtat(){
   ANT.etatServeur=await oeAppel(OE_ROUTE);
+  /* Le banc de vitesse lancé par le serveur à son démarrage : la page le suit
+     dès qu'elle le voit (35-fils.js). */
+  if(typeof antFilsReprendre==="function")antFilsReprendre();
   return ANT.etatServeur;
 }
 

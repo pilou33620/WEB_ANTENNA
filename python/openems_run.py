@@ -54,7 +54,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MAX_CORPS = openems_modele.MAX_CORPS
 
 # Une tache oubliee garde son dossier de calcul et ses champs : on ne les
-# efface pas (ParaView en a besoin), mais on cesse de suivre la tache elle-meme
+# efface pas (la visionneuse en a besoin), mais on cesse de suivre la tache elle-meme
 # au bout d'un moment, sinon le serveur les accumule sans fin.
 DUREE_MEMOIRE = 12 * 3600
 
@@ -469,6 +469,12 @@ class Tache(object):
             self.detail = "Impossible de lancer l'interpreteur : %s" % exc
             self.fin = time.time()
             return
+        # ARRETE AVANT D'AVOIR UN PROCESSUS : `arreter()` n'a rien trouve a
+        # tuer, et le calcul tournerait jusqu'au bout sans que personne le
+        # suive. Le banc du demarrage, qui cede sa place au premier calcul
+        # demande, peut tomber dans cette fenetre.
+        if self.etat == "arrete":
+            self.arreter()
 
         for ligne in self.proc.stdout:
             self._ajouter(ligne)
@@ -1171,11 +1177,14 @@ def _reciprocite(s):
 class TacheBanc(Tache):
     """Le banc de vitesse : la meme boite vide, un essai par nombre de fils."""
 
-    def __init__(self, ident, dossier, fils):
+    def __init__(self, ident, dossier, fils, auto=False):
         super().__init__(ident, dossier, {})
         self.essais = list(fils)
         self.mesures = {}
         self.faits = 0
+        # Lance par le serveur a son demarrage, et non par un clic : il cede
+        # alors la place au premier calcul demande (voir `_exiger_libre`).
+        self.auto = bool(auto)
 
     def _ajouter(self, ligne):
         super()._ajouter(ligne)
@@ -1194,7 +1203,7 @@ class TacheBanc(Tache):
     def vue(self, depuis=0):
         out = super().vue(depuis)
         out["genre"] = "banc"
-        out["banc"] = {"essais": self.essais,
+        out["banc"] = {"essais": self.essais, "auto": self.auto,
                        "mesures": {str(k): v for k, v in self.mesures.items()}}
         return out
 
@@ -1381,7 +1390,7 @@ def script_exportable(modele):
 # c'est le bon endroit pour un essai qu'on ne gardera pas, et le nettoyage de
 # disque de Windows s'en charge. Des qu'un PROJET est ouvert, en revanche, ils
 # doivent aller dedans — un enregistrement de champ fait des centaines de
-# mega-octets de .vtr que ParaView relit, et les laisser dans TEMP revient a
+# mega-octets de .vtr que la visionneuse relit, et les laisser dans TEMP revient a
 # les perdre au premier nettoyage, sans que rien ne l'annonce.
 #
 # Le chemin est POSE PAR LE SERVEUR (voir projet.dossier_calculs) et jamais
@@ -1524,11 +1533,24 @@ def _exiger_libre(pour_banc=False):
     t = _en_cours()
     if t is None:
         return
+    if pour_banc and isinstance(t, TacheBanc):
+        raise openems_modele.ErreurModele(
+            "Le banc de vitesse tourne deja.",
+            "Il dure une a deux minutes : ses mesures s'afficheront a la fin.")
     if pour_banc:
         raise openems_modele.ErreurModele(
             "Un calcul tourne deja : le banc de vitesse le mesurerait en meme "
             "temps que le poste.",
             "Attendez la fin du calcul, ou arretez-le, puis relancez le banc.")
+    # LE BANC DU DEMARRAGE CEDE SA PLACE. Personne ne l'a demande : refuser
+    # pour lui le premier calcul de la seance ferait attendre deux minutes
+    # pour un chronometrage. Il s'arrete, le banc precedent reste en vigueur,
+    # et il repassera au prochain demarrage.
+    if isinstance(t, TacheBanc) and t.auto:
+        t.arreter()
+        t.detail = ("Interrompu pour laisser passer une simulation : les "
+                    "mesures precedentes restent en vigueur.")
+        return
     if isinstance(t, TacheBanc):
         raise openems_modele.ErreurModele(
             "Le banc de vitesse tourne : une simulation lancee maintenant "
@@ -1536,8 +1558,18 @@ def _exiger_libre(pour_banc=False):
             "Il dure une a deux minutes. Attendez sa fin, ou arretez-le.")
 
 
-def lancer_banc():
-    """Demarre le banc de vitesse. Rend la vue initiale de la tache."""
+def banc_en_cours():
+    """La vue du banc qui tourne, ou None. La page s'en sert pour suivre le
+    banc du demarrage, qu'elle n'a pas lance elle-meme."""
+    t = _en_cours()
+    return t.vue() if isinstance(t, TacheBanc) else None
+
+
+def lancer_banc(auto=False):
+    """Demarre le banc de vitesse. Rend la vue initiale de la tache.
+
+    `auto` : lance par le serveur a son demarrage. Il cede alors la place a
+    toute simulation demandee pendant qu'il tourne."""
     _exiger_solveur()
     _exiger_libre(pour_banc=True)
     _oublier_les_vieilles()
@@ -1547,7 +1579,7 @@ def lancer_banc():
     dossier = os.path.join(_base_temporaire(), "banc_" + ident)
     os.makedirs(dossier, exist_ok=True)
     fils = fils_a_essayer()
-    tache = TacheBanc(ident, dossier, fils)
+    tache = TacheBanc(ident, dossier, fils, auto=auto)
     with _VERROU:
         _TACHES[ident] = tache
     tache.demarrer(openems_script.generer_banc(
@@ -1576,76 +1608,13 @@ def arreter(ident):
     return {"arrete": arrete, "etat": tache.etat}
 
 
-# ==========================================================================
-# Regarder les champs : ParaView
-# ==========================================================================
-# LES ENREGISTREMENTS DE CHAMP SONT DES .vtr, et rien dans une page web ne
-# sait les lire. ParaView, si -- et il est souvent pose a cote du solveur. On
-# ne l'embarque pas, on le CHERCHE : s'il n'est pas la, on ouvre simplement
-# le dossier, ce qui laisse l'utilisateur libre de son outil.
-_PARAVIEW = None
-
-
-def chemin_paraview(refaire=False):
-    """Ou est ParaView sur ce poste, ou "" s'il est introuvable."""
-    global _PARAVIEW
-    if _PARAVIEW is not None and not refaire:
-        return _PARAVIEW
-
-    candidats = []
-    # 1. a cote du depot : le dossier decompresse tel qu'il se telecharge.
-    #    ON DESCEND D'UN NIVEAU DE PLUS, parce qu'une archive ouverte « dans
-    #    un dossier du meme nom » -- ce que font la plupart des outils de
-    #    decompression par defaut -- donne ParaView-x/ParaView-x/bin.
-    try:
-        for nom in sorted(os.listdir(ROOT)):
-            if not nom.lower().startswith("paraview"):
-                continue
-            bases = [os.path.join(ROOT, nom)]
-            try:
-                bases += [os.path.join(ROOT, nom, s)
-                          for s in sorted(os.listdir(os.path.join(ROOT, nom)))
-                          if s.lower().startswith("paraview")]
-            except OSError:
-                pass
-            for base in bases:
-                for sous in ("bin", ""):
-                    for exe in ("paraview.exe", "paraview"):
-                        candidats.append(os.path.join(base, sous, exe))
-    except OSError:
-        pass
-    # 2. les emplacements d'installation habituels
-    for base in (os.environ.get("ProgramFiles", r"C:\Program Files"),
-                 os.environ.get("ProgramFiles(x86)", "")):
-        if not base or not os.path.isdir(base):
-            continue
-        try:
-            for nom in sorted(os.listdir(base), reverse=True):
-                if nom.lower().startswith("paraview"):
-                    candidats.append(os.path.join(base, nom, "bin",
-                                                  "paraview.exe"))
-        except OSError:
-            pass
-    # 3. dans le PATH
-    trouve = shutil.which("paraview")
-    if trouve:
-        candidats.append(trouve)
-
-    for c in candidats:
-        if c and os.path.isfile(c):
-            _PARAVIEW = c
-            return c
-    _PARAVIEW = ""
-    return ""
-
-
 _RE_IDENT = re.compile(r"^[0-9a-f]{12}$")
 
 
 def _dossier_de(ident):
     """Le dossier d'une tache. On n'ouvre que ce qu'on a cree soi-meme : une
-    route qui lance un programme sur un chemin venu de la requete ouvrirait
-    bien autre chose que ParaView.
+    route qui ouvre un chemin venu de la requete ouvrirait n'importe quel
+    dossier du poste.
 
     LA LISTE DES TACHES NE SURVIT PAS AU SERVEUR, LES DOSSIERS SI. `_TACHES`
     est un dictionnaire en memoire : redemarrer web_antenna.py le vide, et la page
@@ -1686,7 +1655,7 @@ def dossier_de(ident):
 
     LA VERSION PUBLIQUE DE `_dossier_de`, et la seule porte par laquelle un
     identifiant venu d'une requete devient un chemin. Le lecteur de champs
-    (openems_champs) en a besoin comme ParaView en avait besoin, et pour la
+    (openems_champs) en a besoin comme « ouvrir le dossier », et pour la
     meme raison : il ne doit jamais lire ailleurs que dans un dossier que
     nous avons nous-memes cree.
     """
@@ -1789,29 +1758,6 @@ def _ouvrir(commande):
     subprocess.Popen(commande, cwd=os.path.dirname(commande[-1]) or None,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      close_fds=True)
-
-
-def paraview(ident):
-    """Ouvre les champs de cette simulation dans ParaView."""
-    dossier = _dossier_de(ident)
-    vtr = sorted(f for f in os.listdir(dossier) if f.endswith(".vtr"))
-    exe = chemin_paraview()
-    if not exe:
-        return dict(ouvrir_dossier(ident),
-                    detail="ParaView est introuvable sur ce poste : le "
-                           "dossier de calcul a ete ouvert a la place.")
-    if not vtr:
-        return dict(ouvrir_dossier(ident),
-                    detail="Aucun fichier de champ dans ce dossier. Cochez "
-                           "« Enregistrer les champs » AVANT de lancer : un "
-                           "calcul deja fait ne peut plus en produire.")
-    try:
-        _ouvrir([exe, os.path.join(dossier, vtr[0])])
-    except OSError as exc:
-        raise openems_modele.ErreurModele(
-            "ParaView n'a pas pu etre lance : %s" % exc)
-    return {"lance": "paraview", "exe": exe, "dossier": dossier,
-            "fichiers": len(vtr), "premier": vtr[0]}
 
 
 def ouvrir_dossier(ident):

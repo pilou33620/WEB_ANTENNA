@@ -20,7 +20,7 @@
 #
 # Fonctions : etat, preparer, script, balayage, tableau_s, lancer,
 #            lancer_balayage, lancer_tableau_s, journal, arreter, liste,
-#            paraview, dossier, dossier_calculs, archiver_calcul,
+#            dossier, dossier_calculs, archiver_calcul,
 #            identifiant_neuf,
 #            debit, debit_noter, fils, regler_fils, banc_noter, lancer_banc,
 #            champs, champ
@@ -87,7 +87,6 @@ def etat():
     out["lancer"] = bool(solveur.get("dispo"))
     out["fils"] = fils()
     out["solveur"] = solveur
-    out["paraview"] = openems_run.chemin_paraview()
     if not out["lancer"]:
         out["lancer_detail"] = solveur.get("detail", "")
         out["lancer_conseil"] = solveur.get("conseil", "")
@@ -198,13 +197,6 @@ def liste():
     return openems_run.liste()
 
 
-def paraview(ident):
-    """Ouvre les champs enregistres dans ParaView, ou a defaut le dossier."""
-    if openems_run is None:
-        raise ErreurModele("Execution indisponible : %s" % ERREUR_RUN)
-    return openems_run.paraview(ident)
-
-
 def dossier(ident):
     """Ouvre le dossier de calcul dans l'explorateur du systeme."""
     if openems_run is None:
@@ -215,11 +207,10 @@ def dossier(ident):
 # ==========================================================================
 # Regarder les champs SANS quitter l'outil
 # ==========================================================================
-# `paraview()` ci-dessus reste : il y a des jours ou l'on veut une coupe
-# oblique, un streamline et un export .avi, et ce jour-la ParaView est le bon
-# outil. Mais ce n'est pas le cas courant. Le cas courant est « montre-moi ou
-# passe le courant », et les deux fonctions qui suivent y repondent dans la
-# page, en deux secondes, sans rien installer.
+# Le cas courant est « montre-moi ou passe le courant », et les deux
+# fonctions qui suivent y repondent dans la page, en deux secondes, sans rien
+# installer. Pour le reste, `dossier()` ci-dessus ouvre les .vtr dans
+# l'explorateur et laisse chacun libre de son outil.
 
 def _champs_module():
     if openems_champs is None:
@@ -296,12 +287,19 @@ def fils():
     """
     coeurs = os.cpu_count() or 0
     return {"regle": openems_modele.fils_regle(),
+            # Ce que les calculs recoivent : le reglage, ou le meilleur du banc
+            # quand le reglage est « Auto ».
+            "effectif": openems_modele.fils_effectif(),
             "coeurs": coeurs,
             "max": openems_modele.FILS_MAX,
             "banc": {str(k): v for k, v in openems_modele.banc().items()},
             "meilleur": openems_modele.banc_meilleur(),
             "essais": (openems_run.fils_a_essayer(coeurs)
-                       if openems_run is not None else [])}
+                       if openems_run is not None else []),
+            # Le banc qui tourne, s'il y en a un -- celui du demarrage que la
+            # page n'a pas lance, et qu'elle doit pourtant pouvoir suivre.
+            "banc_tache": (openems_run.banc_en_cours()
+                           if openems_run is not None else None)}
 
 
 def regler_fils(n):
@@ -315,12 +313,15 @@ def banc_noter(mesures):
     return fils()
 
 
-def lancer_banc():
+def lancer_banc(auto=False):
     """Demarre le banc de vitesse : une boite vide, un essai par nombre de
-    fils. Rend la vue de la tache, que la page suit comme un calcul."""
+    fils. Rend la vue de la tache, que la page suit comme un calcul.
+
+    `auto` : lance par le serveur a son demarrage ; il cede la place a la
+    premiere simulation demandee."""
     if openems_run is None:
         raise ErreurModele("Execution indisponible : %s" % ERREUR_RUN)
-    return openems_run.lancer_banc()
+    return openems_run.lancer_banc(auto=auto)
 
 
 def dossier_calculs(chemin):

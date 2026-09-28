@@ -11,7 +11,7 @@
 #   cohabiter les trois choses que produit une seance : ce qu'on a dessine
 #   (quelques kilo-octets), la carte qu'on a ouverte (quelques dizaines de
 #   mega-octets sur une carte de fabrication) et ce que le solveur a rendu
-#   (des courbes, et parfois des giga-octets de champs .vtr que ParaView
+#   (des courbes, et parfois des giga-octets de champs .vtr que la visionneuse
 #   relit). Un fichier unique obligerait a tout charger pour lire une cote,
 #   et a tout reecrire pour changer une frequence.
 #
@@ -506,7 +506,7 @@ def dossier_calculs():
 # calcul par simulation lancee, et `resultats.json` n'en retient qu'UN : le
 # dernier. Apres cinq simulations, cinq dossiers sont sur le disque avec
 # leurs champs, et la page n'en atteignait qu'un seul — les quatre autres
-# etaient la, invisibles, et il fallait ParaView pour les revoir.
+# etaient la, invisibles, et il fallait fouiller le disque pour les revoir.
 #
 # `calculs()` rend la liste. `importer_calcul()` fait entrer dans cette liste
 # un dossier venu d'ailleurs : une cle USB, un partage reseau, un calcul mene

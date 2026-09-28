@@ -219,9 +219,11 @@ function antPortChercher(q){
   if(!fente)
     return {echec:"ni masse franche sous l'antenne, ni masse à moins de "+
                   ANT_PORT_FENTE_MAX_MM+" mm sur « "+de+" »"};
-  /* « vers » n'a pas de sens physique pour un port dans le plan, mais le
-     serveur exige deux couches distinctes : la voisine. Le serveur ne la
-     prend pas pour un plan de référence (`_masse_cachee`). */
+  /* « vers » n'a pas de sens physique pour un port dans le plan : on y met
+     la voisine, qui garde lisible la liste du panneau, et le serveur ne la
+     prend pas pour un plan de référence (`_masse_cachee`). Sur une carte
+     simple face il n'y en a pas : « vers » vaut alors « de », ce que le
+     serveur accepte pour un port dans le plan (`_un_port`). */
   const voisine=couches[i+1]||couches[i-1];
   return {x:fente.x,y:fente.y,de:de,a:voisine?voisine.nom:de,dir:fente.dir,
           ecart:fente.ecart,deplace:Math.hypot(fente.x-x0,fente.y-y0),

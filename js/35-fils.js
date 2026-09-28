@@ -3,7 +3,7 @@
    Antenne openEMS — 35-fils.js
    Les fils de calcul d'openEMS, et le banc de vitesse qui dit combien en mettre.
 
-     POST /api/openems/fils?n=N      règle le poste (0 : openEMS choisit)
+     POST /api/openems/fils?n=N      règle le poste (0 : auto — le meilleur au banc)
      POST /api/openems/banc/lancer   la même boîte vide, un essai par nombre de fils
 
    POURQUOI CE RÉGLAGE EXISTE. Laissé à lui-même, openEMS part d'UN fil et en
@@ -16,6 +16,13 @@
    quelques fils, un de plus ne fait que disputer la bande passante aux autres
    — sur un poste à dix cœurs, huit fils allaient plus vite que douze. Le bon
    nombre dépend de la machine ; il se mesure en une à deux minutes.
+
+   LE BANC PASSE TOUT SEUL AU DÉMARRAGE DU SERVEUR, et « Auto » vaut son
+   meilleur nombre : exemples, conception et balayages partent avec les bons
+   fils sans qu'on ait rien choisi. La page ne l'a pas lancé, mais elle le
+   suit dès qu'elle le voit dans l'état du serveur (`antFilsReprendre`). Une
+   simulation lancée pendant qu'il tourne l'interrompt ; le banc précédent
+   reste alors en vigueur.
 
    LE RÉGLAGE APPARTIENT AU POSTE, pas à l'antenne : le serveur le range dans
    ses réglages, comme le débit mesuré, et il vaut pour tous les projets.
@@ -74,7 +81,11 @@ function antFilsHtml(){
      deux fils se partagent un cœur, et la mesure l'a déjà dit. Un réglage
      rangé plus haut (poste changé depuis) reste proposé, pour qu'on le voie. */
   const n=Math.max(f.coeurs||1, f.regle||0);
-  let opts='<option value="0"'+(f.regle===0?" selected":"")+'>Auto — openEMS tâtonne</option>';
+  const auto=f.effectif&&!f.regle
+    ? "Auto — "+f.effectif+" fil"+(f.effectif>1?"s":"")+", le meilleur au banc"
+    : (f.effectif ? "Auto — le meilleur au banc ("+f.meilleur+" fils)"
+                  : "Auto — openEMS tâtonne (banc pas encore passé)");
+  let opts='<option value="0"'+(f.regle===0?" selected":"")+'>'+auto+'</option>';
   for(let i=1;i<=n;i++){
     const v=parFils[i];
     opts+='<option value="'+i+'"'+(f.regle===i?" selected":"")+'>'+i+' fil'+(i>1?"s":"")+
@@ -90,19 +101,20 @@ function antFilsHtml(){
   return `
 <div class="champ" id="antFilsBloc">
   <label>Fils de calcul
-    <small>Combien de cœurs openEMS emploie. En « Auto », il part d'un fil et
-    en ajoute tant qu'il y gagne — et s'arrête souvent à deux ou trois. Ce
-    poste a <b>${f.coeurs}</b> cœurs logiques ; le calcul étant borné par la
-    mémoire, le plus rapide est rarement « tous ».</small></label>
+    <small>Combien de cœurs openEMS emploie. En « Auto », c'est le nombre le
+    plus rapide au banc de vitesse, qui passe tout seul au démarrage du
+    serveur. Ce poste a <b>${f.coeurs}</b> cœurs logiques ; le calcul étant
+    borné par la mémoire, le plus rapide est rarement « tous ».</small></label>
   <div class="champ ligne">
     <span><select id="antFils">${opts}</select></span>
     <button class="tb" id="bBanc"${encours||calcul?" disabled":""}
       title="${calcul?"Un calcul tourne : le banc le mesurerait en même temps que le poste.":
                "Une boîte vide de 2,9 millions de cellules, un essai par nombre de fils."}">
       ${encours?"⏳ Banc en cours…":"⏱ Mesurer la vitesse du poste"}</button>
-    ${best&&best!==f.regle&&!encours?'<button class="tb on" id="bFilsBest">Appliquer '+best+' fils</button>':""}
+    ${best&&best!==(f.regle||f.effectif)&&!encours?'<button class="tb on" id="bFilsBest">Appliquer '+best+' fils</button>':""}
   </div>
   ${antFilsTableHtml(mes,best,essais,f.regle)}
+  ${t&&t.etat==="arrete"?'<p class="note">Banc interrompu : '+aEsc(t.detail||"arrêté")+'</p>':""}
   ${t&&t.etat==="echoue"?'<p class="note alerte">Le banc a échoué : '+aEsc(t.detail||"voir le journal du serveur")+'</p>':""}
   <p class="note">${antFilsNote(mes,best)}</p>
 </div>`;
@@ -140,9 +152,13 @@ function antFilsTableHtml(mes,best,essais,regle){
 function antFilsNote(mes,best){
   const f=antFilsEtat()||{};
   if(antFilsEnCours())
-    return "Le banc tourne : une boîte vide, le même nombre de pas, un nombre de fils "+
-           "différent à chaque essai. Une à deux minutes ; ne lancez rien d'autre "+
-           "entre-temps, cela fausserait les mesures.";
+    return ((ANT_FILS.tache.banc||{}).auto
+             ? "Le banc du démarrage tourne : une boîte vide, un nombre de fils "+
+               "différent à chaque essai, une à deux minutes. Lancer une simulation "+
+               "l'interrompt — le banc précédent sert alors."
+             : "Le banc tourne : une boîte vide, le même nombre de pas, un nombre de fils "+
+               "différent à chaque essai. Une à deux minutes ; ne lancez rien d'autre "+
+               "entre-temps, cela fausserait les mesures.");
   if(!mes.length)
     return "Jamais mesuré sur ce poste. Le banc dure une à deux minutes et dit "+
            "quel nombre de fils va le plus vite <b>ici</b> — ce n'est pas le même "+
@@ -150,9 +166,9 @@ function antFilsNote(mes,best){
   let t="Les valeurs sont celles d'une boîte vide, plus rapide qu'une antenne : "+
         "c'est le <b>rapport</b> entre deux réglages qui vaut pour vos calculs. "+
         "La durée annoncée plus haut est ramenée au réglage choisi.";
-  if(f.regle===0)
-    t+=" En « Auto », on ne sait pas d'avance où openEMS s'arrêtera : choisissez "+
-       (best?"<b>"+best+" fils</b>":"un nombre")+" pour une durée fiable.";
+  if(f.regle===0&&f.effectif)
+    t+=" En « Auto », les calculs partent avec <b>"+f.effectif+" fils</b>, le "+
+       "meilleur au banc ; choisir un nombre à la main passe devant.";
   t+=" Un poste occupé à autre chose mesure mal : si un résultat paraît "+
      "incohérent, relancez le banc.";
   return t;
@@ -191,6 +207,20 @@ async function antFilsBanc(){
     return;
   }
   typeof wsHint==="function"&&wsHint("Banc de vitesse lancé : une à deux minutes.");
+  await antFilsSuivre();
+}
+
+/* LE BANC DU DÉMARRAGE, que la page n'a pas lancé : le serveur le signale
+   dans son état, et on le suit comme le nôtre. Appelée à chaque relecture de
+   l'état (`oeEtat`) ; sans effet quand un suivi est déjà en cours. */
+function antFilsReprendre(){
+  const b=(antFilsEtat()||{}).banc_tache;
+  if(!b||antFilsEnCours())return;
+  ANT_FILS.tache=b;
+  antFilsSuivre();
+}
+
+async function antFilsSuivre(){
   antFilsRafraichir();
   const mien=++ANT_FILS.suivi;
   let vues=0;
@@ -214,6 +244,13 @@ async function antFilsBanc(){
   if(t&&t.etat==="fini"){
     const best=(antFilsEtat()||{}).meilleur;
     typeof wsHint==="function"&&wsHint("Banc terminé"+(best?" : le plus rapide ici est "+best+" fils.":"."));
+    ANT_FILS.tache=null;
+  }
+  /* Le banc du démarrage cède sa place à un calcul : pas une erreur, et le
+     banc précédent reste en vigueur. On le dit une fois, puis on l'oublie. */
+  if(t&&t.etat==="arrete"&&(t.banc||{}).auto){
+    typeof wsHint==="function"&&wsHint("Banc de vitesse interrompu par la simulation : "+
+      "les fils du banc précédent restent en vigueur.");
     ANT_FILS.tache=null;
   }
   antFilsRafraichir();

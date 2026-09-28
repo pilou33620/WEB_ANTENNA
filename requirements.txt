@@ -7,8 +7,12 @@
 # la bibliothèque standard Python seule. Sur un poste sans solveur, la page s'ouvre,
 # les fichiers IPC-2581 se lisent, les modèles se préparent et les scripts s'exportent.
 #
-# En revanche, pour LANCER les simulations électromagnétiques (FDTD) et visualiser
-# les champs 3D, openEMS et ParaView doivent être installés comme suit :
+# En revanche, pour LANCER les simulations électromagnétiques (FDTD), openEMS doit
+# être installé comme suit (les champs .vtr s'affichent ensuite dans la page) :
+#
+# RACCOURCI : installé via WEB_SUITE, l'outil n'a pas besoin de ce guide. Son
+# installateur (ou le bouton « Installer openEMS ») fait les étapes 2 et 3 seul ;
+# il reste seulement à avoir Python 3.10 ou 3.11 64 bits sur le poste.
 #
 # =============================================================================
 # ÉTAPE 1 : INSTALLER PYTHON 3.10 OU 3.11 (64 BITS) — IMPÉRATIF
@@ -69,30 +73,7 @@
 #    Windows n'est nécessaire !
 #
 # =============================================================================
-# ÉTAPE 3 : INSTALLER PARAVIEW (VISUALISATION 3D DES CHAMPS ÉLECTROMAGNÉTIQUES)
-# =============================================================================
-# Les simulations volumiques exportent les champs E et H au format VTK (.vtr).
-# ParaView est le visualiseur recommandé pour inspecter les coupes et flux 3D.
-#
-# 1. Télécharger ParaView pour Windows :
-#    - Téléchargement : https://www.paraview.org/download/
-#    - Prendre la version Windows 64-bit (soit l'archive portable .zip, soit le .exe).
-#
-# 2. Intégration (2 options au choix) :
-#
-#    Option A — Mode portable (Recommandé, sans droits administrateur) :
-#      Décompressez simplement l'archive ZIP à la racine du projet.
-#      Exemple de dossier : `ParaView-6.1.1-Windows-Python3.12-msvc2017-AMD64/`
-#      `openems_run.py` détecte automatiquement tout dossier racine commençant
-#      par « paraview » et repère `bin/paraview.exe` (même si décompressé avec
-#      un sous-dossier imbriqué).
-#
-#    Option B — Installation standard :
-#      Installez ParaView dans `C:\Program Files\ParaView ...` ou assurez-vous
-#      que l'exécutable `paraview` est accessible dans le `PATH` du système.
-#
-# =============================================================================
-# ÉTAPE 4 : DÉMARRAGE ET VÉRIFICATION
+# ÉTAPE 3 : DÉMARRAGE ET VÉRIFICATION
 # =============================================================================
 # Lancez l'application :
 #
@@ -101,9 +82,8 @@
 # (Note : si lancé avec le Python système, web_antenna.py bascule automatiquement
 #  sur l'environnement virtuel `env/` s'il est présent à la racine).
 #
-# La console doit confirmer la détection des deux outils :
+# La console doit confirmer la détection du solveur :
 #      openEMS           disponible
-#      ParaView          C:\...\bin\paraview.exe
 #
 # =============================================================================
 # CE QUE CHAQUE PAQUET APPORTE :

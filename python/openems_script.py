@@ -1140,7 +1140,7 @@ def _bloc_dumps(m):
         a("# Mode TEMPOREL : openEMS ecrit un fichier PAR PAS DE TEMPS. Utile\n")
         a("# pour une animation, ruineux pour le disque (%.0f Mo estimes).\n"
           % (d["octets"] / 1048576.0))
-    a("# Fichiers .vtr, lisibles directement par ParaView.\n")
+    a("# Fichiers .vtr (grille rectiligne VTK).\n")
     for nom in d["types"]:
         dt_temps, dt_freq, libelle = DUMP_TYPES[nom]
         dt = dt_freq if d["mode"] == "frequentiel" else dt_temps

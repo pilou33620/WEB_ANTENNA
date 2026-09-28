@@ -329,19 +329,36 @@ verifie("pas dielectrique = pas d'air / racine(er) quand rien n'est etroit",
         % (res["die"], lam_haut / 20 / math.sqrt(ER), res["detail"]))
 
 # ... mais une piste fine, elle, doit tirer le maillage vers le bas : c'est la
-# regle qui a fait reapparaitre la resonance du patch de l'exemple.
+# regle qui a fait reapparaitre la resonance du patch de l'exemple. Une piste
+# de 3 mm le fait par le FOND : 0,75 mm, au-dessus de lambda/80.
+_fond_min = lam_haut / 20 / math.sqrt(ER) / openems_modele.FOND_DIVISEUR_MAX
+_d_3mm = document()
+_d_3mm["cuivre"][0]["polys"].append({"o": rect(5.0, 5.0, 20.0, 3.0)})
+_m_3mm = openems_modele.normaliser(_d_3mm)
+verifie("une piste de 3 mm tire le fond a quatre cellules en travers",
+        abs(_m_3mm["resolution"]["die"] - 3.0 / 4.0) < 1e-6,
+        "%.4f" % _m_3mm["resolution"]["die"])
+# UNE PISTE DE 2 MM LE FAIT PAR UNE BANDE : 0,5 mm est sous lambda/80, et le
+# fond s'y arrete. Mettre toute l'emprise a 0,5 mm pour un ruban coutait 1,4
+# fois le calcul ; la bande donne les memes quatre cellules, en travers de
+# lui seul.
 _d_fin = document()
 _d_fin["cuivre"][0]["polys"].append({"o": rect(5.0, 5.0, 20.0, 2.0)})
 _m_fin = openems_modele.normaliser(_d_fin)
-verifie("une piste de 2 mm impose quatre cellules en travers",
-        abs(_m_fin["resolution"]["die"] - 2.0 / 4.0) < 1e-6,
-        "%.4f" % _m_fin["resolution"]["die"])
+verifie("une piste de 2 mm a quatre cellules en travers, par une bande",
+        abs(_m_fin["resolution"]["die"] - _fond_min) < 1e-6
+        and abs(_m_fin["resolution"]["detail"]["fin"] - 0.5) < 1e-6
+        and _m_fin["resolution"]["detail"]["pistes"]["cellules"] > 3.99,
+        "fond %.4f, bande %.4f, %.2f cellules"
+        % (_m_fin["resolution"]["die"], _m_fin["resolution"]["detail"]["fin"],
+           _m_fin["resolution"]["detail"]["pistes"]["cellules"]))
 verifie("et le pas de l'air, lui, ne bouge pas",
         abs(_m_fin["resolution"]["air"] - res["air"]) < 1e-9)
 
-# LE FOND S'ARRETE OU LE BUDGET DE LIGNES S'ARRETE, et la carte d'essai fait
-# 70 mm : une piste de 1 mm y demanderait 0,25 mm de pas sur TOUTE l'emprise,
-# soit 280 lignes par axe. Le fond tient donc a 0,35 mm.
+# LE FOND S'ARRETE A LAMBDA/80, et c'est plus haut que le budget de lignes :
+# une piste de 1 mm demanderait 0,25 mm de pas sur TOUTE l'emprise, le budget
+# de 200 lignes l'aurait arrete a 0,35 mm sur cette carte de 70 mm, et
+# FOND_DIVISEUR_MAX l'arrete des 0,60 mm.
 #
 # MAIS LA PISTE, ELLE, EST MAILLEE FIN QUAND MEME. C'est tout l'objet des
 # bandes : le pas de 0,25 mm n'est pose qu'EN TRAVERS du ruban, sur un
@@ -353,8 +370,9 @@ _d_1mm["cuivre"][0]["polys"].append({"o": rect(5.0, 5.0, 20.0, 1.0)})
 _m_1mm = openems_modele.normaliser(_d_1mm)
 _det1 = _m_1mm["resolution"]["detail"]
 _md1 = _m_1mm["maillage_detail"]
-verifie("sous le budget de lignes, le FOND s'arrete au plancher",
-        abs(_m_1mm["resolution"]["die"] - PLAN / 200.0) < 1e-6,
+verifie("le FOND s'arrete a lambda/80, au-dessus du plancher de lignes",
+        abs(_m_1mm["resolution"]["die"] - max(_fond_min, PLAN / 200.0)) < 1e-6
+        and _fond_min > PLAN / 200.0,
         "%.4f pour une carte de %.0f mm" % (_m_1mm["resolution"]["die"], PLAN))
 verifie("mais une bande fine descend en travers de la piste",
         abs(_det1["fin"] - 1.0 / openems_modele.CELLULES_PAR_PISTE) < 1e-6,
@@ -386,16 +404,18 @@ verifie("plus personne ne declare cette piste non resolue",
 # fois jusqu'a ce que le prix tienne. « Affiner le maillage » ne doit pas
 # vouloir dire « multiplier la duree par cinquante » sans que personne l'ait
 # demande.
-# Vingt pistes de 0,5 mm tiennent encore : quatre cellules chacune pour un
-# tiers de maillage en plus.
+# Vingt pistes de 0,5 mm tiennent encore : quatre cellules chacune, sans que
+# le budget ait a mordre. Le rapport au fond est plus fort qu'au temps ou le
+# fond descendait a 0,35 mm -- x2,7 contre un tiers -- mais c'est le fond qui
+# a baisse : le calcul entier coute 1,9 fois moins qu'alors.
 _d_20 = document()
 for _i in range(20):
     _d_20["cuivre"][0]["polys"].append({"o": rect(3.0 + 3.0 * _i, 5.0, 0.5, 40.0)})
 _m_20 = openems_modele.normaliser(_d_20)
 _det_20 = _m_20["resolution"]["detail"]
-verifie("vingt pistes de 0,5 mm : toutes resolues, pour un tiers de plus",
+verifie("vingt pistes de 0,5 mm : toutes resolues, sous le budget",
         not _det_20["fin_borne"] and _det_20["pistes"]["cellules"] > 3.99
-        and _det_20["cout"] < _det_20["cout_fond"] * 1.5,
+        and _det_20["cout"] < _det_20["cout_fond"] * 3.0,
         "%.2f cellules, cout x%.2f"
         % (_det_20["pistes"]["cellules"],
            _det_20["cout"] / _det_20["cout_fond"]))
@@ -429,12 +449,12 @@ verifie("et l'avis dit que le budget a arrete l'affinage",
         any("budget" in a["texte"] for a in _m_20["avis"]),
         str([a["titre"] for a in _m_20["avis"]]))
 
-# QUAND LE FOND SUFFIT, ON N'AFFINE PAS : une piste de 2 mm tire deja le fond
-# a 0,5 mm (quatre cellules en travers), et une bande par-dessus ne serait
+# QUAND LE FOND SUFFIT, ON N'AFFINE PAS : une piste de 3 mm tire deja le fond
+# a 0,75 mm (quatre cellules en travers), et une bande par-dessus ne serait
 # qu'un pas de temps plus court pour rien.
 verifie("aucune bande quand le fond resout deja le cuivre",
-        (_m_fin["resolution"]["detail"]["fin"] or 0.0) == 0.0,
-        "pas fin = %s" % _m_fin["resolution"]["detail"].get("fin"))
+        (_m_3mm["resolution"]["detail"]["fin"] or 0.0) == 0.0,
+        "pas fin = %s" % _m_3mm["resolution"]["detail"].get("fin"))
 
 # Une pastille de 50 microns ne doit pas emmener toute la carte avec elle.
 _d_pad = document()
@@ -1182,6 +1202,79 @@ refuse("un coaxial entre une couche et elle-meme est refuse comme les autres",
                       "de": "TOP", "a": "TOP"}),
        "a elle-meme")
 
+# LA BOUCLE DE COURANT EST UN CARRE, et ses coins sont a rm.racine(2) de
+# l'axe. Au milieu de la couronne, un coaxial a air de 50 ohms (b/a = 2,3) la
+# voyait sortir de la gaine : le courant lu comptait une part du retour.
+_rb_air = 0.635 * math.exp(50.0 / 59.9585)
+_ca = openems_modele.normaliser(document(port={
+    "type": "coaxial", "x": PLAN / 2.0, "y": Y0 + L_PATCH / 3.0,
+    "de": "TOP", "a": "BOTTOM", "er": 1.0, "rb": _rb_air}))["port"]["coax"]
+verifie("la boucle de courant tient dans la gaine, meme a air",
+        _ca["ra"] < _ca["rm"] and _ca["rm"] * math.sqrt(2) < _ca["rb"],
+        "ra %.3f  coin %.3f  rb %.3f" % (_ca["ra"], _ca["rm"] * math.sqrt(2),
+                                         _ca["rb"]))
+verifie("et celle de la SMA aussi",
+        c["rm"] * math.sqrt(2) < c["rb"] and c["rm"] > c["ra"])
+refuse("un coaxial dont la boucle ne tient pas dans la gaine est refuse",
+       document(port={"type": "coaxial", "x": PLAN / 2.0, "y": Y0 + 5,
+                      "de": "TOP", "a": "BOTTOM", "ra": 1.0, "rb": 1.3}),
+       "trop gras")
+
+# L'AME ET LA GAINE DOIVENT TOMBER SUR DU CUIVRE. Hors du patch, l'ame ne se
+# raccorde a rien : un port ouvert, et un S11 a 0 dB qui a l'air d'un resultat.
+_titres = [a["titre"] for a in mc["avis"]]
+verifie("un coaxial pose sur le patch n'a pas d'avis de contact",
+        not any("ne touche" in t or "touche l'antenne" in t for t in _titres),
+        str(_titres))
+_mo = openems_modele.normaliser(document(port={
+    "type": "coaxial", "x": PLAN / 2.0, "y": Y0 - 5.0,
+    "de": "TOP", "a": "BOTTOM"}))
+verifie("un coaxial pose hors du patch : l'ame ne touche aucun cuivre",
+        any(a["rang"] == "grave" and "L'ame du port 1 ne touche aucun cuivre"
+            in a["titre"] for a in _mo["avis"]),
+        str([a["titre"] for a in _mo["avis"]]))
+
+# UN DEGAGEMENT NE PERCE QUE CE QUI EXISTE. Une couche interne vide est
+# fusionnee avec ses deux substrats ; son degagement s'ecrivait en disque
+# d'AIR au milieu du FR-4 fusionne.
+_emp4 = [{"nom": "TOP", "cuivre": True, "ep": 0.035, "seq": 1},
+         {"nom": "C1", "cuivre": False, "ep": H / 2, "er": ER, "df": 0.02,
+          "seq": 2},
+         {"nom": "MID", "cuivre": True, "ep": 0.035, "seq": 3},
+         {"nom": "C2", "cuivre": False, "ep": H / 2, "er": ER, "df": 0.02,
+          "seq": 4},
+         {"nom": "BOTTOM", "cuivre": True, "ep": 0.035, "seq": 5}]
+_m4 = openems_modele.normaliser(document(empilage=_emp4, port={
+    "type": "coaxial", "x": PLAN / 2.0, "y": Y0 + L_PATCH / 3.0,
+    "de": "TOP", "a": "BOTTOM"}))
+verifie("une couche interne vide ne garde pas de degagement",
+        [d["couche"] for d in _m4["port"]["coax"]["degagements"]] == ["BOTTOM"],
+        str(_m4["port"]["coax"]["degagements"]))
+verifie("et le script ne pose aucun disque d'air dans le substrat",
+        "coax_air" not in openems_script.generer(_m4))
+
+# UN PORT DANS LE PLAN SUR UNE CARTE SIMPLE FACE. Ses deux bornes sont sur la
+# meme couche, et la page n'a pas de voisine a proposer pour « vers ».
+_x0 = (PLAN - W_PATCH) / 2.0
+_m1 = openems_modele.normaliser(document(
+    empilage=[{"nom": "TOP", "cuivre": True, "ep": 0.035, "seq": 1},
+              {"nom": "CORE", "cuivre": False, "ep": H, "er": ER, "df": 0.02,
+               "seq": 2}],
+    cuivre=[{"couche": "TOP", "polys": [
+        {"o": rect(_x0, Y0, W_PATCH, L_PATCH)},
+        {"o": rect(_x0 + W_PATCH + 0.5, Y0, 10.0, L_PATCH), "m": True}]}],
+    port={"type": "localise", "dir": "x", "ecart": 0.5,
+          "x": _x0 + W_PATCH + 0.25, "y": Y0 + L_PATCH / 2.0,
+          "de": "TOP", "a": "TOP"}))
+verifie("un port dans le plan d'une carte simple face est accepte",
+        _m1["port"]["de"] == _m1["port"]["a"] == "TOP"
+        and _m1["port"]["x2"] - _m1["port"]["x1"] > 0.4,
+        str(_m1["port"]))
+refuse("un port vertical d'une couche a elle-meme reste refuse",
+       document(port={"type": "localise", "dir": "z", "x": PLAN / 2.0,
+                      "y": Y0 + 5, "de": "TOP", "a": "TOP"}),
+       "a elle-meme")
+
 # --------------------------------------------------------------------------
 print()
 print("14. Le balayage parametrique")
@@ -1724,10 +1817,23 @@ verifie("entre deux mesures du banc, on interpole",
         abs(openems_modele.debit_suppose() - 27.0 * 212.5 / 180) < 1e-6,
         "%.2f" % openems_modele.debit_suppose())
 openems_modele.regler_fils(0)
-verifie("en « Auto », rien n'est ramene : le tatonnement ne se predit pas",
-        openems_modele.debit_suppose() == 27.0)
 verifie("a 3 % pres, le plus petit nombre de fils gagne",
         openems_modele.banc_meilleur() == 4, str(openems_modele.banc_meilleur()))
+# « AUTO » VAUT LE MEILLEUR DU BANC, et non plus le tatonnement d'openEMS qui
+# s'arretait a deux ou trois fils : le script, l'estimation et la duree
+# partent tous les trois sur ce nombre-la.
+verifie("en « Auto », les calculs recoivent le meilleur du banc",
+        openems_modele.fils_effectif() == 4
+        and openems_modele.normaliser(document())["fils"] == 4
+        and "fils      = 4\n" in openems_script.generer(
+            openems_modele.normaliser(document())))
+verifie("et la duree est ramenee a ce nombre-la",
+        abs(openems_modele.debit_suppose() - 27.0 * 245 / 180) < 1e-6,
+        "%.2f" % openems_modele.debit_suppose())
+openems_modele.noter_banc({})
+verifie("sans banc, « Auto » rend la main a openEMS, et rien n'est ramene",
+        openems_modele.fils_effectif() == 0
+        and openems_modele.debit_suppose() == 27.0)
 
 if _run is not None:
     # Les lignes telles qu'openEMS 0.0.36 les ecrit pendant son tatonnement.
@@ -1760,6 +1866,34 @@ if _run is not None:
     verifie("le banc range sa table, et ne touche pas au debit des antennes",
             openems_modele.debit_mesure() is None and
             sorted(openems_modele.banc()) == [1, 4])
+
+    # LE BANC DU DEMARRAGE CEDE SA PLACE ; celui qu'on a lance a la main, non.
+    # Aucun processus ici : on n'eprouve que la regle de `_exiger_libre`.
+    _auto = _run.TacheBanc("essai-auto", ".", [1, 2], auto=True)
+    _auto.etat = "calcule"
+    with _run._VERROU:
+        _run._TACHES["essai-auto"] = _auto
+    try:
+        _run._exiger_libre()
+        _cede = True
+    except openems_modele.ErreurModele:
+        _cede = False
+    verifie("une simulation interrompt le banc du demarrage au lieu d'attendre",
+            _cede and _auto.etat == "arrete" and _auto.vue()["banc"]["auto"])
+    _main = _run.TacheBanc("essai-main", ".", [1, 2])
+    _main.etat = "calcule"
+    with _run._VERROU:
+        _run._TACHES["essai-main"] = _main
+    try:
+        _run._exiger_libre()
+        _refuse = False
+    except openems_modele.ErreurModele:
+        _refuse = True
+    verifie("mais pas un banc lance a la main : il se mesure, on attend",
+            _refuse and _main.etat == "calcule")
+    with _run._VERROU:
+        _run._TACHES.pop("essai-auto", None)
+        _run._TACHES.pop("essai-main", None)
 
 openems_modele.regler_fils(0)
 openems_modele.noter_banc({})

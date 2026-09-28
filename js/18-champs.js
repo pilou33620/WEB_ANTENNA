@@ -20,9 +20,7 @@
    CE MODULE NE DESSINE PAS LES CHAMPS, IL LES DEMANDE. Les fichiers sont
    des `.vtr` ; le serveur sait maintenant les lire (python/openems_champs.py)
    et la page sait les animer (js/32-visionneuse.js). Le bouton « Voir les
-   champs » ouvre donc la carte ICI, sans rien installer. ParaView reste
-   proposé à côté, pour ce qu'une carte plane ne montre pas — une coupe
-   oblique, des lignes de champ, un rendu volumique — et le bouton
+   champs » ouvre donc la carte ICI, sans rien installer, et le bouton
    « dossier » laisse chacun libre de son outil.
    ============================================================================= */
 
@@ -193,7 +191,6 @@ function antChampsLier(box){
 function antVoirHtml(){
   const t=ANT.tache;
   if(!t||(t.etat!=="fini"&&t.etat!=="arrete"))return "";
-  const pv=ANT.etatServeur&&ANT.etatServeur.paraview;
   const vis=!ANT.etatServeur||ANT.etatServeur.visionneuse!==false;
   const eut=ANT.modele&&ANT.modele.dumps&&ANT.modele.dumps.actif;
   const prj=(typeof PRJ!=="undefined"&&PRJ.dispo)?PRJ:null;
@@ -201,7 +198,6 @@ function antVoirHtml(){
 <div class="champ actions">
   <button class="tb on" id="bVoirChamps"${vis?"":" disabled"}>🎞 Voir les champs</button>
   <button class="tb" id="bDossier">📁 Ouvrir le dossier de calcul</button>
-  ${pv?"<button class=\"tb\" id=\"bParaview\" title=\"Pour ce qu'une carte plane ne montre pas : coupe oblique, lignes de champ, rendu volumique\">📈 ParaView</button>":""}
 </div>
 ${prj?`<div class="champ actions">
   <button class="tb${prj.modifie?" on":""}" id="bToutGarder">💾 ${prj.nom
@@ -221,8 +217,8 @@ ${eut?"":"<p class=\"note\">Aucun champ n'a été enregistré pour ce calcul —
    simulation lancée ; `resultats.json`, lui, n'en retient qu'UN : le dernier.
    Après cinq simulations, cinq dossiers sont sur le disque avec leurs champs,
    et la page n'en atteignait qu'un seul. Les quatre autres étaient là,
-   parfaitement lisibles, et il fallait ouvrir ParaView à la main pour les
-   revoir — alors que la visionneuse est à deux clics.
+   parfaitement lisibles, et il fallait fouiller le disque à la main pour
+   les revoir — alors que la visionneuse est à deux clics.
 
    ET CE QU'IL AJOUTE. Le même endroit sert à faire ENTRER un dossier qui n'y
    était pas : celui d'un collègue, d'une clé USB, d'un calcul mené à la main
@@ -472,15 +468,11 @@ function antVoirLier(box){
     bouton.disabled=true;
     try{
       const r=await oePost(route+"?id="+encodeURIComponent(ANT.tache.id),{});
-      dire(r.detail || (r.lance==="paraview"
-        ? ("ParaView ouvert sur "+r.fichiers+" fichier(s) de champ.")
-        : ("Dossier ouvert : "+r.dossier)), !r.detail);
+      dire(r.detail || ("Dossier ouvert : "+r.dossier), !r.detail);
     }catch(e){
       dire("Impossible : "+(e.message||e), false);
     }finally{ bouton.disabled=false; }
   };
-  const pv=box.querySelector("#bParaview");
-  if(pv&&!pv.disabled)pv.onclick=function(){ appel("/api/openems/paraview",pv); };
   const bd=box.querySelector("#bDossier");
   if(bd)bd.onclick=function(){ appel("/api/openems/dossier",bd); };
 

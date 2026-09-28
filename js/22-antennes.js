@@ -100,14 +100,42 @@ function conZ0Microruban(er,h,w){
    ========================================================================== */
 function conContexte(){
   const s=conSubstrat();
+  const wmax=(CON.wmax>0)?CON.wmax:0;
+  const wf50=conLargeurMicroruban(50,s.er,s.h);
   return {
     f:CON.fcible, s:s, er:s.er, h:s.h, df:s.df,
-    wf:conLargeurMicroruban(50,s.er,s.h),
+    /* La largeur de piste maximale, quand on en a imposé une (0 : aucune).
+       `wf50` garde la largeur que 50 Ω demanderait, `wf` celle qu'on a le
+       droit de dessiner : la fiche compare les deux pour dire ce que la
+       borne coûte en adaptation. */
+    wmax:wmax, wf50:wf50,
+    wf:wmax>0?Math.min(wf50,wmax):wf50,
     /* Le brin d'une antenne qui sort du plan de masse a la moitié de son
        champ dans l'air : (εr+1)/2 est l'approximation d'usage, et elle vaut
        pour le monopôle, l'IFA, le MIFA et le dipôle. */
     eeffAir:(s.er+1)/2
   };
+}
+
+/* ==========================================================================
+   La largeur de piste maximale
+   --------------------------------------------------------------------------
+   Une contrainte de fabrication ou de place — « pas de piste plus large que
+   0,5 mm » — et non une règle d'antenne. Elle BORNE les largeurs que les
+   motifs proposent (champs marqués `piste`), et c'est aux motifs de calculer
+   leurs longueurs APRÈS la borne : le bras d'un IFA se compte sur l'axe du
+   cuivre, une ligne étroite n'a pas le même εr effectif qu'une large. Borner
+   après coup rendrait des largeurs justes et des longueurs fausses.
+
+   Une largeur tapée à la main au-delà de la borne n'est PAS rabotée : c'est
+   une décision, et la fiche la signale au lieu de la défaire. */
+function conBorne(c,w){ return (c&&c.wmax>0)?Math.min(w,c.wmax):w; }
+
+/* Les champs de piste qui dépassent la borne, dans les cotes `p`. */
+function conPistesHorsBorne(g,c,p){
+  if(!(c.wmax>0))return [];
+  return g.champs.filter(ch=>ch.piste&&p[ch.id]!=null&&
+                             +p[ch.id]>c.wmax*(1+1e-6));
 }
 
 /* ==========================================================================
@@ -202,7 +230,7 @@ const CON_MOTIF_PATCH={
           "sur FR-4 1,6 mm à 2,45 GHz, il faut l'écourter d'un bon quart : "+
           "le calcul proposait 11,5 mm pour −2,5 dB, 8,5 mm en rend −13. "+
           "Balayez-le"},
-    {id:"wf", nom:"largeur de la ligne",
+    {id:"wf", nom:"largeur de la ligne", piste:true, z50:true,
      aide:"synthétisée pour 50 Ω sur ce substrat"},
     {id:"g",  nom:"largeur des encoches",
      aide:"le vide qui isole la ligne du cuivre du patch sur toute la "+
@@ -341,19 +369,20 @@ const CON_MOTIF_MONOPOLE={
   champs:[
     {id:"Lm", nom:"longueur du brin",
      aide:"le quart d'onde : c'est la cote qui fixe la résonance"},
-    {id:"wr", nom:"largeur du brin",
+    {id:"wr", nom:"largeur du brin", piste:true,
      aide:"plus il est large, plus la bande est large et la résonance basse"},
     {id:"Lg", nom:"masse tronquée",
      aide:"c'est le second bras de l'antenne : la raccourcir déplace la "+
           "résonance"},
-    {id:"wf", nom:"largeur de la ligne", aide:"synthétisée pour 50 Ω"},
+    {id:"wf", nom:"largeur de la ligne", piste:true, z50:true,
+     aide:"synthétisée pour 50 Ω"},
     {id:"Lb", nom:"largeur de la carte", aide:"de part et d'autre du brin"},
     {id:"marge", nom:"marge au-dessus du brin",
      aide:"le substrat qui dépasse du bout du brin"}
   ],
   defauts:function(c){
     const Lm=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
-    const wr=Math.max(2*c.wf,Lm/6);
+    const wr=conBorne(c,Math.max(2*c.wf,Lm/6));
     const marge=Math.max(3*c.h,2);
     return {
       Lm:Lm, wr:wr,
@@ -504,7 +533,7 @@ function conIfaClassique(c){
   const dVia=Math.min(CON.diametreVia||0.6,0.6);
   /* Brins à λ₀/100 : assez larges pour être gravés et maillés sans excès,
      assez fins pour que le développé reste celui d'un fil. */
-  const wb=+Math.max(lam/100,0.6).toFixed(2);
+  const wb=conBorne(c,+Math.max(lam/100,0.6).toFixed(2));
   /* L'enfoncement du patin de court-circuit n'a pas de règle en λ : c'est le
      via qui le commande, et il lui faut du cuivre autour. */
   const sc=+Math.max(0.8,dVia*1.2).toFixed(2);
@@ -555,7 +584,8 @@ const CON_MOTIF_IFA={
      aide:"longueur hors-tout du bras horizontal : c'est elle qui boucle le développé au quart d'onde"},
     {id:"ha", nom:"hauteur au-dessus de la masse",
      aide:"hauteur au-dessus du bord de masse (classique : λ₀/40 à λ₀/20 — plus haut, plus large de bande)"},
-    {id:"wb", nom:"largeur du bras", aide:"largeur du bras horizontal (classique : λ₀/100)"},
+    {id:"wb", nom:"largeur du bras", piste:true,
+     aide:"largeur du bras horizontal (classique : λ₀/100)"},
     {id:"d",  nom:"écartement court-circuit → alim",
      aide:"espace libre entre brins verticaux (classique : λ₀/40) — c'est le réglage d'impédance"},
     {id:"sc", nom:"enfoncement / patin court-circuit",
@@ -568,7 +598,7 @@ const CON_MOTIF_IFA={
      aide:"longueur du plan de masse : un quart d'onde au moins"},
     {id:"Lb", nom:"largeur de la carte",
      aide:"largeur totale de la carte et du plan de masse (au moins 30 mm)"},
-    {id:"wf", nom:"largeur brins verticaux",
+    {id:"wf", nom:"largeur brins verticaux", piste:true,
      aide:"largeur du brin de court-circuit et d'alimentation (classique : la même que le bras)"},
     {id:"dVia", nom:"diamètre des vias", aide:"vias traversants de court-circuit et de couture"},
     {id:"marge", nom:"marge de carte", aide:"substrat qui dépasse du bras à gauche"},
@@ -755,7 +785,7 @@ const CON_MOTIF_MIFA={
      aide:"plus il y en a, plus les dents sont courtes et les brins serrés"},
     {id:"ha", nom:"hauteur au-dessus de la masse",
      aide:"elle compte dans le développé, comme sur l'IFA"},
-    {id:"wb", nom:"largeur du bras",
+    {id:"wb", nom:"largeur du bras", piste:true,
      aide:"c'est elle qui décide de la distance minimale entre deux brins"},
     {id:"d",  nom:"court-circuit → alimentation",
      aide:"le réglage d'impédance"},
@@ -767,7 +797,7 @@ const CON_MOTIF_MIFA={
     {id:"gd", nom:"dégagement du décroché",
      aide:"largeur du vide de part et d'autre du brin d'alimentation"},
     {id:"Lg", nom:"plan de masse", aide:"il fait partie de l'antenne"},
-    {id:"wf", nom:"largeur du brin d'alimentation",
+    {id:"wf", nom:"largeur du brin d'alimentation", piste:true, z50:true,
      aide:"synthétisé pour 50 Ω"},
     {id:"dVia", nom:"diamètre du via", aide:"le court-circuit, traversant"},
     {id:"marge", nom:"marge de carte", aide:"le substrat qui dépasse"}
@@ -787,7 +817,7 @@ const CON_MOTIF_MIFA={
       Lx:quart*0.35,
       n:2,
       ha:ha,
-      wb:Math.max(quart/20,0.6),
+      wb:conBorne(c,Math.max(quart/20,0.6)),
       d:d, ed:ed, gd:gd,
       sc:sc,
       Lg:Math.max(quart,15),
@@ -927,7 +957,7 @@ const CON_MOTIF_DIPOLE={
   champs:[
     {id:"La", nom:"longueur d'un bras",
      aide:"le quart d'onde : les deux bras font la demi-onde du dipôle"},
-    {id:"wd", nom:"largeur des bras",
+    {id:"wd", nom:"largeur des bras", piste:true,
      aide:"plus large, plus large de bande"},
     {id:"ov", nom:"chevauchement central",
      aide:"c'est le volume du port : les deux bras s'y superposent d'une face "+
@@ -939,7 +969,7 @@ const CON_MOTIF_DIPOLE={
     const La=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
     return {
       La:La,
-      wd:Math.max(La/12,1.0),
+      wd:conBorne(c,Math.max(La/12,1.0)),
       ov:Math.max(c.h,0.5),
       marge:Math.max(4*c.h,3)
     };
@@ -1008,7 +1038,7 @@ const CON_MOTIF_LIGNE={
   besoin:"Il faut deux couches de cuivre : une ligne microruban court "+
          "au-dessus d'un plan.",
   champs:[
-    {id:"wf", nom:"largeur de la ligne",
+    {id:"wf", nom:"largeur de la ligne", piste:true, z50:true,
      aide:"synthétisée pour 50 Ω, et relue ci-dessous"},
     {id:"Ll", nom:"longueur de la ligne",
      aide:"une demi-longueur d'onde guidée : c'est ce qu'on éprouve"},
@@ -1210,6 +1240,26 @@ function conGabaritFiche(g,c,p,t){
     lignes.push(["Résonance estimée (cotes dessinées)",
       conFreq(t.calcul.festim)+"  ("+
       (ec>=0?"+":"")+ec.toFixed(1)+" %)"]);
+  }
+  /* LA BORNE DE PISTE, ET CE QU'ELLE COÛTE. Une ligne d'alimentation plus
+     étroite que sa largeur 50 Ω n'est plus une ligne 50 Ω : on dit de
+     combien elle s'en écarte plutôt que de laisser croire que le port est
+     adapté par construction. */
+  if(c.wmax>0){
+    const pistes=g.champs.filter(ch=>ch.piste).map(conSymbole);
+    lignes.push(["Largeur de piste max", conLong(c.wmax,3)+
+      (pistes.length?" — appliquée à "+pistes.join(", "):"")]);
+    const z=g.champs.find(ch=>ch.z50);
+    if(z&&p[z.id]!=null&&+p[z.id]<c.wf50*0.995){
+      lignes.push(["⚠ Ligne sous sa largeur 50 Ω",
+        conLong(+p[z.id],3)+" → "+conZ0Microruban(c.er,c.h,+p[z.id]).toFixed(1)+
+        " Ω (50 Ω demanderait "+conLong(c.wf50,3)+") : attendez une "+
+        "désadaptation au port"]);
+    }
+    conPistesHorsBorne(g,c,p).forEach(function(ch){
+      lignes.push(["⚠ "+conSymbole(ch)+" au-delà de la borne",
+        conLong(+p[ch.id],3)+" > "+conLong(c.wmax,3)+" (repris à la main)"]);
+    });
   }
   const fiche={titre:t.calcul.titre, resume:t.calcul.resume,
                lignes:lignes.concat(t.calcul.lignes)};

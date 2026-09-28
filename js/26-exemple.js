@@ -221,6 +221,12 @@ function exPoser(cle){
         motif s'alimente — au bout de la ligne pour le patch, au fond du
         décroché de masse pour l'IFA — et demande le champ lointain. */
   CON.fcible=ex.f;
+  /* La borne de largeur de piste est levée pour la même raison que
+     l'empilage est reposé : saisie pour une autre carte, elle survivait à
+     l'exemple — un F inversé borné à 0,35 mm gardait ses brins à 0,35 au
+     lieu de 1,22, et le maillage qui suit les brins passait de une à
+     quatre heures de calcul. */
+  CON.wmax=0;
   conGabaritPoser(ex.motif, ex.cotes);
 
   /* 3. L'arrêt et le maillage, reposés — voir EX plus haut. */

@@ -57,6 +57,7 @@ import socketserver
 import subprocess
 import sys
 import threading
+import time
 import urllib.parse
 import webbrowser
 
@@ -405,13 +406,13 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             raise Refus(409, self._detail(exc))
 
     def _oe_voir(self, action):
-        """Ouvre les champs d'une simulation : ParaView, ou le dossier.
+        """Ouvre le dossier de calcul d'une simulation.
 
         LE SERVEUR LANCE UN PROGRAMME DU POSTE, et cela merite une borne :
         l'identifiant est resolu en dossier par openems_run, qui ne connait
         que les taches QU'IL A CREEES. Un chemin venu de la requete
-        n'atteindrait donc jamais cette route — sans quoi elle ouvrirait bien
-        autre chose que ParaView.
+        n'atteindrait donc jamais cette route — sans quoi elle ouvrirait
+        n'importe quel dossier du poste.
         """
         self._oe()
         ident = (self._params().get("id") or [""])[0]
@@ -428,7 +429,7 @@ class Poste(http.server.SimpleHTTPRequestHandler):
     def _oe_champs(self):
         """La liste de ce qu'un calcul a laisse a regarder.
 
-        MEME BORNE QUE ParaView, ET POUR LA MEME RAISON : l'identifiant est
+        MEME BORNE QUE « ouvrir le dossier », ET POUR LA MEME RAISON : l'identifiant est
         resolu en dossier par openems_run, qui ne connait que les dossiers
         qu'il a crees. Aucun chemin ne vient de la requete — sans quoi cette
         route lirait n'importe quel fichier du poste et le renverrait au
@@ -739,8 +740,7 @@ class Poste(http.server.SimpleHTTPRequestHandler):
            "/api/openems/balayage", "/api/openems/balayage/lancer",
            "/api/openems/tableau-s", "/api/openems/tableau-s/lancer",
            "/api/openems/lancer", "/api/openems/arreter",
-           "/api/openems/journal", "/api/openems/paraview",
-           "/api/openems/dossier",
+           "/api/openems/journal", "/api/openems/dossier",
            "/api/openems/fils", "/api/openems/banc/lancer",
            "/api/openems/champs", "/api/openems/champ",
            "/api/projet", "/api/projet/ouvrir", "/api/projet/racine",
@@ -833,9 +833,6 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             return
         if route == "/api/openems/banc/lancer":
             self._api(self._oe_banc)
-            return
-        if route == "/api/openems/paraview":
-            self._api(lambda: self._oe_voir(openems_antenne.paraview))
             return
         if route == "/api/openems/dossier":
             self._api(lambda: self._oe_voir(openems_antenne.dossier))
@@ -1227,6 +1224,47 @@ def redemarrer_application(argv=None):
         print("[*] Poursuite avec le processus actuel...")
 
 
+def banc_au_demarrage():
+    """Mesure la vitesse du poste des le demarrage, et range le resultat.
+
+    LES BONS FILS SANS AVOIR A LES DEMANDER. Le reglage « Auto » vaut le
+    meilleur nombre du banc (openems_modele.fils_effectif) : le passer ici,
+    une fois par seance, donne ce nombre a tout ce qui suit -- exemples,
+    conception, balayages -- sans clic. Le banc precedent, recolle plus haut
+    depuis les reglages du poste, sert en attendant.
+
+    IL NE BLOQUE RIEN. Une simulation demandee pendant qu'il tourne
+    l'interrompt (openems_run._exiger_libre) : ses mesures partielles sont
+    alors jetees, et l'ancien banc reste en vigueur.
+
+    LE RANGEMENT SE FAIT ICI, PAS DANS LE SUIVI DU JOURNAL : personne ne
+    suivra forcement ce banc -- la page peut ne pas etre ouverte --, et
+    `_oe_ranger_debit` n'est appele que par ce suivi-la.
+    """
+    try:
+        if not openems_antenne.etat().get("lancer"):
+            return
+        ident = openems_antenne.lancer_banc(auto=True)["id"]
+    except Exception:                                  # noqa: BLE001
+        return
+    while True:
+        time.sleep(2.0)
+        try:
+            v = openems_antenne.journal(ident, 10 ** 9)
+        except Exception:                              # noqa: BLE001
+            return
+        if v.get("etat") not in ("prepare", "calcule"):
+            break
+    if v.get("etat") != "fini" or projet is None:
+        return
+    try:
+        b = openems_antenne.fils().get("banc")
+        if b:
+            projet.banc_noter(b)
+    except Exception:                                  # noqa: BLE001
+        pass
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--port", type=int, default=PORT_DEFAUT,
@@ -1239,6 +1277,10 @@ def main(argv=None):
     ap.add_argument("--sans-maj", dest="verifier_maj", action="store_false",
                     default=True,
                     help="ne pas verifier les mises a jour GitHub au demarrage")
+    ap.add_argument("--sans-banc", dest="banc", action="store_false",
+                    default=True,
+                    help="ne pas mesurer la vitesse du poste au demarrage "
+                         "(les fils du dernier banc restent en vigueur)")
     args = ap.parse_args(argv)
 
     # LA MISE A JOUR AVANT TOUT LE RESTE, ET AVANT LA BASCULE DANS LE VENV.
@@ -1346,18 +1388,25 @@ def main(argv=None):
                     print("                    %s" % ligne.strip())
         if solveur.get("dll"):
             print("  DLL               %s" % solveur["dll"])
-        if etat.get("paraview"):
-            print("  ParaView          %s" % etat["paraview"])
         d = openems_antenne.debit()
         print("  Debit annonce     %.1f Mcellules/s  (%s)"
               % (d["mcps"],
                  ("mesure sur %d calcul(s) de ce poste" % d["n"])
                  if d["mesure"] else "suppose : aucun calcul n'a encore fini"))
         f = openems_antenne.fils()
-        print("  Fils de calcul    %s  (%d coeurs logiques%s)"
-              % (f["regle"] or "au choix d'openEMS", f["coeurs"],
-                 (", meilleur au banc : %d" % f["meilleur"])
-                 if f["meilleur"] else ", banc de vitesse jamais passe"))
+        if f["regle"]:
+            qui = "%d, choisi a la main" % f["regle"]
+        elif f["effectif"]:
+            qui = "auto : %d, le meilleur au dernier banc" % f["effectif"]
+        else:
+            qui = "auto : au choix d'openEMS tant que le banc n'a pas parle"
+        print("  Fils de calcul    %s  (%d coeurs logiques)"
+              % (qui, f["coeurs"]))
+        if args.banc and etat.get("lancer"):
+            print("  Banc de vitesse   lance en arriere-plan (une a deux "
+                  "minutes) ;")
+            print("                    une simulation demandee entre-temps "
+                  "l'interrompt")
     print()
     print("  Ctrl+C pour arreter.")
     print()
@@ -1370,6 +1419,8 @@ def main(argv=None):
 
     if args.navigateur:
         threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+    if args.banc and openems_antenne is not None:
+        threading.Thread(target=banc_au_demarrage, daemon=True).start()
     try:
         serveur.serve_forever()
     except KeyboardInterrupt:

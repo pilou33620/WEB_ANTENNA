@@ -193,6 +193,12 @@ const CON={
      bande. */
   fcible:2.45e9,
 
+  /* La largeur de piste maximale que les gabarits ont le droit de proposer,
+     en millimètres ; 0 veut dire « aucune borne ». Voir `conBorne` dans
+     22-antennes.js : elle borne les largeurs, et les longueurs se calculent
+     ensuite sur les largeurs bornées. */
+  wmax:0,
+
   /* Ce que le dernier gabarit a calculé, pour que le panneau puisse le dire :
      largeur de ligne 50 Ω, εr effectif, longueur résonante. Un chiffre rendu
      sans son calcul n'est qu'un chiffre. */
@@ -1155,7 +1161,7 @@ function conEtatDessin(){
   return JSON.stringify({
     el:CON.elements, carte:CON.carte, pile:CON.pile, uid:CON.uid,
     modele:CON.modele, cible:CON.cible,
-    cu:CON.coucheActive, net:CON.netActif, f:CON.fcible,
+    cu:CON.coucheActive, net:CON.netActif, f:CON.fcible, wm:CON.wmax,
     gab:CON.gabarit, gabP:CON.gabaritP, gabT:CON.gabaritTouche,
     calc:CON.calcul,
     ports:ANT.ports, pa:ANT.portActif,
@@ -1206,6 +1212,7 @@ function conHistAller(j){
   CON.coucheActive=e.cu;
   CON.netActif=e.net;
   CON.fcible=e.f;
+  CON.wmax=e.wm||0;
   CON.gabarit=e.gab;
   CON.gabaritP=e.gabP;
   CON.gabaritTouche=e.gabT;

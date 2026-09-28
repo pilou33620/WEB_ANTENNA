@@ -116,9 +116,10 @@ function antPortVerdict(p){
     out.push({ok:false,t:"Les deux couches du port ne sont pas choisies."});
     return out;
   }
-  if(p.type==="coaxial")return out;       // le connecteur a ses propres avis
   const k=V.unite==="in" ? 1/25.4 : 1;
   const nom=function(n){ return n==="antenne"?"l'antenne":n==="masse"?"la masse":"rien"; };
+
+  if(p.type==="coaxial")return antPortVerdictCoax(p,nom);
 
   if(p.dir==="x"||p.dir==="y"){
     const e=(p.ecart>0?p.ecart:0.2*k)/2;
@@ -205,6 +206,43 @@ function antPortVerdict(p){
     out.push({ok:null,t:"Un trou métallisé ("+aL(g.v.d)+", de « "+g.v.de+
       " » à « "+g.v.a+" ») passe à "+aL(g.jeu)+" du port, entre ses deux "+
       "couches : la grille peut les réunir."});
+  return out;
+}
+
+/* LE CONNECTEUR COAXIAL. Ses deux bornes ne sont pas des points : l'âme se
+   raccorde à « de » sur l'axe, la gaine à « a » sur tout son tour. Une âme
+   posée à côté du cuivre est un circuit ouvert, une gaine dans une réserve
+   aussi — et l'un comme l'autre rend un S₁₁ vers 0 dB qui a l'air d'un
+   résultat. Le serveur tient la même règle (`_avis_coax_contacts`). La gaine
+   est lue au milieu de son épaisseur, sur seize points. */
+const ANT_COAX_POINTS=16;
+function antPortVerdictCoax(p,nom){
+  const out=[];
+  const ame=antCuivreRetenuEn(p.de,p.x,p.y);
+  out.push({ok:ame==="antenne",
+    t:"Âme sur « "+p.de+" » : "+(ame==="antenne"?"sur l'antenne."
+      :ame==="masse"?"sur la MASSE — le connecteur est court-circuité."
+      :"dans le vide — aucun cuivre retenu sous l'âme : le port est ouvert.")});
+  const r=(p.rb>0?p.rb:0)+(p.ep_gaine>0?p.ep_gaine:0)/2;
+  let vide=0, ant=0;
+  for(let i=0;i<ANT_COAX_POINTS;i++){
+    const t=2*Math.PI*i/ANT_COAX_POINTS;
+    const n=antCuivreRetenuEn(p.a,p.x+r*Math.cos(t),p.y+r*Math.sin(t));
+    if(!n)vide++; else if(n==="antenne")ant++;
+  }
+  if(ant)
+    out.push({ok:false,t:"Gaine sur « "+p.a+" » : elle touche du cuivre de "+
+      "l'ANTENNE — le connecteur est court-circuité par ce cuivre."});
+  else if(vide===ANT_COAX_POINTS)
+    out.push({ok:false,t:"Gaine sur « "+p.a+" » : aucun cuivre retenu sur "+
+      "son tour — elle ne touche pas la masse, le port est ouvert."});
+  else if(vide)
+    out.push({ok:null,t:"Gaine sur « "+p.a+" » : elle ne touche la masse que "+
+      "sur une partie de son tour ("+(ANT_COAX_POINTS-vide)+"/"+
+      ANT_COAX_POINTS+") — un bord ou une réserve passe sous le connecteur."});
+  else
+    out.push({ok:true,t:"Gaine sur « "+p.a+" » : sur "+nom("masse")+
+      ", sur tout son tour."});
   return out;
 }
 

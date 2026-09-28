@@ -109,6 +109,28 @@ LIGNES_MAX_EMPRISE = 200.0
 # largeur du ruban, pas sur sa longueur. D'ou les bandes fines de `_maillage`,
 # et les trois constantes qui les bornent.
 #
+# ... ET LE FOND NE DOIT PLUS SUIVRE LE CUIVRE JUSQU'EN BAS. Les bandes sont
+# arrivees, mais `_resolution` continuait de poser le fond de TOUTE l'emprise
+# a largeur / CELLULES_PAR_PISTE : sur l'exemple F inverse (brins de 1,22 mm,
+# carte de 50 x 58 mm), le plan de masse entier tombait a 0,305 mm, les bandes
+# n'avaient plus rien a affiner, et le calcul durait 2 h 13 -- 3,9 millions de
+# cellules. Fond borne et bandes sur les brins : 1,0 million, 27 minutes, les
+# memes quatre cellules en travers des brins, et une resonance a 0,4 % pres
+# (2,569 GHz contre 2,580, S11 -29 dB contre -37, rendement 9,5 % contre
+# 9,7 %). La largeur du
+# cuivre ne descend donc le fond que jusqu'a lambda/20 divise par
+# FOND_DIVISEUR_MAX ; en dessous, ce sont les bandes qui mettent les quatre
+# cellules en travers de la piste, la ou elle est, et sous le budget de
+# `_mailler`. Ce n'est pas le « rapport fixe » refuse plus haut : il borne le
+# FOND, pas la resolution du cuivre, que les bandes assurent toujours.
+#
+# QUATRE, ET LE PATCH N'EN VOIT RIEN. A 2,45 GHz sur FR-4, le fond ne descend
+# plus sous 0,64 mm ; celui du patch de l'exemple est a 0,74 mm (sa ligne de
+# 2,98 mm divisee par quatre), au-dessus : sa grille reste la meme, ligne pour
+# ligne. Et la mesure de CELLULES_PAR_PISTE -- la resonance revient a 0,8 mm
+# -- dit qu'un fond a 0,64 n'est pas un fond grossier.
+FOND_DIVISEUR_MAX = 4.0
+#
 # MARGE_BANDE : de combien de cellules fines la bande depasse le cuivre, de
 # chaque cote. Zero marcherait — le lissage rattraperait le fond des la cellule
 # suivante —, mais le champ de bord d'un ruban s'etend sur a peu pres
@@ -499,6 +521,21 @@ def banc_meilleur():
     return min(f for f, v in _BANC.items() if v >= 0.97 * top)
 
 
+def fils_effectif():
+    """Les fils que les calculs recoivent VRAIMENT : le reglage s'il y en a
+    un, sinon le meilleur du banc, sinon 0 (openEMS tatonne).
+
+    « AUTO » VEUT DIRE « LE BON NOMBRE », PAS « LE TATONNEMENT D'OPENEMS ».
+    Laisse a lui-meme, openEMS s'arretait a deux ou trois fils : l'exemple
+    F inverse a tourne a 2 fils et 30 MC/s sur un poste dont le banc mesure
+    138 MC/s a deux fils et 222 a huit. Le banc passe au demarrage du
+    serveur (web_antenna.py) : des qu'il a parle, ses fils vont a tous les
+    calculs -- exemples, conception, balayages -- sans qu'on ait rien a
+    choisir. Un nombre choisi a la main reste un choix, et passe devant.
+    """
+    return _FILS if _FILS > 0 else banc_meilleur()
+
+
 def _banc_a(f):
     """Le debit du banc a `f` fils, interpole entre deux mesures voisines."""
     ks = sorted(_BANC)
@@ -515,13 +552,16 @@ def _banc_a(f):
 def facteur_fils(fils_mesure):
     """De combien un debit mesure a `fils_mesure` fils change au reglage.
 
-    1.0 quand on ne sait pas : pas de banc, fils de la mesure inconnus, ou
-    reglage laisse a openEMS -- son tatonnement ne se predit pas.
+    1.0 quand on ne sait pas : pas de banc, ou fils de la mesure inconnus.
+    Sans banc, le reglage « Auto » laisse openEMS tatonner, et son
+    tatonnement ne se predit pas ; avec un banc, « Auto » vaut son meilleur
+    nombre (voir `fils_effectif`), et la mise a l'echelle se fait sur lui.
     """
-    if not _BANC or _FILS <= 0 or not fils_mesure or fils_mesure <= 0:
+    fils = fils_effectif()
+    if not _BANC or fils <= 0 or not fils_mesure or fils_mesure <= 0:
         return 1.0
     ref = _banc_a(fils_mesure)
-    return _banc_a(_FILS) / ref if ref > 0 else 1.0
+    return _banc_a(fils) / ref if ref > 0 else 1.0
 
 
 class ErreurModele(Exception):
@@ -1612,9 +1652,24 @@ def _port_coaxial(p, ca, cb, conducteurs, x, y, k_mm):
     # modes superieurs soient morts, assez loin de la carte pour que le champ
     # de bord du degagement ne soit pas compte comme de la ligne.
     z_mes = 0.5 * (z_bas + z_gaine)
-    # Le rayon de la boucle de courant : au milieu de la couronne, la ou le
-    # champ H est le mieux represente.
-    rm = 0.5 * (ra + rb)
+    # LA BOUCLE DE COURANT EST UN CARRE, ET SES COINS SONT PLUS LOIN QUE SES
+    # COTES. `rm` est son demi-cote : les cotes passent a rm de l'axe, les
+    # coins a rm.racine(2). Au milieu de la couronne -- rm = (a+b)/2 -- les
+    # coins sortaient de la gaine des que b/a < 2,414 : un coaxial a air de
+    # 50 ohms (b/a = 2,3) comptait dans sa boucle une part du courant de
+    # retour de la gaine, et l'impedance lue etait fausse sans que rien le
+    # dise. Le demi-cote est donc pris a mi-chemin entre l'ame et le plus
+    # grand carre qui tienne dans la gaine, b/racine(2).
+    rb_carre = rb / math.sqrt(2.0)
+    if ra >= rb_carre:
+        raise ErreurModele(
+            "Le coaxial du port est trop gras pour sa gaine : ame de %.3f mm "
+            "pour une gaine de %.3f mm (b/a = %.2f)." % (ra, rb, rb / ra),
+            "La sonde de courant est un carre autour de l'ame, qui doit tenir "
+            "dans la gaine : il faut b/a > 1,414, soit Z0 > %.1f ohms avec "
+            "er = %.2f. Une SMA ordinaire donne a = 0,635 et b = 2,05 mm."
+            % (_coax_z0(1.0, math.sqrt(2.0), er), er))
+    rm = 0.5 * (ra + rb_carre)
 
     # LES DEGAGEMENTS. Toute couche de cuivre que l'ame traverse doit etre
     # percee, sauf celle qui la recoit. Celle de la gaine en fait partie : sans
@@ -1788,7 +1843,13 @@ def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu):
             "(recues : « %s » et « %s »)." % (rang, nom_a or "?", nom_b or "?"),
             "Choisissez la couche de l'antenne et celle du plan de masse "
             "dans le panneau « Le port ».")
-    if ca["nom"] == cb["nom"]:
+    # UN PORT DANS LE PLAN A SES DEUX BORNES SUR LA MEME COUCHE : c'est la
+    # fente qu'il enjambe qui fait la difference de potentiel, et `a` ne sert
+    # a rien (`_port_volume_localise` ne lit que `ca`). Le refuser rendait
+    # impossible toute antenne coplanaire sur une carte simple face, ou la
+    # page n'a pas de couche voisine a proposer.
+    dans_plan = genre == "localise" and direction in ("x", "y")
+    if ca["nom"] == cb["nom"] and not dans_plan:
         raise ErreurModele(
             "Le port %d relie « %s » a elle-meme." % (rang, ca["nom"]),
             "Un port excite une DIFFERENCE de potentiel : il lui faut deux "
@@ -2060,8 +2121,12 @@ def _resolution(bande, er_max, cuivre=(), boite_cu=None):
 
     res_die = res_lam
     largeur = _largeur_cuivre_min(cuivre)
+    # Le fond suit le cuivre, mais pas plus bas que `fond_min` : au-dela, ce
+    # sont les bandes fines de `_mailler` qui resolvent la piste, en travers
+    # d'elle seule. Voir FOND_DIVISEUR_MAX.
+    fond_min = res_lam / FOND_DIVISEUR_MAX
     if largeur:
-        res_die = min(res_die, largeur / CELLULES_PAR_PISTE)
+        res_die = min(res_die, max(largeur / CELLULES_PAR_PISTE, fond_min))
 
     if boite_cu:
         cote = max(boite_cu[2] - boite_cu[0], boite_cu[3] - boite_cu[1])
@@ -2078,6 +2143,7 @@ def _resolution(bande, er_max, cuivre=(), boite_cu=None):
     # se voit au lieu de se subir.
     return res_air, res_die, {"lambda": res_lam, "largeur_cuivre": largeur,
                               "plancher": plancher, "bornee": bornee,
+                              "fond_min": fond_min,
                               "air": res_air, "die": res_die}
 
 
@@ -3316,7 +3382,7 @@ def _estimation(mx, my, mz, res_die):
         "mcps_n": debit_n(),
         # Les fils avec lesquels ce debit est annonce, et s'il a ete ramene a
         # ce reglage par le banc de vitesse (voir `debit_suppose`).
-        "fils": _FILS,
+        "fils": fils_effectif(),
         "mcps_ramene": any(facteur_fils(f) != 1.0 for _v, f in _MCPS_VUS),
     }
 
@@ -3375,6 +3441,16 @@ def normaliser(doc):
     n_polys -= sum(masse_retiree.values())
     conducteurs, dielectriques, empilage_reduit = _reduire_empilage(
         conducteurs, dielectriques, cuivre, vias, ports)
+    # UN DEGAGEMENT NE PERCE QUE CE QUI EXISTE. Ceux du coaxial ont ete poses
+    # sur l'empilage entier, avant la fusion : une couche interne vide,
+    # fusionnee avec ses deux substrats, gardait le sien -- et le script
+    # l'ecrivait en disque d'AIR au milieu du FR-4 fusionne, faute de face de
+    # substrat a sa cote.
+    gardees = {c["nom"] for c in conducteurs}
+    for p in ports:
+        if p.get("coax"):
+            p["coax"]["degagements"] = [d for d in p["coax"]["degagements"]
+                                        if d["couche"] in gardees]
 
     # L'EMPRISE EST L'UNION DE TOUT CE QUI EXISTE, et pas seulement du cuivre :
     # une marge d'air mesuree depuis la carte seule laisserait un boitier ou
@@ -3493,8 +3569,9 @@ def normaliser(doc):
         },
         # Les fils de calcul passes a openEMS (`numThreads`). Reglage du
         # POSTE et non du document -- voir « Les fils de calcul » plus haut.
-        # 0 laisse openEMS tatonner.
-        "fils": _FILS,
+        # Le reglage, ou a defaut le meilleur du banc (`fils_effectif`) ; 0
+        # seulement quand aucun banc n'a encore parle : openEMS tatonne.
+        "fils": fils_effectif(),
         "nf2ff": {
             "actif": bool(nf2ff.get("actif")),
             # Les angles sont en degres dans le document, en radians nulle
@@ -3819,6 +3896,86 @@ def _avis_ports_court_circuit(m):
                              % (x, y, "de l'" + nature if nature == "antenne"
                                 else "de la " + nature, p["de"], p["a"]),
                 })
+    return out
+
+
+# LE CONNECTEUR COAXIAL A AUSSI DEUX BORNES, et aucune n'etait verifiee. L'ame
+# se raccorde a « de » sur l'axe, la gaine a « a » sur tout son tour. Une ame
+# posee a cote du cuivre est un circuit ouvert ; une gaine dans une reserve de
+# masse aussi. Le calcul va au bout dans les deux cas, et rend un S11 vers
+# 0 dB que rien ne distingue d'une antenne desaccordee. La gaine est lue au
+# milieu de son epaisseur, sur COAX_POINTS_GAINE points ; la page tient la
+# meme regle (36-port-verdict.js, `antPortVerdictCoax`). Comme pour
+# `_avis_ports_court_circuit`, ce qui distingue l'antenne de la masse n'est
+# dit que si la masse est connue.
+COAX_POINTS_GAINE = 16
+
+
+def _avis_coax_contacts(m):
+    out = []
+    connue = any(q.get("m") or q.get("mixte")
+                 for b in m["cuivre"] for q in b["polys"])
+    for p in m["ports"]:
+        c = p.get("coax")
+        if not c:
+            continue
+        x, y = p["x"], p["y"]
+        ame = _cuivre_sous(m, p["de"], x, y)
+        if not ame:
+            out.append({
+                "rang": "grave",
+                "titre": "L'ame du port %d ne touche aucun cuivre" % p["n"],
+                "texte": "En (%.3f ; %.3f) mm, il n'y a pas de cuivre retenu "
+                         "sur « %s », la couche ou l'ame se raccorde. Le port "
+                         "est ouvert : le calcul ira au bout et rendra un S11 "
+                         "vers 0 dB. Posez le connecteur sur le cuivre de "
+                         "l'antenne." % (x, y, p["de"]),
+            })
+        elif connue and ame == {"masse"}:
+            out.append({
+                "rang": "grave",
+                "titre": "L'ame du port %d se raccorde a la masse" % p["n"],
+                "texte": "En (%.3f ; %.3f) mm, le cuivre de « %s » est de la "
+                         "masse : l'ame et la gaine sont au meme potentiel, "
+                         "le connecteur est court-circuite." % (x, y, p["de"]),
+            })
+        r = c["rb"] + c["ep_gaine"] / 2.0
+        vus = [_cuivre_sous(m, p["a"],
+                            x + r * math.cos(2 * math.pi * k / COAX_POINTS_GAINE),
+                            y + r * math.sin(2 * math.pi * k / COAX_POINTS_GAINE))
+               for k in range(COAX_POINTS_GAINE)]
+        vides = sum(1 for v in vus if not v)
+        if connue and any(v == {"antenne"} for v in vus):
+            out.append({
+                "rang": "grave",
+                "titre": "La gaine du port %d touche l'antenne" % p["n"],
+                "texte": "Sur « %s », autour du connecteur (rayon %.3f mm), "
+                         "une partie du cuivre est celle de l'antenne : la "
+                         "gaine la met a la masse, et le connecteur est "
+                         "court-circuite par ce cuivre." % (p["a"], r),
+            })
+        elif vides == len(vus):
+            out.append({
+                "rang": "grave",
+                "titre": "La gaine du port %d ne touche aucun cuivre" % p["n"],
+                "texte": "Sur « %s », il n'y a pas de cuivre retenu autour du "
+                         "connecteur (rayon %.3f mm) : la gaine ne touche pas "
+                         "la masse, et le port est ouvert. Verifiez la couche "
+                         "« vers » du port, ou la reserve du plan de masse a "
+                         "cet endroit." % (p["a"], r),
+            })
+        elif vides:
+            out.append({
+                "rang": "attention",
+                "titre": "La gaine du port %d ne touche la masse qu'en partie"
+                         % p["n"],
+                "texte": "Sur « %s », %d points sur %d du tour de la gaine "
+                         "(rayon %.3f mm) tombent hors du cuivre : un bord ou "
+                         "une reserve passe sous le connecteur. Le retour de "
+                         "courant fait alors un detour que le vrai connecteur "
+                         "ne fait pas."
+                         % (p["a"], vides, len(vus), r),
+            })
     return out
 
 
@@ -4676,6 +4833,7 @@ def _avis(m):
             })
 
     out.extend(_avis_ports_court_circuit(m))
+    out.extend(_avis_coax_contacts(m))
     out.extend(_avis_ecarts_ouverts(m))
     out.extend(_avis_ponts_de_maille(m))
 

@@ -526,8 +526,14 @@ function conApercuBloc(g){
         'résonance estimée '+conFreq(t.calcul.festim)+' ('+
         (ec>=0?"+":"−")+conNb(a,1)+' %)</span>';
     }
+    /* Une piste reprise à la main au-delà de la borne se voit ICI, pendant
+       qu'on règle, et pas seulement dans la fiche après la pose. */
+    const hors=conPistesHorsBorne(g,c,CON.gabaritP).map(conSymbole);
+    const borne=hors.length
+      ? '<span class="loin">⚠ '+aEsc(hors.join(", "))+' &gt; piste max '+
+        conLong(c.wmax,2)+'</span>' : "";
     etat='<div class="apm-etat">'+f+'<span>carte '+conLong(t.carte.L,1)+
-         ' × '+conLong(t.carte.W,1)+'</span></div>';
+         ' × '+conLong(t.carte.W,1)+'</span>'+borne+'</div>';
   }
   /* La légende dit les trois couleurs du dessin. Elle est sous l'image et non
      dedans : une étiquette posée sur un dessin de cette taille recouvre
@@ -640,6 +646,9 @@ function conFicheMotif(g){
       '<span class="unite">'+conU()+'</span></div>'+
     '<div class="pnl-bar">'+
       '<button class="tb on" data-con-motif-poser>Dessiner ce motif</button>'+
+      '<button class="tb" data-con-motif-simuler title="Dessiner ce motif, '+
+      'puis lancer openEMS sur la bande ±15 % autour de la fréquence visée">'+
+      '▶ Dessiner et simuler</button>'+
       '<button class="tb mini" data-con-motif-calcul title="Rendre à chaque '+
       'cote la valeur que le calcul propose">↻ cotes du calcul</button>'+
     '</div>'+
@@ -681,6 +690,13 @@ function conBlocGabarits(){
         '<input type="number" step="any" min="0" data-con-f value="'+
         f+'"></span>'+
       '<span><label>en</label><select data-con-uf>'+uf+'</select></span>'+
+      '<span><label title="La largeur maximale des pistes du motif (ligne '+
+        'd\'alimentation, bras, brin). Les longueurs sont recalculées sur les '+
+        'largeurs bornées. Vide : aucune borne.">largeur de piste max</label>'+
+        '<input type="number" step="'+conPas(0.05)+'" min="0" data-con-wmax '+
+        'placeholder="aucune" value="'+(CON.wmax>0?conAff(CON.wmax):"")+
+        '"></span>'+
+      '<span class="unite">'+conU()+'</span>'+
     '</div>'+
     '<div class="galerie-motifs">'+galerie+'</div>'+
     (g?conFicheMotif(g):
@@ -1109,6 +1125,41 @@ function conPanneauLier(box){
       CON.gabaritTouche={};
       conGabaritRafraichir();
       conPanneauRendre();
+    };
+  });
+  /* La borne de piste : même partage que la fréquence — l'aperçu suit la
+     frappe, le panneau se refait au relâchement. Un champ vidé, ou nul, lève
+     la borne. */
+  box.querySelectorAll("[data-con-wmax]").forEach(function(el){
+    el.oninput=function(){
+      const t=String(el.value).trim();
+      const v=parseFloat(t.replace(",","."));
+      if(t!==""&&!isFinite(v))return;
+      CON.wmax=(t===""||!(v>0))?0:conLire(v);
+      conGabaritRafraichir();
+      conApercuMaj();
+    };
+    el.onchange=function(){ conPanneauRendre(); };
+  });
+  /* Dessiner, puis lancer le solveur. Le lancement passe par le même
+     `antLancer` que le bouton de l'assistant : ce qu'il refuse, il le refuse
+     ici aussi, et le dit. */
+  box.querySelectorAll("[data-con-motif-simuler]").forEach(function(b){
+    b.onclick=function(){
+      const g=conGabarit(CON.gabarit);
+      if(!g||!conGabaritPoser(g,CON.gabaritP))return;
+      const t=ANT.tache;
+      if(t&&(t.etat==="calcule"||t.etat==="prepare")){
+        hint("Motif dessiné. Une simulation tourne déjà : relancez quand "+
+             "elle aura fini.");
+        return;
+      }
+      if(!(ANT.etatServeur&&ANT.etatServeur.lancer)){
+        hint("Motif dessiné, mais openEMS ne peut pas être lancé depuis ce "+
+             "serveur : exportez le script depuis l'assistant.");
+        return;
+      }
+      antLancer();
     };
   });
   box.querySelectorAll("[data-con-motif-poser]").forEach(function(b){

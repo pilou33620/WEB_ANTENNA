@@ -136,7 +136,7 @@ function prjDessin(){
     grille:CON.grille, unite:CON.unite, largeur:CON.largeur,
     trou:!!CON.trou, coucheActive:CON.coucheActive,
     netActif:CON.netActif, diametreVia:CON.diametreVia,
-    fcible:CON.fcible,
+    fcible:CON.fcible, wmax:CON.wmax,
     /* LE MOTIF OUVERT ET SES COTES, alors que RIEN N'EN EST DESSINÉ. C'est
        précisément pour cela qu'il faut le garder : une fiche de motif est un
        réglage en cours — on ouvre un patch, on retouche deux cotes, on va
@@ -400,6 +400,8 @@ function prjConAppliquer(d){
   CON.netActif=String(d.netActif||CON.netActif);
   CON.diametreVia=prjNombre(d.diametreVia,CON.diametreVia);
   CON.fcible=prjNombre(d.fcible,CON.fcible);
+  /* Un projet écrit avant la borne de piste n'en a pas : aucune borne. */
+  CON.wmax=Math.max(0,prjNombre(d.wmax,0));
   CON.coucheActive=(conCoucheDeUid(d.coucheActive)>=0)
     ? d.coucheActive : conPremierCuivre();
   /* Le motif n'est repris que si l'outil le connaît encore : un projet écrit

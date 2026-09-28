@@ -27,10 +27,9 @@
    patch y serait deux fois trop large. Chaque pixel est donc ramené à sa
    coordonnée réelle, par une table calculée une fois par taille de vue.
 
-   CE MODULE NE REMPLACE PAS ParaView POUR TOUT. Une coupe oblique, des
-   lignes de champ en 3D, un rendu volumique : c'est son métier, et le
-   bouton qui l'ouvre reste. Mais la question de tous les jours — « où passe
-   le courant ? » — se répond ici, en deux secondes, sans rien installer.
+   LA QUESTION DE TOUS LES JOURS — « où passe le courant ? » — se répond
+   ici, en deux secondes, sans rien installer. Pour le reste, le bouton
+   « Ouvrir le dossier de calcul » laisse chacun libre de son outil.
    ============================================================================= */
 
 const CHP={

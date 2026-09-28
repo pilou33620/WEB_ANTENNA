@@ -176,7 +176,7 @@ def _tableau(da, compresse, simple=True):
         raise ErreurChamps(
             "Ce .vtr range ses donnees en « %s », que l'outil ne lit pas."
             % fmt,
-            "Ouvrez le dossier de calcul : ParaView, lui, les lira.")
+            "Ouvrez le dossier de calcul pour les lire avec un autre outil.")
     brut = _bloc_binaire(da.text or "", compresse)
     a = array.array(forme)
     a.frombytes(brut[:len(brut) - (len(brut) % a.itemsize)])
