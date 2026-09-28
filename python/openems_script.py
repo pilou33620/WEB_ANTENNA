@@ -691,7 +691,18 @@ def generer(m, chemin_openems=None, dossier_sim=None):
     a(_bloc_calcport(m))
     a("s11 = port.uf_ref / port.uf_inc\n")
     a("Zin = port.uf_tot / port.if_tot\n")
-    if len(m["ports"]) > 1:
+    if m.get("reseau"):
+        a("# LE RESEAU : le coefficient de reflexion ACTIF de chaque port\n")
+        a("# excite, b_i / a_i, pendant que tous emettent. Un port en charge\n")
+        a("# garde b_j rapporte a l'onde incidente du port de reference.\n")
+        a("couplages = {}\n")
+        for q in m["ports"]:
+            if q["n"] == port["n"]:
+                continue
+            k = q["n"] - 1
+            a("couplages[%d] = ports[%d].uf_ref / %s.uf_inc\n"
+              % (q["n"], k, ("ports[%d]" % k) if q["excite"] else "port"))
+    elif len(m["ports"]) > 1:
         a("# LES COUPLAGES. S(j,%d) = ce qui RESSORT du port j divise par ce qui\n"
           % port["n"])
         a("# ENTRE par le port %d. Le denominateur est donc toujours celui du\n"
@@ -723,8 +734,8 @@ def generer(m, chemin_openems=None, dossier_sim=None):
     a(_bloc_ligne(m))
     if len(m["ports"]) > 1:
         a("for _n, _s in sorted(couplages.items()):\n")
-        a("    print('S%%d%d       : %%.2f dB a la resonance, %%.2f dB au pire'\n"
-          % port["n"])
+        a("    print('%s       : %%.2f dB a la resonance, %%.2f dB au pire'\n"
+          % ("Gamma actif %d" if m.get("reseau") else "S%%d%d" % port["n"]))
         a("          % (_n, 20 * np.log10(max(abs(_s[i0]), 1e-12)),\n")
         a("             20 * np.log10(max(np.max(np.abs(_s)), 1e-12))))\n")
 
@@ -747,8 +758,18 @@ def generer(m, chemin_openems=None, dossier_sim=None):
         a("# signe de cette derniere depend du sens de reference du courant du\n")
         a("# port, et un rendement negatif n'apprend rien a personne. Ce qui\n")
         a("# entre vraiment, c'est l'incidente moins la reflechie.\n")
-        a("p_inc = abs(0.5 * np.real(port.uf_inc[i0] * np.conj(port.if_inc[i0])))\n")
-        a("p_acc = p_inc * (1 - abs(s11[i0]) ** 2)\n")
+        if m.get("reseau"):
+            a("# Un reseau : la puissance acceptee est la SOMME sur les ports\n")
+            a("# excites, chacun avec son coefficient de reflexion actif.\n")
+            a("p_acc = 0.0\n")
+            for q in m["ports"]:
+                if q["excite"]:
+                    a("_p = ports[%d]\n" % (q["n"] - 1))
+                    a("p_acc += abs(0.5 * np.real(_p.uf_inc[i0] * np.conj(_p.if_inc[i0]))) \\\n"
+                      "    * (1 - min(abs(_p.uf_ref[i0] / _p.uf_inc[i0]), 1.0) ** 2)\n")
+        else:
+            a("p_inc = abs(0.5 * np.real(port.uf_inc[i0] * np.conj(port.if_inc[i0])))\n")
+            a("p_acc = p_inc * (1 - abs(s11[i0]) ** 2)\n")
         a("print('Directivite : %.2f dBi' % (10 * np.log10(res_nf.Dmax[0])))\n")
         a("if p_acc > 0:\n")
         a("    print('Rendement   : %.1f %%' % (100 * res_nf.Prad[0] / p_acc))\n")
@@ -911,7 +932,11 @@ def _bloc_ports(m):
     a("# 6. %s\n" % ("Le port d'excitation" if len(ports) == 1
                      else "Les %d ports" % len(ports)))
     a("# --------------------------------------------------------------------\n")
-    if len(ports) > 1:
+    if m.get("reseau"):
+        a("# UN RESEAU ALIMENTE EN PHASE : les ports excites emettent ensemble,\n")
+        a("# meme amplitude, meme phase. Ce que chacun renvoie est son\n")
+        a("# coefficient de reflexion ACTIF -- couplages compris --, pas un S11.\n")
+    elif len(ports) > 1:
         a("# Le port %d excite ; %s pose%s en charge, c'est-a-dire en\n"
           % (excite["n"],
              "l'autre est" if len(ports) == 2 else "les autres sont",

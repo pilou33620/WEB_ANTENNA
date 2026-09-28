@@ -40,7 +40,8 @@ let ANT_COURBE_ETAT={
   polarSurvol:false,
   polarAngle:null,  // angle theta en degrés
   polarR:null,
-  ffPas:10          // dB par division du diagramme polaire (4 divisions)
+  ffPas:10,         // dB par division du diagramme polaire (4 divisions)
+  ffCaches:{}       // plans φ masqués, par valeur de φ : { 90:true }
 };
 
 /* Indice dans f de la résonance f0. */
@@ -356,11 +357,24 @@ function antCouplageVerdict(r){
   if(!r.couplages)return "";
   return Object.keys(r.couplages).map(function(n){
     const c=r.couplages[n];
+    /* Un réseau : c'est le coefficient de réflexion ACTIF de l'élément n, et
+       son « pire » sur la bande n'apprend rien — hors résonance, tout port
+       renvoie presque tout. On le juge à la résonance. */
+    if(r.reseau)
+      return '<div class="cle'+(c.db_f0>-10?" ko":"")+'"><b>'+
+        aNb(c.db_f0,1)+' dB</b><span>Γ<sub>'+aEsc(n)+
+        '</sub> actif à la résonance</span></div>';
     return '<div class="cle'+(c.pire_db>-10?" ko":"")+'"><b>'+
       aNb(c.db_f0,1)+' dB</b><span>S<sub>'+aEsc(n)+
       (r.excite||1)+'</sub> à la résonance ('+aNb(c.pire_db,1)+
       ' dB au pire)</span></div>';
   }).join("");
+}
+
+/* Le nom d'une courbe de l'onglet Couplage : S₂₁ d'ordinaire, Γ₂ actif
+   pour un réseau. */
+function antNomCouplage(r,n){
+  return r.reseau?"Γ"+n+" actif":"S"+n+(r.excite||1);
 }
 
 /* La bande à −10 dB. Trois choses la rendent fausse quand on ne les dit pas :
@@ -648,10 +662,11 @@ function antSeries(r){
       const cs=r.couplages||{};
       const noms=Object.keys(cs);
       return noms.map(function(n,i){
-        return {nom:"S"+n+(r.excite||1),v:cs[n].db,
+        return {nom:antNomCouplage(r,n),v:cs[n].db,
                 couleur:["#e0705a","#4cc38a","#c07cf0","#3fa0ea"][i%4],
-                seuil:(i===0)?-15:null,
-                seuilNom:(i===0)?"−15 dB (isolation usuelle)":null};
+                seuil:(i===0)?(r.reseau?-10:-15):null,
+                seuilNom:(i===0)?(r.reseau?"−10 dB":
+                                  "−15 dB (isolation usuelle)"):null};
       });
     }
     default:    return [{nom:"S₁₁",v:r.s11_db,couleur:"#3fa0ea",
@@ -1072,7 +1087,7 @@ function antFfDessiner(c,W,H,nf){
   const th=nf.theta;
   nf.phi.forEach(function(phi,ip){
     const ligne=nf.e_norm[ip];
-    if(!ligne)return;
+    if(!ligne||ANT_COURBE_ETAT.ffCaches[phi])return;
     c.strokeStyle=couleurs[ip%couleurs.length]; c.lineWidth=1.8;
     c.beginPath();
     for(let i=0;i<th.length;i++){
@@ -1105,7 +1120,7 @@ function antFfDessiner(c,W,H,nf){
 
     nf.phi.forEach(function(phi,ip){
       const ligne=nf.e_norm[ip];
-      if(!ligne)return;
+      if(!ligne||ANT_COURBE_ETAT.ffCaches[phi])return;
       const db=20*Math.log10(Math.max(ligne[iTheta],1e-6));
       const rDot=R*Math.max(0,(db+PLAGE))/PLAGE;
       const xDot=cx+rDot*Math.sin(tRad), yDot=cy-rDot*Math.cos(tRad);
@@ -1165,7 +1180,10 @@ function antFfDessiner(c,W,H,nf){
 
   const lg=aE("legende");
   if(lg)lg.innerHTML=nf.phi.map((p,i)=>
-      '<span><i style="background:'+couleurs[i%couleurs.length]+'"></i>'+
+      '<span class="bascule'+(ANT_COURBE_ETAT.ffCaches[p]?' off':'')+'" '+
+      'title="Cliquer pour afficher / masquer" onclick="ANT_COURBE_ETAT.ffCaches['+p+
+      ']=!ANT_COURBE_ETAT.ffCaches['+p+'];antCourbeDessiner()">'+
+      '<i style="background:'+couleurs[i%couleurs.length]+'"></i>'+
       'plan φ = '+aNb(p,0)+'°</span>').join("")+
     '<span class="note">niveau relatif au maximum, '+ANT_COURBE_ETAT.ffPas+
     ' dB par division ('+PLAGE+' dB au total) ; '+
@@ -1496,7 +1514,8 @@ function antExportCsv(){
   const cs=r.couplages||{};
   const noms=Object.keys(cs);
   const l=["frequence_Hz;s11_dB;s11_reel;s11_imag;Z_reel_ohm;Z_imag_ohm;ROE"+
-           noms.map(n=>";s"+n+(r.excite||1)+"_dB").join("")];
+           noms.map(n=>(r.reseau?";gamma"+n+"_actif":";s"+n+(r.excite||1))+
+                       "_dB").join("")];
   for(let i=0;i<r.f.length;i++)
     l.push([r.f[i],r.s11_db[i],r.s11_re[i],r.s11_im[i],
             r.z_re[i],r.z_im[i],r.vswr[i]]

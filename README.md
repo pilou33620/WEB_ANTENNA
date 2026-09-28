@@ -105,7 +105,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── 20 … 23            le mode conception : dessiner au lieu d'importer
 │   ├── 24-balayage.js      une ou deux cotes, une plage, une famille de courbes
 │   ├── 25-polygones.js     l'intersection exacte de deux polygones
-│   ├── 26-exemple.js       les boutons « Patch » et « IFA » : deux cas connus, d'un clic
+│   ├── 26-exemple.js       les boutons « Patch », « IFA » et « Réseau 3×3 » : trois cas connus, d'un clic
 │   ├── 27-apercu-motif.js  le dessin coté d'un motif d'antenne, avant de le poser
 │   ├── 28-projet.js        capturer la séance, et la reprendre
 │   ├── 29-tableau-s.js     le tableau S complet, et son fichier Touchstone

@@ -358,6 +358,8 @@ table.bal-table td.ok{color:var(--green)}
 .legende i.trait.jaune{background:var(--yellow)}
 .legende em{font-style:normal;color:#6c727c}
 .legende .note{flex:1 1 100%;margin:2px 0 0}
+.legende .bascule{cursor:pointer;user-select:none}
+.legende .bascule.off{opacity:.35;text-decoration:line-through}
 
 /* ---------- pied de page ---------- */
 footer #fSolveur.ok b,footer #fSolveur.ok{color:var(--green)}

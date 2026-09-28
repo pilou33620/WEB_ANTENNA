@@ -1477,13 +1477,19 @@ def _emprise_primitive(o):
 # deux brins a 15 dB d'isolation partagent leur puissance au lieu de la
 # rayonner, et le diagramme de chacun devient celui de l'ensemble.
 #
-# UN SEUL PORT EXCITE A LA FOIS, ET CE N'EST PAS UNE LIMITE TECHNIQUE. openEMS
-# accepte plusieurs excitations simultanees ; mais leurs ondes se superposent
-# alors dans la boite, et aucun parametre S ne se deduit plus de ce melange --
-# S21 est par definition « ce qui sort en 2 QUAND SEUL 1 excite ». Ce qu'une
-# simulation rend, c'est donc UNE COLONNE du tableau S, celle du port excite ;
-# l'autre colonne demande une seconde simulation, excitation deplacee.
-MAX_PORTS = 8
+# UN SEUL PORT EXCITE, SAUF POUR UN RESEAU. openEMS accepte plusieurs
+# excitations simultanees ; mais leurs ondes se superposent alors dans la
+# boite, et aucun parametre S ne se deduit plus de ce melange -- S21 est par
+# definition « ce qui sort en 2 QUAND SEUL 1 excite ». Ce qu'une simulation
+# rend, c'est donc UNE COLONNE du tableau S, celle du port excite.
+#
+# UN RESEAU ALIMENTE EN PHASE est l'exception, et elle change la question :
+# on ne cherche plus le S21, on cherche ce que chaque element voit QUAND TOUS
+# EMETTENT -- le coefficient de reflexion ACTIF, b_i / a_i port par port, et
+# le diagramme du reseau entier. Plusieurs ports excites posent donc le
+# modele en mode « reseau » (voir `_bloc_ports` et le depouillement dans
+# openems_script.py) : ce qui en sort n'est plus nomme S, et ne l'est jamais.
+MAX_PORTS = 9          # un reseau 3 x 3
 
 # -- le port coaxial --------------------------------------------------------
 # `AddCoaxialPort` EXISTE DANS L'INTERFACE MATLAB D'openEMS, PAS DANS LES
@@ -1921,14 +1927,19 @@ def _ports(doc, conducteurs, dielectriques, k_mm, boite_cu):
     out = [_un_port(p, i + 1, conducteurs, dielectriques, k_mm, boite_cu)
            for i, p in enumerate(bruts)]
 
+    # Plusieurs ports excites : un reseau alimente en phase (voir MAX_PORTS).
+    # Deux excitations AU MEME ENDROIT ne sont pas un reseau, c'est un port
+    # compte deux fois -- l'amplitude doublee y passerait pour un gain.
     excites = [p for p in out if p["excite"]]
-    if len(excites) > 1:
-        raise ErreurModele(
-            "%d ports sont excites en meme temps (%s)."
-            % (len(excites), ", ".join(str(p["n"]) for p in excites)),
-            "Un parametre S se definit par « ce qui sort de j QUAND SEUL i "
-            "excite » : deux excitations simultanees superposent leurs ondes, "
-            "et aucun S ne s'en deduit. Excitez-en un, relancez pour l'autre.")
+    places = set()
+    for p in excites:
+        cle = (round(p["x"], 6), round(p["y"], 6), p["de"], p["a"])
+        if cle in places:
+            raise ErreurModele(
+                "Deux ports excites au meme endroit (port %d)." % p["n"],
+                "Un reseau excite des elements DISTINCTS. Deplacez le port, ou "
+                "decochez son excitation pour le laisser en charge.")
+        places.add(cle)
     if not excites:
         out[0]["excite"] = True
     return out
@@ -3531,6 +3542,8 @@ def normaliser(doc):
         "carte": carte,
         "port": port,
         "ports": ports,
+        # Plusieurs ports excites ensemble : un reseau (voir MAX_PORTS).
+        "reseau": sum(1 for p in ports if p["excite"]) > 1,
         "bande": bande,
         "boite": boite,
         "maillage_tiers": tiers,
@@ -4761,7 +4774,20 @@ def _avis(m):
         })
 
     # -- les ports ---------------------------------------------------------
-    if len(m["ports"]) > 1:
+    if m.get("reseau"):
+        excites = [p["n"] for p in m["ports"] if p["excite"]]
+        out.append({
+            "rang": "info",
+            "titre": "Un reseau alimente en phase, pas un tableau S",
+            "texte": "Les ports %s excitent ensemble, a la meme amplitude et "
+                     "a la meme phase. Ce qui revient a chacun est son "
+                     "coefficient de reflexion ACTIF -- ce qu'il voit quand "
+                     "tous emettent, couplages compris --, et non un S11 : "
+                     "le « S11 » affiche est celui actif du port %d. Le "
+                     "diagramme est celui du reseau entier."
+                     % (", ".join(str(n) for n in excites), excites[0]),
+        })
+    elif len(m["ports"]) > 1:
         exc = next(p for p in m["ports"] if p["excite"])
         autres = [p["n"] for p in m["ports"] if not p["excite"]]
         rendus = ", ".join("S%d%d" % (n, exc["n"])

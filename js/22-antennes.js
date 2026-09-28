@@ -1012,6 +1012,85 @@ const CON_MOTIF_DIPOLE={
 };
 
 /* ==========================================================================
+   5 bis. Le réseau 3 × 3 de dipôles imprimés
+   --------------------------------------------------------------------------
+   Neuf fois le dipôle ci-dessus, au pas d'une demi-onde dans l'air dans les
+   deux directions, et UN PORT PAR ÉLÉMENT, tous excités en phase. C'est ce
+   qu'un réseau alimenté par un répartiteur idéal verrait : pas de lignes à
+   dessiner ni à adapter, seulement les éléments et leurs couplages.
+
+   CE QU'IL REND N'EST PAS UN S₁₁. Quand les neuf émettent, chacun reçoit
+   aussi ce que ses voisins lui envoient : ce qui revient à un port est son
+   coefficient de réflexion ACTIF. Le « S₁₁ » affiché est celui de l'élément
+   CENTRAL — le port 1, le plus entouré —, les huit autres suivent dans
+   l'onglet des couplages. Le diagramme, lui, est celui du réseau entier.
+
+   LE PAS EST DANS L'AIR, LA LONGUEUR DANS LE SUBSTRAT. Un pas au-delà de
+   λ₀ ferait naître des lobes de réseau ; λ₀/2 est la valeur d'usage, et elle
+   laisse entre deux bras colinéaires un écart d'environ la moitié d'un bras.
+   ========================================================================== */
+const CON_MOTIF_RESEAU={
+  id:"reseau", nom:"Réseau 3 × 3 de dipôles", role:"signal",
+  aide:"neuf dipôles imprimés, un port chacun, excités en phase",
+  besoin:CON_MOTIF_DIPOLE.besoin,
+  champs:CON_MOTIF_DIPOLE.champs.slice(0,3).concat([
+    {id:"pas", nom:"pas du réseau", sym:"p",
+     aide:"d'un centre d'élément au suivant, dans les deux directions : "+
+          "λ₀/2 évite les lobes de réseau"},
+    CON_MOTIF_DIPOLE.champs[3]
+  ]),
+  defauts:function(c){
+    const d=CON_MOTIF_DIPOLE.defauts(c);
+    d.pas=CON_C0/(2*c.f);
+    return d;
+  },
+  tracer:function(c,p){
+    const n=3, s=p.pas;
+    const Lb=(n-1)*s+2*p.La+2*p.marge, Wb=(n-1)*s+p.wd+4*p.marge;
+    const x0=Lb/2-s, y0=Wb/2-s;
+    const formes=[], ports=[];
+    for(let j=0;j<n;j++)for(let i=0;i<n;i++){
+      const xc=x0+i*s, yc=y0+j*s;
+      formes.push(
+        gRect("haut","ANTENNE",xc-p.ov/2,yc-p.wd/2,xc-p.ov/2+p.La,yc+p.wd/2),
+        gRect("bas","ANTENNE",xc+p.ov/2-p.La,yc-p.wd/2,xc+p.ov/2,yc+p.wd/2));
+      ports.push({x:xc, y:yc, w:p.ov, l:p.wd});
+    }
+    /* L'élément central d'abord : c'est lui le port 1, celui du « S₁₁ ». */
+    const centre=ports.splice(4,1)[0];
+    const festim=CON_C0/(4*p.La*Math.sqrt(c.eeffAir));
+    return {
+      carte:{L:Lb, W:Wb},
+      formes:formes,
+      port:centre,
+      autres:ports,
+      cotes:[
+        gCote("La",x0-p.ov/2,Wb,x0-p.ov/2+p.La,Wb,2.2,"La"),
+        gCote("pas",x0,0,x0+s,0,-2.2,"p"),
+        gCote("wd",Lb,y0-p.wd/2,Lb,y0+p.wd/2,2.2,"wd"),
+        gCote("marge",0,0,p.marge,0,-2.2,"m",true)
+      ],
+      calcul:{
+        titre:"Réseau 3 × 3 de dipôles",
+        resume:"neuf dipôles de "+conLong(2*p.La,2)+" au pas de "+
+               conLong(s,2)+", neuf ports excités en phase",
+        festim:festim,
+        lignes:[
+          ["Couplage entre éléments", "la résonance estimée est celle du "+
+             "dipôle SEUL : les voisins la déplacent de quelques pour cent"],
+          ["Longueur d'un dipôle", conLong(2*p.La,3)],
+          ["Pas du réseau", conLong(s,3)+" ("+(s*c.f/CON_C0).toFixed(2)+" λ₀)"],
+          ["Ports", "9, tous excités : le « S₁₁ » est le coefficient de "+
+                    "réflexion ACTIF de l'élément central"],
+          ["Plan de masse", "aucun : diagramme bidirectionnel"],
+          ["Carte", conLong(Lb,2)+" × "+conLong(Wb,2)]
+        ]
+      }
+    };
+  }
+};
+
+/* ==========================================================================
    6. La ligne 50 Ω seule — l'étalon
    --------------------------------------------------------------------------
    Ce n'est pas une antenne : c'est une ligne microruban ouverte au bout,
@@ -1095,7 +1174,7 @@ const CON_MOTIF_LIGNE={
    se cherche que lorsqu'on doute du reste. */
 const CON_GABARITS=[
   CON_MOTIF_PATCH, CON_MOTIF_MONOPOLE, CON_MOTIF_IFA,
-  CON_MOTIF_MIFA, CON_MOTIF_DIPOLE, CON_MOTIF_LIGNE
+  CON_MOTIF_MIFA, CON_MOTIF_DIPOLE, CON_MOTIF_RESEAU, CON_MOTIF_LIGNE
 ];
 
 function conGabarit(id){
@@ -1204,7 +1283,7 @@ function conVirgules(t){ return String(t).replace(/(\d)\.(\d)/g,"$1,$2"); }
    premier plan de masse. `w` est l'étendue en x, `l` celle en y — c'est ainsi
    que python/openems_modele.py construit son volume, et les confondre pose un
    port en travers de la ligne. */
-function conPoser(port,ligne){
+function conPoser(port,ligne,autres){
   const cu=conCuivres();
   /* UN MOTIF REFAIT LA CARTE ENTIÈRE : les ports supplémentaires posés sur le
      dessin précédent désignaient du cuivre qui n'existe plus. On revient donc
@@ -1226,6 +1305,16 @@ function conPoser(port,ligne){
      de ruban qui n'existe plus, et le nombre aurait l'air d'un nombre. */
   ANT.port.ligne_d=(ligne&&ligne.d>0)?+ligne.d.toFixed(4):0;
   ANT.port.ligne_w=(ligne&&ligne.w>0)?+ligne.w.toFixed(4):0;
+  /* LES AUTRES ÉLÉMENTS D'UN RÉSEAU : un port chacun, TOUS EXCITÉS — ils
+     émettent ensemble, en phase. Le serveur lit alors le modèle comme un
+     réseau (voir MAX_PORTS, python/openems_modele.py). */
+  (autres||[]).forEach(function(q){
+    const p=antPortNeuf(true);
+    p.pose=true; p.dir="z"; p.de=ANT.port.de; p.a=ANT.port.a; p.R=ANT.port.R;
+    p.x=+q.x.toFixed(4); p.y=+q.y.toFixed(4);
+    p.w=+Math.max(q.w,0.05).toFixed(4); p.l=+Math.max(q.l,0.05).toFixed(4);
+    ANT.ports.push(p);
+  });
 }
 
 /* La fiche : ce que le motif a calculé, ce que les cotes posées donnent, et
@@ -1393,7 +1482,7 @@ function conGabaritPoser(id,p){
   conGabaritDebut(c.f,t.carte.L,t.carte.W);
   conRoleSeconde(g.role);
   r.elements.forEach(function(el){ CON.elements.push(el); });
-  conPoser(t.port,t.ligne);
+  conPoser(t.port,t.ligne,t.autres);
   conGabaritFin(conGabaritFiche(g,c,q,t));
   return true;
 }

@@ -183,10 +183,46 @@ const EX_IFA={
   }
 };
 
+/* LE TROISIÈME CAS : NEUF ANTENNES À LA FOIS.
+
+   Un réseau 3 × 3 de dipôles imprimés, un port par élément, tous excités en
+   phase. Ce qu'il éprouve, ni le patch ni l'IFA ne le touchent : NEUF PORTS
+   dans une même boîte, et le mode « réseau » du serveur — plusieurs
+   excitations simultanées, un coefficient de réflexion ACTIF par port au
+   lieu d'un S₁₁, une puissance acceptée sommée sur les neuf.
+
+   AUCUNE COTE N'EST IMPOSÉE, comme pour l'IFA : le dipôle et le pas λ₀/2
+   sortent du gabarit. Ce qu'on attend est une silhouette, pas un chiffre —
+   un dipôle nu sur 50 Ω n'est pas adapté (il présente ~70 Ω seul, autre
+   chose au milieu de ses voisins), et un creux vers −10 dB près de 2,45 GHz
+   est un réseau qui marche. Le diagramme, lui, doit montrer un lobe
+   nettement plus étroit que le huit du dipôle seul, et une directivité de
+   l'ordre de 10 dBi. C'est LE PLUS CHER des trois : une carte de
+   17 × 15 cm et neuf volumes de port à mailler — 2,3 millions de cellules,
+   trois quarts d'heure à l'estimation du panneau. */
+const EX_RESEAU={
+  motif:"reseau",
+  f:2.45e9,
+  energie:-40,
+  nmax:0,
+  cotes:null,
+  confirme:"L'exemple remplace le dessin en cours par un réseau 3 × 3 de "+
+           "dipôles 2,45 GHz. Continuer ?",
+  mot:function(){
+    const p=CON.gabaritP||{};
+    const mm=function(v){ return (v==null)?"?":conLong(v,2); };
+    return "Exemple posé : réseau 3 × 3 de dipôles imprimés 2,45 GHz sur FR-4 "+
+      "1,6 mm — bras "+mm(p.La)+", pas "+mm(p.pas)+", neuf ports excités en "+
+      "phase. Le « S₁₁ » est le coefficient de réflexion ACTIF de l'élément "+
+      "central ; les huit autres sont dans l'onglet Couplage. Cotes du "+
+      "gabarit, non recalées : attendez une silhouette, pas un chiffre.";
+  }
+};
+
 /* Les cas, par leur clé. C'est ce que les boutons désignent, et c'est aussi
    ce qui garde `exPoser` indifférent au nombre d'exemples : en ajouter un
-   troisième ne demandera qu'une entrée ici et un bouton. */
-const EX_CAS={patch:EX, ifa:EX_IFA};
+   ne demande qu'une entrée ici et un bouton. */
+const EX_CAS={patch:EX, ifa:EX_IFA, reseau:EX_RESEAU};
 
 /* Poser un exemple. Rien de plus que la suite des gestes qu'on ferait à la
    main, dans l'ordre où le panneau les propose.
@@ -257,7 +293,8 @@ function exPoser(cle){
 window.addEventListener("DOMContentLoaded",function(){
   const branchements={
     bExemple:"patch",  bExemple2:"patch",
-    bExempleIfa:"ifa", bExempleIfa2:"ifa"
+    bExempleIfa:"ifa", bExempleIfa2:"ifa",
+    bExempleReseau:"reseau", bExempleReseau2:"reseau"
   };
   Object.keys(branchements).forEach(function(id){
     const b=document.getElementById(id);

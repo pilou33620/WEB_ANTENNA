@@ -1029,10 +1029,23 @@ verifie("le script a deux ports compile", compile(t2, "<deux>", "exec") or True)
 verifie("un document a un seul « port » reste lu",
         len(openems_modele.normaliser(document())["ports"]) == 1)
 
-refuse("deux excitations simultanees sont refusees",
+refuse("deux excitations au meme endroit sont refusees",
        document(ports=[dict(document()["port"], excite=True),
                        dict(document()["port"], excite=True)]),
-       "excites en meme temps")
+       "excites au meme endroit")
+
+# UN RESEAU : deux ports excites a deux endroits. Ce qui revient n'est plus
+# un S21 mais le coefficient de reflexion ACTIF de chacun.
+res = dict(deux, ports=[dict(q, excite=True) for q in deux["ports"]])
+mr = openems_modele.normaliser(res)
+verifie("deux ports excites posent le modele en reseau",
+        mr["reseau"] and not m2["reseau"])
+tr = openems_script.generer(mr)
+verifie("le reseau excite ses deux ports",
+        tr.count("', 1.0, priority=50)") == 2)
+verifie("le reseau rend le reflexion actif du second port",
+        "couplages[2] = ports[1].uf_ref / ports[1].uf_inc" in tr)
+verifie("le script du reseau compile", compile(tr, "<reseau>", "exec") or True)
 
 # -- le tableau complet : N simulations, l'excitation deplacee -------------
 # CE QUE CET ENCHAINEMENT AJOUTE, ET CE QU'IL N'INVENTE PAS. Chaque colonne

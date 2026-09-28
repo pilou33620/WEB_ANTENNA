@@ -269,7 +269,7 @@ function balDocumentPour(poses){
          arrondi qu'à la pose. */
       CON.carte.L=+r.t.carte.L.toFixed(3);
       CON.carte.W=+r.t.carte.W.toFixed(3);
-      conPoser(r.t.port,r.t.ligne);
+      conPoser(r.t.port,r.t.ligne,r.t.autres);
       /* LES AUTRES PORTS SURVIVENT AU BALAYAGE, alors que la POSE les
          supprime — et les deux ont raison. Poser un motif refait la carte
          entière : les ports supplémentaires y désignaient du cuivre qui
@@ -281,8 +281,11 @@ function balDocumentPour(poses){
          Ils sont remis tels quels, aux mêmes coordonnées absolues, ET AVEC
          LEUR EXCITATION : si la carte a bougé sous l'un d'eux, il tombe hors
          du cuivre et le serveur refuse CE point-là en le nommant, avant tout
-         lancement. C'est le bon endroit pour l'apprendre. */
-      for(let i=1;i<portsAvant.p.length;i++)
+         lancement. C'est le bon endroit pour l'apprendre.
+
+         UN RÉSEAU FAIT EXCEPTION : ses ports suivent le motif, et `conPoser`
+         vient de les reposer au centre de chaque élément. */
+      if(!r.t.autres)for(let i=1;i<portsAvant.p.length;i++)
         ANT.ports.push(JSON.parse(JSON.stringify(portsAvant.p[i])));
       ANT.ports[0].excite=!!portsAvant.p[0].excite;
       ANT.portActif=portsAvant.i;

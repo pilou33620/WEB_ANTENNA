@@ -265,7 +265,7 @@ function antPortExciter(i){
 }
 
 function antPortAjouter(){
-  if(ANT.ports.length>=8)return false;
+  if(ANT.ports.length>=9)return false;   // MAX_PORTS, openems_modele.py
   const modele=ANT.port;
   const p=antPortNeuf(false);
   /* Les couches et l'impédance du port courant : un second port relie presque

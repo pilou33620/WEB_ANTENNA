@@ -1324,6 +1324,9 @@ def _epilogue(m):
              for p in m["ports"]]))
         a("_out['excite'] = %d\n"
           % next(p["n"] for p in m["ports"] if p["excite"]))
+        # Un reseau : `couplages` porte les coefficients de reflexion ACTIFS,
+        # et la page doit les nommer ainsi, pas « S21 ».
+        a("_out['reseau'] = %r\n" % bool(m.get("reseau")))
         a("_out['couplages'] = {}\n")
         a("for _n, _s in couplages.items():\n")
         a("    _out['couplages'][str(_n)] = {\n")

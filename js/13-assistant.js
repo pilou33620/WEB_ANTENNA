@@ -941,7 +941,7 @@ ANT_CORPS.port=function(){
       (q.type==="coaxial"?" ⌾":"")+
       ' <b data-retirer="'+i+'">✕</b></button>';
   }).join(""):""}
-  ${ANT.ports.length<8?'<button class="jeton plus" id="bPortPlus" title="Un second port donne le S₂₁ : le couplage entre deux antennes, qui ne se déduit d\'aucun S₁₁">+ port</button>':""}
+  ${ANT.ports.length<9?'<button class="jeton plus" id="bPortPlus" title="Un second port donne le S₂₁ : le couplage entre deux antennes, qui ne se déduit d\'aucun S₁₁">+ port</button>':""}
 </div>`;
 
   return `
