@@ -1237,7 +1237,7 @@ def generer_banc(fils, chemin_openems=None, dossier_sim=None):
     a("                           errors='replace')\n")
     a("        # « Speed: 243.1 MCells/s » : la vitesse de la boucle FDTD seule,\n")
     a("        # montage du maillage exclu.\n")
-    a("        m = re.findall(r'Speed:\s*([\d.]+)\s*MCells/s', p.stdout)\n")
+    a("        m = re.findall(r'Speed:\\s*([\\d.]+)\\s*MCells/s', p.stdout)\n")
     a("        if p.returncode != 0 or not m:\n")
     a("            print('Banc : %d fil(s) -> echec' % n)\n")
     a("            print(p.stdout[-2000:])\n")

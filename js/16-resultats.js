@@ -39,7 +39,8 @@ let ANT_COURBE_ETAT={
   glisse:null,      // { downX, downY, moved, k0, k1 } lors du déplacement
   polarSurvol:false,
   polarAngle:null,  // angle theta en degrés
-  polarR:null
+  polarR:null,
+  ffPas:10          // dB par division du diagramme polaire (4 divisions)
 };
 
 /* Indice dans f de la résonance f0. */
@@ -1049,7 +1050,7 @@ function antFfDessiner(c,W,H,nf){
     c.fillText("Pas de champ lointain dans ce résultat.",12,24);
     return;
   }
-  const PLAGE=40;                      // dB affichés, du centre au bord
+  const PLAGE=4*ANT_COURBE_ETAT.ffPas; // dB affichés, du centre au bord
   const cx=W/2, cy=H/2, R=Math.min(W,H)/2-22;
 
   c.strokeStyle="#23262b"; c.fillStyle="#8b919c";
@@ -1166,7 +1167,8 @@ function antFfDessiner(c,W,H,nf){
   if(lg)lg.innerHTML=nf.phi.map((p,i)=>
       '<span><i style="background:'+couleurs[i%couleurs.length]+'"></i>'+
       'plan φ = '+aNb(p,0)+'°</span>').join("")+
-    '<span class="note">niveau relatif au maximum, échelle '+PLAGE+' dB ; '+
+    '<span class="note">niveau relatif au maximum, '+ANT_COURBE_ETAT.ffPas+
+    ' dB par division ('+PLAGE+' dB au total) ; '+
     'angle θ mesuré depuis le zénith (0° = au-dessus de la carte).</span>';
 }
 
@@ -1389,6 +1391,9 @@ function antCourbeBarreMettreAJour(){
     } else {
       txt='<span class="courbe-astuce">Survolez le diagramme polaire pour sonder le niveau selon l\'angle θ</span>';
     }
+    txt+='<label class="courbe-badge">Échelle <select onchange="ANT_COURBE_ETAT.ffPas=+this.value;antCourbeDessiner()">'+
+      [1,2,3,5,10,15,20].map(p=>'<option value="'+p+'"'+(p===ANT_COURBE_ETAT.ffPas?' selected':'')+'>'+
+        p+' dB/div</option>').join("")+'</select></label>';
     barre.innerHTML=txt;
     return;
   }
