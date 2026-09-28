@@ -119,6 +119,11 @@ function conAide(){
     e.stopPropagation(); e.preventDefault();
 
     if(CON.outil==="via"){
+      /* Le second clic d'un double-clic ne pose pas un second via au même
+         endroit : deux vias superposés ne se voient pas et ne s'enlèvent
+         qu'un à un. */
+      const der=CON.elements[CON.elements.length-1];
+      if(der&&der.type==="via"&&conMemePoint([der.x,der.y],[p.x,p.y]))return;
       conNouvelle("via",{x:p.x, y:p.y, d:CON.diametreVia});
       conAppliquer(false);
       return;
@@ -127,9 +132,12 @@ function conAide(){
     if(CON.outil==="piste"||CON.outil==="poly"){
       /* Une polyligne se construit clic par clic. Le premier clic l'ouvre, les
          suivants l'allongent, le double-clic la ferme. */
+      /* Le double-clic qui ferme la forme envoie d'abord deux clics : sans ce
+         filtre, le dernier sommet était posé deux fois — un segment de
+         longueur nulle au bout de chaque piste. */
       if(!CON.courant)
         CON.courant={type:CON.outil, pts:[[p.x,p.y]], apercu:[p.x,p.y]};
-      else
+      else if(!conMemePoint(CON.courant.pts[CON.courant.pts.length-1],[p.x,p.y]))
         CON.courant.pts.push([p.x,p.y]);
       redessiner();
       return;
@@ -207,11 +215,13 @@ function conAide(){
   },true);
 
   /* Le double-clic ferme une polyligne. Il est capté AVANT celui de la
-     visionneuse, qui sinon prendrait tout le net sous le curseur. */
+     visionneuse, qui sinon prendrait tout le net sous le curseur — et ce
+     pour tout outil de dessin : un double-clic en posant des vias ne doit
+     pas, en plus, sélectionner le net d'en dessous. */
   cv.addEventListener("dblclick",function(e){
-    if(!CON.actif||!CON.courant||!CON.courant.pts)return;
+    if(!conDessinActif())return;
     e.stopPropagation(); e.preventDefault();
-    conTerminerPolyligne();
+    if(CON.courant&&CON.courant.pts)conTerminerPolyligne();
   },true);
 })();
 
@@ -223,6 +233,12 @@ function conFormeSous(x,y){
   for(let i=CON.elements.length-1;i>=0;i--)
     if(conDedans(CON.elements[i],x,y))return i;
   return -1;
+}
+
+/* Deux points que la main ne distingue pas : à moins de trois pixels à
+   l'écran, quel que soit le zoom — la tolérance de la désignation. */
+function conMemePoint(a,b){
+  return Math.hypot(a[0]-b[0],a[1]-b[1])<3/V.vue.scale;
 }
 
 function conTerminerPolyligne(){

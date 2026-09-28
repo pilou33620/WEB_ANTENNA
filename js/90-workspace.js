@@ -181,22 +181,29 @@ function wsApply(save){
   /* --- docks --- */
   for(const k of WS_DOCKS){
     const dk=wsQ(k), ids=WS.order[k];
-    /* on vide le dock sans détruire les panneaux */
+    /* ON NE DÉPLACE QUE CE QUI N'EST PAS À SA PLACE. Sortir un panneau du
+       document et l'y remettre lui fait perdre son défilement et le champ
+       qui avait le focus : vider le dock à chaque appel ramenait tous les
+       panneaux en haut au moindre clic sur un en-tête. */
     for(const ch of Array.prototype.slice.call(dk.children)){
       if(ch.classList.contains("psplit"))ch.remove();
-      else store.appendChild(ch);
+      else if(ids.indexOf(ch.dataset.pnl)<0)store.appendChild(ch);
     }
     dk.classList.toggle("empty",!ids.length);
     if(k==="dockB")dk.style.height=WS.docks[k]+"px";
     else dk.style.width=WS.docks[k]+"px";
+    let rang=0;
     ids.forEach(function(id,i){
       const el=wsEl[id];
       if(!el)return;
+      if(dk.children[rang]!==el)dk.insertBefore(el,dk.children[rang]||null);
+      rang++;
       if(i){
         const sp=document.createElement("div");
         sp.className="psplit";sp.dataset.dock=k;sp.dataset.i=String(i-1);
         sp.addEventListener("pointerdown",wsSplitDown);
-        dk.appendChild(sp);
+        dk.insertBefore(sp,el);
+        rang++;
       }
       el.classList.remove("floating","maximized");
       el.style.left=el.style.top=el.style.width=el.style.height="";
@@ -205,7 +212,6 @@ function wsApply(save){
       wsHandles(el,false);
       const bMax=el.querySelector('.pnl-btn[data-act="maximize"]');
       if(bMax){bMax.textContent="□";bMax.title="Plein écran";}
-      dk.appendChild(el);
     });
   }
   /* --- panneaux flottants --- */
@@ -236,7 +242,7 @@ function wsApply(save){
       wsHandles(el,true);
       if(bMax){bMax.textContent="□";bMax.title="Plein écran";}
     }
-    fl.appendChild(el);
+    if(el.parentNode!==fl)fl.appendChild(el);   // l'empilement vient du zIndex
   });
   /* --- panneaux masqués --- */
   for(const id of WS.hidden){
@@ -248,7 +254,7 @@ function wsApply(save){
     wsHandles(el,false);
     const bMax=el.querySelector('.pnl-btn[data-act="maximize"]');
     if(bMax){bMax.textContent="□";bMax.title="Plein écran";}
-    store.appendChild(el);
+    if(el.parentNode!==store)store.appendChild(el);
   }
   /* --- replié + poignées de dock --- */
   for(const id in WS.panels)
@@ -279,6 +285,22 @@ function wsHandles(el,on){
    Glisser-déposer d'un panneau
    ========================================================================== */
 const wsDrag={id:null,on:false,x0:0,y0:0,dx:0,dy:0,target:null,index:-1};
+/* SUIVRE UN GLISSEMENT JUSQU'À SA FIN, QUELLE QU'ELLE SOIT. Le pointeur est
+   capturé, et l'annulation (tactile, perte de focus) termine le geste comme un
+   relâchement : sans cela, un `pointerup` perdu laissait le panneau ou la
+   poignée collé au curseur jusqu'au clic suivant. */
+function wsSuivre(e,mv,up){
+  try{e.currentTarget.setPointerCapture(e.pointerId);}catch(_){}
+  const fin=function(ev){
+    window.removeEventListener("pointermove",mv);
+    window.removeEventListener("pointerup",fin);
+    window.removeEventListener("pointercancel",fin);
+    up(ev);
+  };
+  window.addEventListener("pointermove",mv);
+  window.addEventListener("pointerup",fin);
+  window.addEventListener("pointercancel",fin);
+}
 function wsHeadDown(e){
   if(e.button!==0)return;
   if(e.target.closest("button,select,input,label,textarea"))return;
@@ -288,8 +310,7 @@ function wsHeadDown(e){
   const r=el.getBoundingClientRect();
   wsDrag.dx=e.clientX-r.left;wsDrag.dy=e.clientY-r.top;
   if(wsPlaceOf(id)==="float")wsRaise(id);
-  window.addEventListener("pointermove",wsHeadMove);
-  window.addEventListener("pointerup",wsHeadUp,{once:true});
+  wsSuivre(e,wsHeadMove,wsHeadUp);
 }
 function wsHeadMove(e){
   const id=wsDrag.id;if(!id)return;
@@ -333,8 +354,9 @@ function wsHeadMove(e){
   wsShowZone(hit);
 }
 function wsHeadUp(e){
-  window.removeEventListener("pointermove",wsHeadMove);
   const id=wsDrag.id;wsDrag.id=null;
+  /* Un geste annulé ne dépose rien : le panneau reprend sa place. */
+  if(e.type==="pointercancel")wsDrag.on=false;
   wsQ("dragGhost").classList.remove("on");
   wsQ("dropZone").classList.remove("on","line");
   document.body.classList.remove("ws-drag");
@@ -456,13 +478,11 @@ function wsGutDown(e){
     wsCanvasSync();
   };
   const up=function(){
-    window.removeEventListener("pointermove",mv);
     g.classList.remove("act");
     document.body.classList.remove("ws-resize-v","ws-resize-h");
     wsSave();wsCanvasSync();
   };
-  window.addEventListener("pointermove",mv);
-  window.addEventListener("pointerup",up,{once:true});
+  wsSuivre(e,mv,up);
   e.preventDefault();
 }
 /* partage entre deux panneaux d'un même dock */
@@ -491,13 +511,11 @@ function wsSplitDown(e){
     wsEl[idb].style.flexGrow=String(WS.panels[idb].grow);
   };
   const up=function(){
-    window.removeEventListener("pointermove",mv);
     sp.classList.remove("act");
     document.body.classList.remove("ws-resize-v","ws-resize-h");
     wsSave();
   };
-  window.addEventListener("pointermove",mv);
-  window.addEventListener("pointerup",up,{once:true});
+  wsSuivre(e,mv,up);
   e.preventDefault();
 }
 /* fenêtre flottante : huit poignées */
@@ -522,9 +540,7 @@ function wsFloatResizeDown(e){
     el.style.left=Math.round(p.x)+"px";el.style.top=Math.round(p.y)+"px";
     el.style.width=Math.round(p.w)+"px";el.style.height=Math.round(p.h)+"px";
   };
-  const up=function(){window.removeEventListener("pointermove",mv);wsSave();};
-  window.addEventListener("pointermove",mv);
-  window.addEventListener("pointerup",up,{once:true});
+  wsSuivre(e,mv,wsSave);
   e.preventDefault();e.stopPropagation();
 }
 

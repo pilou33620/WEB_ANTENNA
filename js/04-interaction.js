@@ -21,6 +21,7 @@ const PICK_PX=3;
 const POINTEURS=new Map();     // pointerId -> {x,y} en pixels page
 let GLISSE=null;               // {x,y,ox,oy,bouge} pendant un déplacement
 let PINCE=null;                // {d, cx, cy} pendant un pincement
+let DERNIER_CLIC=null;         // {t,x,y} : repérer le second clic d'un double-clic
 
 function pos(e){
   const r=cv.getBoundingClientRect();
@@ -301,10 +302,12 @@ cv.addEventListener("pointermove",function(e){
   const t=resume(V.survol);
   if(t||avant)hint(t||"");
   cv.style.cursor=V.survol?"pointer":"crosshair";
+  /* Seul l'anneau change : on le repose sur l'image gardée de la carte, sans
+     la repeindre (03-rendu.js, redessinerSurvol). */
   if((avant&&avant.type)!==(V.survol&&V.survol.type)||
      (avant&&avant.x)!==(V.survol&&V.survol.x)||
      (avant&&avant.ref)!==(V.survol&&V.survol.ref))
-    redessiner();
+    redessinerSurvol();
 });
 function fin(e){
   const glisse=GLISSE;
@@ -315,6 +318,13 @@ function fin(e){
   if(!V.modele||!glisse||glisse.bouge)return;
   /* Un clic, pas un déplacement : on désigne. */
   const p=pos(e), w=s2w(p.x,p.y);
+  /* LE SECOND CLIC D'UN DOUBLE-CLIC N'EST PAS UN CLIC : c'est le `dblclick`
+     qui le traite. Sans ce filtre, un boîtier double-cliqué se sélectionnait,
+     se désélectionnait puis se resélectionnait — un clignotement. `e.detail`
+     ne compte pas les clics sur un `pointerup`, d'où l'horloge. */
+  const t=performance.now(), dc=DERNIER_CLIC;
+  DERNIER_CLIC={t:t,x:p.x,y:p.y};
+  if(dc&&t-dc.t<500&&Math.hypot(p.x-dc.x,p.y-dc.y)<4){DERNIER_CLIC=null;return;}
   /* DÉSIGNER UNE BORNE DE CHUTE CONTINUE. Le panneau de simulation arme
      l'attente ; ce clic-là choisit la pastille et ne touche ni au net montré
      ni à la sélection — on désigne un point de mesure, on ne navigue pas.
@@ -388,7 +398,7 @@ cv.addEventListener("pointercancel",function(e){
   GLISSE=null;
 });
 cv.addEventListener("pointerleave",function(){
-  if(V.survol){V.survol=null;redessiner();}
+  if(V.survol){V.survol=null;redessinerSurvol();}
   document.getElementById("fPos").textContent="—";
 });
 cv.addEventListener("wheel",function(e){

@@ -1887,6 +1887,10 @@ def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu):
         "R": _nb_pos(p.get("R"), 50.0),
         "de": ca["nom"], "a": cb["nom"],
         "excite": bool(p.get("excite", True)),
+        # La phase d'excitation en degres. Elle ne compte que dans un reseau ;
+        # voir `_retards`. PAS RAMENEE A [0, 360) : -90, 0, +90 est un
+        # gradient, 270, 0, 90 n'en est plus un hors de la frequence visee.
+        "phase": max(-3600.0, min(3600.0, _nb(p.get("phase"), 0.0))),
     }
     out.update(volume)
     if coax:
@@ -1943,6 +1947,34 @@ def _ports(doc, conducteurs, dielectriques, k_mm, boite_cu):
     if not excites:
         out[0]["excite"] = True
     return out
+
+
+def _retards(ports, bande):
+    """La phase de chaque port excite, traduite en RETARD de l'impulsion.
+
+    UNE IMPULSION N'A PAS DE PHASE, ELLE A UN INSTANT. openEMS excite par une
+    gaussienne large bande ; la seule facon de dephaser un port est de la
+    retarder (`delay=` des ports d'openEMS). Un retard tau donne une phase
+    -2.pi.f.tau : exacte a UNE frequence -- la frequence visee --, et qui
+    suit f ailleurs. C'est un retard vrai, pas un dephaseur : le faisceau ne
+    louche pas avec la frequence, il garde son angle.
+
+    Un retard est positif : on part de la phase la plus en AVANCE, qui n'est
+    pas retardee, et chaque autre port l'est de son ecart. Les phases ne sont
+    PAS ramenees a [0, 360) : un gradient -90 / 0 / +90 reste un gradient de
+    retards, et le faisceau garde son angle sur toute la bande. Le plus grand
+    retard peut donc depasser une periode ; le compteur de pas en tient
+    compte.
+    """
+    f = bande.get("fcible") or bande.get("f0") or 0.0
+    excites = [p for p in ports if p["excite"]]
+    for p in ports:
+        p["retard_s"] = 0.0
+    if len(excites) < 2 or f <= 0:
+        return
+    ref = max(p["phase"] for p in excites)
+    for p in excites:
+        p["retard_s"] = (ref - p["phase"]) / (360.0 * f)
 
 
 def _emprise_port(p):
@@ -3427,6 +3459,7 @@ def normaliser(doc):
     vias = _vias(doc, conducteurs, k_mm)
     bande = _bande(doc)
     ports = _ports(doc, conducteurs, dielectriques, k_mm, boite_cu)
+    _retards(ports, bande)
     # LE PORT EXCITE RESTE ACCESSIBLE SOUS SON ANCIEN NOM. C'est lui que la
     # vue 3D dessine en rouge, lui que l'export Touchstone nomme, lui dont
     # l'assistant recapitule le volume : tout ce qui ne parle que d'UN port
@@ -3653,7 +3686,10 @@ def normaliser(doc):
     f_res = bande.get("fcible") or bande.get("f0") or 0.0
     # DEUX CRITERES, ET C'EST LE PLUS GRAND QUI GAGNE : le temps d'emettre
     # l'impulsion, et le temps de l'oublier. Voir NMAX_PERIODES.
-    n_imp = (NMAX_IMPULSIONS * t_exc / dt_s) if (dt_s > 0 and t_exc > 0) else 0.0
+    # Un port dephase part EN RETARD : son impulsion finit plus tard d'autant.
+    retard = max([p.get("retard_s", 0.0) for p in modele["ports"]] or [0.0])
+    n_imp = ((NMAX_IMPULSIONS * t_exc + retard) / dt_s
+             if (dt_s > 0 and t_exc > 0) else 0.0)
     n_dec = (NMAX_PERIODES / (f_res * dt_s)) if (dt_s > 0 and f_res > 0) else 0.0
     if n_imp > 0 or n_dec > 0:
         nmax_calcule = max(NMAX_PLANCHER, int(math.ceil(max(n_imp, n_dec))))
@@ -4776,16 +4812,24 @@ def _avis(m):
     # -- les ports ---------------------------------------------------------
     if m.get("reseau"):
         excites = [p["n"] for p in m["ports"] if p["excite"]]
+        dephase = any(p.get("retard_s", 0) > 0 for p in m["ports"])
         out.append({
             "rang": "info",
-            "titre": "Un reseau alimente en phase, pas un tableau S",
-            "texte": "Les ports %s excitent ensemble, a la meme amplitude et "
-                     "a la meme phase. Ce qui revient a chacun est son "
+            "titre": ("Un reseau dephase" if dephase
+                      else "Un reseau alimente en phase") + ", pas un tableau S",
+            "texte": "Les ports %s excitent ensemble, a la meme amplitude. "
+                     "Ce qui revient a chacun est son "
                      "coefficient de reflexion ACTIF -- ce qu'il voit quand "
                      "tous emettent, couplages compris --, et non un S11 : "
                      "le « S11 » affiche est celui actif du port %d. Le "
-                     "diagramme est celui du reseau entier."
-                     % (", ".join(str(n) for n in excites), excites[0]),
+                     "diagramme est celui du reseau entier.%s"
+                     % (", ".join(str(n) for n in excites), excites[0],
+                        " Tous en phase." if not dephase
+                        else " Phases d'excitation : %s -- realisees par un "
+                             "RETARD de l'impulsion, exactes a la frequence "
+                             "visee." % ", ".join(
+                                 "port %d a %g deg" % (p["n"], round(p["phase"], 1))
+                                 for p in m["ports"] if p["excite"])),
         })
     elif len(m["ports"]) > 1:
         exc = next(p for p in m["ports"] if p["excite"])
@@ -5042,7 +5086,18 @@ def _avis(m):
                      "corrigez-la si vous la connaissez.",
         })
 
-    if not m["vias"]:
+    # UNE ANTENNE EQUILIBREE -- un dipole, un bras par face -- n'a ni masse ni
+    # vias, et c'est voulu. On la reconnait a ses ports : chacun relie deux
+    # couches qui portent TOUTES DEUX du cuivre d'antenne. Une masse oubliee
+    # dans la selection, elle, laisse la couche d'arrivee du port vide -- et
+    # les deux avis restent.
+    masses = [c for c in m["cuivre"] if c["role"] in ("gnd", "masse")]
+    avec_cuivre = {c["couche"] for c in m["cuivre"] if c.get("polys")}
+    equilibree = not masses and all(
+        p["de"] in avec_cuivre and p["a"] in avec_cuivre and p["de"] != p["a"]
+        for p in m["ports"] if p["excite"])
+
+    if not m["vias"] and not equilibree:
         out.append({
             "rang": "info",
             "titre": "Aucun via dans le modele",
@@ -5052,8 +5107,7 @@ def _avis(m):
                      "pas et le S11 est faux.",
         })
 
-    masses = [c for c in m["cuivre"] if c["role"] in ("gnd", "masse")]
-    if not masses:
+    if not masses and not equilibree:
         out.append({
             "rang": "attention",
             "titre": "Pas de plan de masse dans la selection",

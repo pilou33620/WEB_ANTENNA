@@ -214,8 +214,10 @@ const EX_RESEAU={
     return "Exemple posé : réseau 3 × 3 de dipôles imprimés 2,45 GHz sur FR-4 "+
       "1,6 mm — bras "+mm(p.La)+", pas "+mm(p.pas)+", neuf ports excités en "+
       "phase. Le « S₁₁ » est le coefficient de réflexion ACTIF de l'élément "+
-      "central ; les huit autres sont dans l'onglet Couplage. Cotes du "+
-      "gabarit, non recalées : attendez une silhouette, pas un chiffre.";
+      "central ; les huit autres sont dans l'onglet Couplage. Pour orienter "+
+      "le faisceau, réglez Δφx / Δφy dans la fiche du motif (90° ≈ 30° de "+
+      "dépointage). Cotes du gabarit, non recalées : attendez une "+
+      "silhouette, pas un chiffre.";
   }
 };
 

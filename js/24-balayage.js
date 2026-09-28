@@ -124,7 +124,7 @@ function balSources(){
       const v=CON.gabaritP[ch.id];
       if(!isFinite(v))return;
       out.push({id:"m."+ch.id, nom:g.nom+" — "+ch.nom,
-                unite:ch.entier?"":"mm", valeur:v, motif:ch.id});
+                unite:ch.entier?"":(ch.unite||"mm"), valeur:v, motif:ch.id});
     });
   }
   return out;

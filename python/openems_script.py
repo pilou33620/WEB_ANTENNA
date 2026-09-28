@@ -100,6 +100,14 @@ def _ident(nom, prefixe="p"):
     return s
 
 
+def _com(s):
+    """Un nom venu du fichier, sur UNE ligne, pour un commentaire ou la
+    docstring du script. Un retour a la ligne dans un nom de couche ferait
+    sortir la suite du commentaire -- et le script est EXECUTE : ce serait du
+    code. `split()` coupe aussi sur \\r, \\x0b, \\x0c, \\x85, \\u2028."""
+    return " ".join(str(s).split()).replace('"""', "'''").replace("\\", "/")
+
+
 def _kappa(er, df, f0):
     """Conductivite equivalente d'un dielectrique a pertes.
 
@@ -152,7 +160,7 @@ def _bloc_debye(m, pertes):
         for p in j["poles"]:
             a("        (%.8e, %.8e),\n" % (p["de"], p["tau"]))
         a("    ]},   # %s : tan d tenu a %.2f %% pres sur la bande\n"
-          % (d["nom"], j["ecart_tand_pc"]))
+          % (_com(d["nom"]), j["ecart_tand_pc"]))
     a("}\n\n")
     a("def _en_debye(chemin):\n")
     a("    arbre = _ET.parse(chemin)\n")
@@ -259,7 +267,7 @@ def _bloc_pieces(m):
             e = c["emprise"]
             quoi = c.get("matiere") or c["materiau"]
             a("\n# %s / %s : %s, %d triangles, de (%s, %s, %s) a (%s, %s, %s) mm\n"
-              % (p["nom"], c["nom"], quoi, c["triangles"],
+              % (_com(p["nom"]), _com(c["nom"]), _com(quoi), c["triangles"],
                  _f(e[0], 3), _f(e[1], 3), _f(e[2], 3),
                  _f(e[3], 3), _f(e[4], 3), _f(e[5], 3)))
             if c["materiau"] == "metal":
@@ -360,7 +368,7 @@ def generer(m, chemin_openems=None, dossier_sim=None):
 
     a('#!/usr/bin/python3\n')
     a('# -*- coding: utf-8 -*-\n')
-    a('"""Simulation openEMS — %s\n\n' % (m["nom"] or "antenne"))
+    a('"""Simulation openEMS — %s\n\n' % (_com(m["nom"]) or "antenne"))
     a("Script produit par l'outil « Antenne openEMS » a partir d'un fichier\n")
     a("IPC-2581. Il est autonome : il ne depend ni du serveur, ni de la page\n")
     a("qui l'a produit. Tout ce que l'assistant a choisi est ecrit en clair\n")
@@ -444,7 +452,7 @@ def generer(m, chemin_openems=None, dossier_sim=None):
             k = _kappa(d["er"], d["df"], pertes.get("f_kappa") or b["f0"])
         a("sub_%d = CSX.AddMaterial('%s', epsilon=%s, kappa=%.6e)"
           "   # %s, tan d = %s a %.4g GHz\n"
-          % (i, nom, _f(d["er"], 4), k, d["nom"], _f(d["df"], 5),
+          % (i, nom, _f(d["er"], 4), k, _com(d["nom"]), _f(d["df"], 5),
              (pertes.get("f_kappa") or b["f0"]) / 1e9))
         if m.get("carte"):
             # Le contour de la carte entiere, et non l'emprise du cuivre :
@@ -582,11 +590,11 @@ def generer(m, chemin_openems=None, dossier_sim=None):
             nom = _ident(o["nom"], "obj")
             v = "obj_%d" % i
             if o["materiau"] == "metal":
-                a("\n%s = CSX.AddMetal('%s')   # %s\n" % (v, nom, o["nom"]))
+                a("\n%s = CSX.AddMetal('%s')   # %s\n" % (v, nom, _com(o["nom"])))
             else:
                 k = _kappa(o["er"], o["df"], b["f0"])
                 a("\n%s = CSX.AddMaterial('%s', epsilon=%s, kappa=%.6e)"
-                  "   # %s\n" % (v, nom, _f(o["er"], 4), k, o["nom"]))
+                  "   # %s\n" % (v, nom, _f(o["er"], 4), k, _com(o["nom"])))
             pr = o["priorite"]
             if o["type"] == "fil":
                 a("%s.AddWire([\n" % v)
@@ -762,19 +770,29 @@ def generer(m, chemin_openems=None, dossier_sim=None):
             a("# Un reseau : la puissance acceptee est la SOMME sur les ports\n")
             a("# excites, chacun avec son coefficient de reflexion actif.\n")
             a("p_acc = 0.0\n")
+            a("p_inc = 0.0\n")
             for q in m["ports"]:
                 if q["excite"]:
                     a("_p = ports[%d]\n" % (q["n"] - 1))
-                    a("p_acc += abs(0.5 * np.real(_p.uf_inc[i0] * np.conj(_p.if_inc[i0]))) \\\n"
-                      "    * (1 - min(abs(_p.uf_ref[i0] / _p.uf_inc[i0]), 1.0) ** 2)\n")
+                    a("_pi = abs(0.5 * np.real(_p.uf_inc[i0] * np.conj(_p.if_inc[i0])))\n")
+                    a("p_inc += _pi\n")
+                    a("p_acc += _pi * (1 - min(abs(_p.uf_ref[i0] / _p.uf_inc[i0]), 1.0) ** 2)\n")
         else:
             a("p_inc = abs(0.5 * np.real(port.uf_inc[i0] * np.conj(port.if_inc[i0])))\n")
             a("p_acc = p_inc * (1 - abs(s11[i0]) ** 2)\n")
+        a("# DEUX GAINS, ET ILS NE REPONDENT PAS A LA MEME QUESTION. Le gain\n")
+        a("# (IEEE) rapporte le rayonnement a la puissance ACCEPTEE : il dit ce\n")
+        a("# que l'antenne perd en elle-meme. Le gain REALISE le rapporte a la\n")
+        a("# puissance INCIDENTE : il compte en plus ce que la desadaptation\n")
+        a("# renvoie au generateur -- c'est lui qu'un bilan de liaison utilise.\n")
         a("print('Directivite : %.2f dBi' % (10 * np.log10(res_nf.Dmax[0])))\n")
         a("if p_acc > 0:\n")
         a("    print('Rendement   : %.1f %%' % (100 * res_nf.Prad[0] / p_acc))\n")
-        a("    print('Gain        : %.2f dBi'\n")
+        a("    print('Gain        : %.2f dBi (IEEE, desadaptation exclue)'\n")
         a("          % (10 * np.log10(res_nf.Dmax[0] * res_nf.Prad[0] / p_acc)))\n")
+        a("if p_inc > 0 and res_nf.Prad[0] > 0:\n")
+        a("    print('Gain realise: %.2f dBi (desadaptation comprise)'\n")
+        a("          % (10 * np.log10(res_nf.Dmax[0] * res_nf.Prad[0] / p_inc)))\n")
 
     return "".join(t)
 
@@ -829,7 +847,8 @@ class PortCoaxial(Port):
     """Un port coaxial : tension radiale, courant en boucle, Z0 analytique."""
 
     def __init__(self, CSX, port_nr, x, y, ra, rb, rm, er, Z0,
-                 z_source, z_mesure, z_lignes, sens, excite=0, priority=50):
+                 z_source, z_mesure, z_lignes, sens, excite=0, priority=50,
+                 delay=0):
         # `start`/`stop` : le bras +x de la croix. La classe de base ne s'en
         # sert que pour nommer et situer le port.
         super(PortCoaxial, self).__init__(
@@ -863,7 +882,7 @@ class PortCoaxial(Port):
                 vec = [0, 0, 0]
                 vec[ny] = signe * excite
                 exc = CSX.AddExcitation('%s_e%d' % (self.lbl_temp.format('coax'), k),
-                                        exc_type=0, exc_val=vec)
+                                        exc_type=0, exc_val=vec, delay=delay)
                 exc.AddBox(deb, fin, priority=priority)
 
         # -- le plan de mesure, pose sur une ligne de maillage --------------
@@ -910,6 +929,17 @@ class PortCoaxial(Port):
 '''
 
 
+def _retard(p):
+    """`, delay=...` pour un port dephase d'un reseau, rien sinon.
+
+    La phase d'un port est rendue par un RETARD de l'impulsion : voir
+    `_retards` dans openems_modele.py."""
+    r = p.get("retard_s", 0.0)
+    if not (p["excite"] and r > 0):
+        return ""
+    return ", delay=%.6e" % r
+
+
 def _bloc_ports(m):
     """Les ports : la geometrie des connecteurs, puis les sources.
 
@@ -933,9 +963,14 @@ def _bloc_ports(m):
                      else "Les %d ports" % len(ports)))
     a("# --------------------------------------------------------------------\n")
     if m.get("reseau"):
-        a("# UN RESEAU ALIMENTE EN PHASE : les ports excites emettent ensemble,\n")
-        a("# meme amplitude, meme phase. Ce que chacun renvoie est son\n")
+        a("# UN RESEAU : les ports excites emettent ensemble, a la meme\n")
+        a("# amplitude. Ce que chacun renvoie est son\n")
         a("# coefficient de reflexion ACTIF -- couplages compris --, pas un S11.\n")
+        for q in ports:
+            if q["excite"] and q.get("retard_s", 0) > 0:
+                a("# Port %d : phase %g deg a la frequence visee, soit un retard\n"
+                  "# de %.4g ps de l'impulsion (`delay=`).\n"
+                  % (q["n"], round(q["phase"], 2), q["retard_s"] * 1e12))
     elif len(ports) > 1:
         a("# Le port %d excite ; %s pose%s en charge, c'est-a-dire en\n"
           % (excite["n"],
@@ -965,13 +1000,13 @@ def _bloc_ports(m):
               % _f(p["R"], 3))
             a("# selon %s — le sens du champ electrique a l'entree. Elle relie\n"
               % p["dir"])
-            a("# « %s » a « %s ».\n" % (p["de"], p["a"]))
+            a("# « %s » a « %s ».\n" % (_com(p["de"]), _com(p["a"])))
             a("port_%d = FDTD.AddLumpedPort(%d, %s, [%s, %s, %s], [%s, %s, %s],\n"
-              "                            '%s', %s, priority=50)%s\n"
+              "                            '%s', %s, priority=50%s)%s\n"
               % (n, n, _f(p["R"], 3),
                  _f(p["x1"]), _f(p["y1"]), _f(p["z1"]),
                  _f(p["x2"]), _f(p["y2"]), _f(p["z2"]), p["dir"],
-                 "1.0" if p["excite"] else "0",
+                 "1.0" if p["excite"] else "0", _retard(p),
                  "" if p["excite"] else "   # en charge : il mesure, il n'emet pas"))
             continue
 
@@ -1010,7 +1045,7 @@ def _bloc_ports(m):
              _f(c["rb"] + c["ep_gaine"] / 2.0), _f(c["ep_gaine"])))
         if c["degagements"]:
             a("# LES DEGAGEMENTS. Sans eux l'ame touche %s : le port est un\n"
-              % " et ".join("« %s »" % d["couche"] for d in c["degagements"]))
+              % " et ".join("« %s »" % _com(d["couche"]) for d in c["degagements"]))
             a("# court-circuit franc, le S11 vaut 0 dB sur toute la bande, et\n")
             a("# rien dans le resultat ne dit pourquoi.\n")
         # AU-DESSUS DU CUIVRE, ET C'EST TOUT LE SUJET. Le degagement etait
@@ -1041,19 +1076,19 @@ def _bloc_ports(m):
                 a("%s.AddLinPoly(%s, 'z', %s, %s, priority=15)"
                   "   # degagement dans %s\n"
                   % (cible, _poly(disque), _f(d["z0"]),
-                     _f(d["z1"] - d["z0"]), d["couche"]))
+                     _f(d["z1"] - d["z0"]), _com(d["couche"])))
             else:
                 a("%s.AddPolygon(%s, 'z', %s, priority=15)"
                   "   # degagement dans %s\n"
-                  % (cible, _poly(disque), _f(d["z0"]), d["couche"]))
+                  % (cible, _poly(disque), _f(d["z0"]), _com(d["couche"])))
         a("port_%d = PortCoaxial(CSX, %d, %s, %s, %s, %s, %s, %s, %s,\n"
           "                     z_source=%s, z_mesure=%s,\n"
           "                     z_lignes=mesh.GetLines('z'), sens=%s,\n"
-          "                     excite=%s)%s\n"
+          "                     excite=%s%s)%s\n"
           % (n, n, _f(p["x"]), _f(p["y"]), _f(c["ra"]), _f(c["rb"]),
              _f(c["rm"]), _f(c["er"], 4), _f(c["z0_ligne"], 4),
              _f(c["z_bas"]), _f(c["z_mes"]), _f(c["sens"], 1),
-             "1.0" if p["excite"] else "0",
+             "1.0" if p["excite"] else "0", _retard(p),
              "" if p["excite"] else "   # en charge : il mesure, il n'emet pas"))
 
     a("\n")

@@ -1364,6 +1364,11 @@ def _epilogue(m):
         a("    _out['nf2ff']['rendement'] = float(res_nf.Prad[0] / p_acc)\n")
         a("    _out['nf2ff']['gain_dbi'] = float(\n")
         a("        10 * np.log10(res_nf.Dmax[0] * res_nf.Prad[0] / p_acc))\n")
+        # Le gain REALISE : rapporte a la puissance INCIDENTE, desadaptation
+        # comprise. Voir le commentaire du script, « DEUX GAINS ».
+        a("if p_inc > 0 and res_nf.Prad[0] > 0 and np.isfinite(res_nf.Dmax[0]):\n")
+        a("    _out['nf2ff']['gain_realise_dbi'] = float(\n")
+        a("        10 * np.log10(res_nf.Dmax[0] * res_nf.Prad[0] / p_inc))\n")
     a("\n")
     a("# UN NaN DANS DU JSON N'EST PAS DU JSON. json.dump ecrit « NaN » sans\n")
     a("# broncher, JSON.parse le refuse, et la page perd TOUT le resultat —\n")

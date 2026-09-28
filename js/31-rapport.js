@@ -47,6 +47,26 @@ function rapEscHtml(s){
 /* =============================================================================
    1. Collecte & Agrégation des données
    ============================================================================= */
+/* Le gain RÉALISÉ : rapporté à la puissance INCIDENTE, désadaptation
+   comprise — celui d'un bilan de liaison. Le serveur le calcule désormais
+   (`gain_realise_dbi`) ; pour un résultat plus ancien, on le retrouve depuis
+   le gain IEEE et les coefficients de réflexion à f₀. Tous les ports excités
+   reçoivent la même onde incidente — même amplitude, même impédance —, la
+   fraction acceptée est donc la moyenne des 1 − |Γ|². */
+function rapGainRealise(res){
+  const nf = res && res.nf2ff;
+  if(!nf) return null;
+  if(nf.gain_realise_dbi != null) return nf.gain_realise_dbi;
+  if(nf.gain_dbi == null || res.s11_min_db == null) return null;
+  const db = [res.s11_min_db];
+  if(res.reseau && res.couplages)
+    for(const k in res.couplages) db.push(res.couplages[k].db_f0);
+  const acc = db.reduce(function(s, v){
+    return s + 1 - Math.min(1, Math.pow(10, v / 10));
+  }, 0) / db.length;
+  return acc > 0 ? nf.gain_dbi + 10 * Math.log10(acc) : null;
+}
+
 function rapCollecterDonnees(){
   const d = {
     date: new Date(),
@@ -228,10 +248,14 @@ function rapCollecterDonnees(){
       d.solver.nf2ff_actif = !!ANT.nf2ff.actif;
     }
     if(ANT.boite){
-      d.boite.mx = ANT.boite.mx;
-      d.boite.my = ANT.boite.my;
-      d.boite.mz_haut = ANT.boite.mz_haut;
-      d.boite.mz_bas = ANT.boite.mz_bas;
+      /* Zéro dans le réglage veut dire « automatique » : la marge réelle est
+         celle que le modèle a calculée, et c'est elle qu'on rapporte. */
+      const mb = (ANT.modele && ANT.modele.boite) || {};
+      const marge = function(k){ return ANT.boite[k] > 0 ? ANT.boite[k] : (mb[k] || 0); };
+      d.boite.mx = marge("mx");
+      d.boite.my = marge("my");
+      d.boite.mz_haut = marge("mz_haut");
+      d.boite.mz_bas = marge("mz_bas");
       d.boite.pml = ANT.boite.pml;
     }
     if(ANT.maillage){
@@ -323,6 +347,8 @@ function rapCollecterDonnees(){
       },
       vswr: (res.vswr && res.f0 && res.f) ? res.vswr[res.f.indexOf(res.f0)] : null,
       couplages: res.couplages || null,
+      reseau: !!res.reseau,
+      gain_realise_dbi: rapGainRealise(res),
       nf2ff: res.nf2ff || null,
       diagnostic: res.diagnostic || null
     };
@@ -839,7 +865,8 @@ function rapGenererHtml(d, diags){
     h += '        <tbody>';
     if(nf){
       h += '          <tr><td>Directivité maximale Dₘₐₓ</td><td class="mono highlight">' + (nf.dmax_dbi != null ? rapNb(nf.dmax_dbi, 2) + " dBi" : "Indéfinie") + '</td></tr>';
-      h += '          <tr><td>Gain réalisé maximal G</td><td class="mono highlight">' + (sansReso ? "non mesurable" : nf.gain_dbi != null ? rapNb(nf.gain_dbi, 2) + " dBi" : "—") + '</td></tr>';
+      h += '          <tr><td>Gain G (IEEE, désadaptation exclue)</td><td class="mono highlight">' + (sansReso ? "non mesurable" : nf.gain_dbi != null ? rapNb(nf.gain_dbi, 2) + " dBi" : "—") + '</td></tr>';
+      h += '          <tr><td>Gain réalisé (désadaptation comprise)</td><td class="mono highlight">' + (sansReso ? "non mesurable" : res.gain_realise_dbi != null ? rapNb(res.gain_realise_dbi, 2) + " dBi" : "—") + '</td></tr>';
       h += '          <tr><td>Rendement de rayonnement η</td><td class="mono">' + (sansReso ? "non mesurable" : nf.rendement != null ? rapNb(nf.rendement * 100, 1) + " %" : "—") + '</td></tr>';
       h += '          <tr><td>Puissance rayonnée P_rad</td><td class="mono">' + (nf.prad != null ? rapNb(nf.prad, 4) + " W" : "—") + '</td></tr>';
     } else {
@@ -847,7 +874,9 @@ function rapGenererHtml(d, diags){
     }
     if(res.couplages){
       for(const k in res.couplages){
-        h += '        <tr><td>Couplage Port ' + rapEscHtml(k) + ' (S' + rapEscHtml(k) + '1)</td><td class="mono">' + rapNb(res.couplages[k].db_f0, 2) + ' dB à f₀ (' + rapNb(res.couplages[k].pire_db, 2) + ' dB au pire)</td></tr>';
+        h += res.reseau
+          ? '        <tr><td>Port ' + rapEscHtml(k) + ' — Γ' + rapEscHtml(k) + ' actif</td><td class="mono">' + rapNb(res.couplages[k].db_f0, 2) + ' dB à f₀</td></tr>'
+          : '        <tr><td>Couplage Port ' + rapEscHtml(k) + ' (S' + rapEscHtml(k) + '1)</td><td class="mono">' + rapNb(res.couplages[k].db_f0, 2) + ' dB à f₀ (' + rapNb(res.couplages[k].pire_db, 2) + ' dB au pire)</td></tr>';
       }
     }
     h += '        </tbody>';
@@ -903,7 +932,11 @@ function rapGenererMarkdown(d, diags){
       L.push("- Fréquence de résonance f0 : aucune — le S11 ne descend jamais sous -3 dB (minimum à " + rapFmtHz(res.f0) + ")");
     else
       L.push("- Fréquence de résonance f0 : " + rapFmtHz(res.f0) + (res.ecart_cible_pct != null ? " (" + (res.ecart_cible_pct >= 0 ? "+" : "") + rapNb(res.ecart_cible_pct, 2) + " % vs cible)" : ""));
-    L.push("- S11 minimal : " + rapNb(res.s11_min_db, 2) + " dB");
+    L.push("- " + (res.reseau ? "Γ actif minimal du port 1 (« S11 »)" : "S11 minimal") + " : " + rapNb(res.s11_min_db, 2) + " dB");
+    if(res.reseau && res.couplages)
+      L.push("- Γ actifs des autres ports à f0 : " + Object.keys(res.couplages).map(function(k){
+        return "port " + k + " " + rapNb(res.couplages[k].db_f0, 1) + " dB";
+      }).join(", "));
     L.push("- Impédance d'entrée Zin(f0) : " + rapNb(res.z0_re, 1) + (res.z0_im >= 0 ? "+" : "−") + rapNb(Math.abs(res.z0_im), 1) + "j Ω");
     if(res.z0_pied_re != null){
       L.push("- Impédance au pied de l'antenne : " + rapNb(res.z0_pied_re, 1) + (res.z0_pied_im >= 0 ? "+" : "−") + rapNb(Math.abs(res.z0_pied_im), 1) + "j Ω");
@@ -913,9 +946,10 @@ function rapGenererMarkdown(d, diags){
       L.push("- Directivité maximale : " + (nf.dmax_dbi != null ? rapNb(nf.dmax_dbi, 2) + " dBi" : "Indéfinie"));
       if(sansReso){
         if(nf.gain_dbi != null || nf.rendement != null)
-          L.push("- Gain réalisé et rendement : non mesurables (puissance acceptée trop faible)");
+          L.push("- Gain et rendement : non mesurables (puissance acceptée trop faible)");
       }else{
-        if(nf.gain_dbi != null) L.push("- Gain réalisé : " + rapNb(nf.gain_dbi, 2) + " dBi");
+        if(nf.gain_dbi != null) L.push("- Gain (IEEE, désadaptation exclue) : " + rapNb(nf.gain_dbi, 2) + " dBi");
+        if(res.gain_realise_dbi != null) L.push("- Gain réalisé (désadaptation comprise) : " + rapNb(res.gain_realise_dbi, 2) + " dBi");
         if(nf.rendement != null) L.push("- Rendement de rayonnement : " + rapNb(nf.rendement * 100, 1) + " %");
       }
     }

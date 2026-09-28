@@ -1084,6 +1084,14 @@ ${(p.ligne_d>0&&p.ligne_w>0)?(function(){
 <div class="champ ligne">
   <span><label>Impédance de référence</label><input type="text" inputmode="numeric" spellcheck="false" id="antPR" value="${p.R}"> Ω</span>
 </div>
+${p.excite&&ANT.ports.filter(q=>q.excite).length>1?`
+<div class="champ ligne">
+  <span><label>Phase d'excitation</label><input type="text" inputmode="decimal" spellcheck="false" id="antPphase" value="${mdlNb(+p.phase||0)}"> °</span>
+</div>
+<p class="note">Un réseau : les ports excités émettent ensemble. Leur écart de
+   phase oriente le faisceau. Il est exact à la fréquence visée — openEMS le
+   réalise par un <b>retard</b> de l'impulsion, donc la phase suit la
+   fréquence ailleurs dans la bande.</p>`:""}
 
 <div id="antPortRecap">
   ${antPortRecapHtml()}
@@ -1161,7 +1169,7 @@ ANT_LIER.port=function(box){
   };
   n("#antPx","x"); n("#antPy","y"); n("#antPecart","ecart",0.001);
   n("#antPw","w",0.001);
-  n("#antPl","l",0.001); n("#antPR","R",1);
+  n("#antPl","l",0.001); n("#antPR","R",1); n("#antPphase","phase");
   n("#antPra","ra",0.001); n("#antPrb","rb",0.001); n("#antPer","er",1);
   n("#antPepg","ep_gaine",0.001); n("#antPlong","longueur",0.01);
   antLierNombre(box.querySelector("#antPlgd"), ANT.port, "ligne_d", {min:0});

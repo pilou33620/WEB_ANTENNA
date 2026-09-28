@@ -235,6 +235,9 @@ function antVieillir(){ ANT_AGE++; }
 function antPortNeuf(exc){
   return {pose:false, type:"localise", x:0, y:0, de:"", a:"", dir:"z",
           w:0.5, l:0.5, ecart:0.2, R:50, excite:exc!==false,
+          /* La phase d'excitation, en degrés, à la fréquence visée. Elle ne
+             compte que dans un réseau — plusieurs ports excités ensemble. */
+          phase:0,
           /* Le connecteur, quand `type` vaut « coaxial ». Ce sont les cotes
              d'une SMA ordinaire : âme de 1,27 mm de diamètre, diélectrique
              PTFE de 4,1 mm, ce qui donne 49 Ω — un coaxial n'est à 50 Ω que
@@ -294,7 +297,8 @@ function antPortRetirer(i){
 function antPortDoc(p,i){
   const d={type:p.type||"localise", nom:"port "+(i+1),
            dir:p.dir, x:p.x, y:p.y, w:p.w, l:p.l, ecart:p.ecart,
-           R:p.R, de:p.de, a:p.a, excite:!!p.excite, pose:!!p.pose};
+           R:p.R, de:p.de, a:p.a, excite:!!p.excite, pose:!!p.pose,
+           phase:+p.phase||0};
   if(p.type==="coaxial"){
     d.ra=p.ra; d.rb=p.rb; d.er=p.er;
     d.ep_gaine=p.ep_gaine; d.longueur=p.longueur;

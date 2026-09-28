@@ -616,6 +616,12 @@ function conChampCote(ch,val){
     return '<span>'+lab+
       '<input type="number" step="1" min="1" data-con-cote="'+ch.id+
       '" value="'+Math.round(val)+'"></span>';
+  /* Un angle : ni conversion en pouces, ni minimum — un déphasage négatif
+     oriente le faisceau de l'autre côté. */
+  if(ch.unite)
+    return '<span>'+lab+
+      '<input type="number" step="5" data-con-cote="'+ch.id+
+      '" value="'+(+val||0)+'"> '+aEsc(ch.unite)+'</span>';
   return '<span>'+lab+
     '<input type="number" step="'+conPas(0.05)+'" min="0" data-con-cote="'+
     ch.id+'" value="'+conAff(val)+'"></span>';
@@ -1183,7 +1189,8 @@ function conPanneauLier(box){
     el.oninput=function(){
       const v=parseFloat(String(el.value).replace(",","."));
       if(!isFinite(v))return;
-      CON.gabaritP[ch.id]=ch.entier?Math.max(1,Math.round(v)):conLire(v);
+      CON.gabaritP[ch.id]=ch.entier?Math.max(1,Math.round(v)):
+                          ch.unite?v:conLire(v);
       CON.gabaritTouche[ch.id]=true;
       conApercuMaj();
     };

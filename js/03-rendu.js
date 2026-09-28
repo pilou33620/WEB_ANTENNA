@@ -125,10 +125,26 @@ function centrerSur(x,y,echelle){
 /* ==========================================================================
    Dessin
    ========================================================================== */
-let RAF=0;
+let RAF=0, RAF_SURVOL=0;
+/* L'IMAGE DE LA CARTE SANS LE SURVOL, gardée à part : l'anneau de survol suit
+   le curseur le long d'une piste, et repeindre toute la carte à chaque pixel
+   parcouru rendait le survol poussif sur une grande carte. */
+const CACHE=document.createElement("canvas");
 function redessiner(){
   if(RAF)return;
   RAF=requestAnimationFrame(function(){RAF=0;dessiner();});
+}
+/* Ne repeint que le survol, par-dessus l'image gardée. Tout ce qui change la
+   carte passe par `dessiner`, qui refait l'image : elle ne peut pas vieillir. */
+function redessinerSurvol(){
+  if(RAF||RAF_SURVOL)return;
+  RAF_SURVOL=requestAnimationFrame(function(){
+    RAF_SURVOL=0;
+    if(CACHE.width!==cv.width||CACHE.height!==cv.height){dessiner();return;}
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.drawImage(CACHE,0,0);
+    if(V.survol)peindreSurvol(ctx,window.devicePixelRatio||1);
+  });
 }
 function dessiner(){
   const dpr=window.devicePixelRatio||1;
@@ -138,6 +154,14 @@ function dessiner(){
      garde son ancienne taille et le dessin déborde. */
   if(TAILLE.dpr!==dpr&&TAILLE.w>1){resize();return;}
   peindre(ctx,dpr,cv.width,cv.height);
+  if(CACHE.width!==cv.width||CACHE.height!==cv.height){
+    CACHE.width=cv.width; CACHE.height=cv.height;
+  }
+  const cc=CACHE.getContext("2d");
+  cc.setTransform(1,0,0,1,0,0);
+  cc.clearRect(0,0,CACHE.width,CACHE.height);
+  cc.drawImage(cv,0,0);
+  if(V.modele&&V.survol)peindreSurvol(ctx,dpr);
   piedZoom();
 }
 
@@ -222,7 +246,8 @@ function peindre(c,dpr,W,H){
   const boitiers=V.sel.filter(e=>e.s&&e.s.type==="composant").map(e=>e.s.ref);
   if(!boitiers.length&&V.comp)boitiers.push(V.comp);
   for(const ref of boitiers)peindreCompChoisi(c,dpr,ref);
-  if(V.survol)peindreSurvol(c,dpr);
+  /* Le survol n'est pas peint ici : `dessiner` le pose par-dessus, après
+     avoir gardé l'image de la carte (voir CACHE). */
 
   c.setTransform(1,0,0,1,0,0);
   peindreEchelle(c,dpr,W,H);

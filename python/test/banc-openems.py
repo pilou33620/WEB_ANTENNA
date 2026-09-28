@@ -697,6 +697,25 @@ _t_dll = openems_script.generer(m, chemin_openems=r"C:\un\dossier\inexistant\ope
 verifie("le dossier d'origine est en tete de liste des candidats",
         "inexistant" in _t_dll and "_candidats" in _t_dll)
 
+# UN NOM VENU DU FICHIER NE DOIT JAMAIS DEVENIR DU CODE. Le script est
+# execute : un retour a la ligne dans un nom de couche recopie en
+# commentaire, ou un """ dans le nom du document, ferait de la suite une
+# instruction Python.
+_pique = "__import__('os').system('x')"
+_pile_p = [dict(e) for e in document()["empilage"]]
+_pile_p[1]["nom"] = "CORE\n" + _pique
+_t_inj = openems_script.generer(openems_modele.normaliser(
+    document(nom='a"""\n' + _pique + '\n"""', empilage=_pile_p)))
+try:
+    compile(_t_inj, "script-injecte", "exec")
+    _inj_ok = True
+except SyntaxError:
+    _inj_ok = False
+verifie("un nom piege reste du texte : aucune ligne de code n'en sort",
+        _inj_ok and not any(l.lstrip().startswith("__import__")
+                            for l in _t_inj.splitlines()),
+        "script invalide" if not _inj_ok else "ligne injectee trouvee")
+
 
 
 def aire(pts):
@@ -1046,6 +1065,26 @@ verifie("le reseau excite ses deux ports",
 verifie("le reseau rend le reflexion actif du second port",
         "couplages[2] = ports[1].uf_ref / ports[1].uf_inc" in tr)
 verifie("le script du reseau compile", compile(tr, "<reseau>", "exec") or True)
+verifie("un reseau en phase ne retarde rien", "delay=" not in tr)
+
+# LE DEPHASAGE EST UN RETARD. Port 2 en avance de 90 deg : c'est le port 1
+# qui part un quart de periode plus tard, a la frequence visee.
+rp = dict(res, ports=[dict(res["ports"][0], phase=-45),
+                      dict(res["ports"][1], phase=45)])
+mp = openems_modele.normaliser(rp)
+f_vis = mp["bande"].get("fcible") or mp["bande"]["f0"]
+verifie("une phase negative reste negative : c'est un gradient",
+        mp["ports"][0]["phase"] == -45.0)
+verifie("le port en retard de phase part un quart de periode apres",
+        abs(mp["ports"][0]["retard_s"] - 0.25 / f_vis) < 1e-15
+        and mp["ports"][1]["retard_s"] == 0.0)
+tp = openems_script.generer(mp)
+verifie("le script retarde le port 1 et lui seul",
+        tp.count(", delay=") == 1 and ", delay=%.6e" % (0.25 / f_vis) in tp)
+verifie("le script dephase compile", compile(tp, "<dephase>", "exec") or True)
+verifie("le compteur de pas couvre le retard",
+        mp["arret"]["nmax_detail"]["impulsion"]
+        > mr["arret"]["nmax_detail"]["impulsion"])
 
 # -- le tableau complet : N simulations, l'excitation deplacee -------------
 # CE QUE CET ENCHAINEMENT AJOUTE, ET CE QU'IL N'INVENTE PAS. Chaque colonne

@@ -1037,11 +1037,20 @@ const CON_MOTIF_RESEAU={
     {id:"pas", nom:"pas du réseau", sym:"p",
      aide:"d'un centre d'élément au suivant, dans les deux directions : "+
           "λ₀/2 évite les lobes de réseau"},
-    CON_MOTIF_DIPOLE.champs[3]
+    CON_MOTIF_DIPOLE.champs[3],
+    /* LE DÉPHASAGE PROGRESSIF : une colonne (ou une rangée) en avance de Δφ
+       sur la précédente. C'est ce qui ORIENTE le faisceau — zéro le garde
+       droit devant, dans l'axe de la carte. Des degrés, pas des millimètres,
+       et le seul champ qui a le droit d'être nul ou négatif (`signe`). */
+    {id:"dphx", nom:"déphasage entre colonnes (x)", sym:"Δφx", unite:"°",
+     signe:true, aide:"oriente le faisceau dans le plan xz, le long des bras"},
+    {id:"dphy", nom:"déphasage entre rangées (y)", sym:"Δφy", unite:"°",
+     signe:true, aide:"oriente le faisceau dans le plan yz, en travers des bras"}
   ]),
   defauts:function(c){
     const d=CON_MOTIF_DIPOLE.defauts(c);
     d.pas=CON_C0/(2*c.f);
+    d.dphx=0; d.dphy=0;
     return d;
   },
   tracer:function(c,p){
@@ -1054,11 +1063,24 @@ const CON_MOTIF_RESEAU={
       formes.push(
         gRect("haut","ANTENNE",xc-p.ov/2,yc-p.wd/2,xc-p.ov/2+p.La,yc+p.wd/2),
         gRect("bas","ANTENNE",xc+p.ov/2-p.La,yc-p.wd/2,xc+p.ov/2,yc+p.wd/2));
-      ports.push({x:xc, y:yc, w:p.ov, l:p.wd});
+      /* La phase est comptée depuis l'élément central : c'est le port 1, et
+         il reste à zéro quel que soit le dépointage. */
+      ports.push({x:xc, y:yc, w:p.ov, l:p.wd,
+                  phase:(i-1)*p.dphx+(j-1)*p.dphy});
     }
     /* L'élément central d'abord : c'est lui le port 1, celui du « S₁₁ ». */
     const centre=ports.splice(4,1)[0];
     const festim=CON_C0/(4*p.La*Math.sqrt(c.eeffAir));
+    /* Le dépointage attendu : le faisceau part là où les retards de phase
+       compensent le chemin, k·p·sin θ + Δφ = 0. Au-delà de |sin θ| = 1 il
+       n'y a plus de lobe principal réel — on le dit plutôt que d'afficher NaN. */
+    const k0p=360*s*c.f/CON_C0;
+    const angle=function(dph){
+      const u=-dph/k0p;
+      return Math.abs(u)>1 ? "aucun lobe principal réel (|Δφ| > "+
+                             k0p.toFixed(0)+"°)"
+                           : (Math.asin(u)*180/Math.PI).toFixed(1)+"°";
+    };
     return {
       carte:{L:Lb, W:Wb},
       formes:formes,
@@ -1082,6 +1104,10 @@ const CON_MOTIF_RESEAU={
           ["Pas du réseau", conLong(s,3)+" ("+(s*c.f/CON_C0).toFixed(2)+" λ₀)"],
           ["Ports", "9, tous excités : le « S₁₁ » est le coefficient de "+
                     "réflexion ACTIF de l'élément central"],
+          ["Dépointage estimé (plan xz)", angle(p.dphx)+" pour Δφx = "+
+                                          p.dphx+"°"],
+          ["Dépointage estimé (plan yz)", angle(p.dphy)+" pour Δφy = "+
+                                          p.dphy+"°"],
           ["Plan de masse", "aucun : diagramme bidirectionnel"],
           ["Carte", conLong(Lb,2)+" × "+conLong(Wb,2)]
         ]
@@ -1214,7 +1240,7 @@ function conGabaritCotes(g,c,p){
     if(ch.entier)v=Math.max(1,Math.round(v));
     /* L'encastrement est la seule cote qui a le droit d'être nulle : un patch
        alimenté au bord existe, il est juste mal adapté. */
-    else if(v<0||(v===0&&ch.id!=="y0"))v=d[ch.id];
+    else if(!ch.signe&&(v<0||(v===0&&ch.id!=="y0")))v=d[ch.id];
     out[ch.id]=v;
   });
   return out;
@@ -1305,6 +1331,7 @@ function conPoser(port,ligne,autres){
      de ruban qui n'existe plus, et le nombre aurait l'air d'un nombre. */
   ANT.port.ligne_d=(ligne&&ligne.d>0)?+ligne.d.toFixed(4):0;
   ANT.port.ligne_w=(ligne&&ligne.w>0)?+ligne.w.toFixed(4):0;
+  ANT.port.phase=+port.phase||0;
   /* LES AUTRES ÉLÉMENTS D'UN RÉSEAU : un port chacun, TOUS EXCITÉS — ils
      émettent ensemble, en phase. Le serveur lit alors le modèle comme un
      réseau (voir MAX_PORTS, python/openems_modele.py). */
@@ -1313,6 +1340,7 @@ function conPoser(port,ligne,autres){
     p.pose=true; p.dir="z"; p.de=ANT.port.de; p.a=ANT.port.a; p.R=ANT.port.R;
     p.x=+q.x.toFixed(4); p.y=+q.y.toFixed(4);
     p.w=+Math.max(q.w,0.05).toFixed(4); p.l=+Math.max(q.l,0.05).toFixed(4);
+    p.phase=+q.phase||0;
     ANT.ports.push(p);
   });
 }
@@ -1352,10 +1380,12 @@ function conGabaritFiche(g,c,p,t){
   }
   const fiche={titre:t.calcul.titre, resume:t.calcul.resume,
                lignes:lignes.concat(t.calcul.lignes)};
+  const val=function(ch,v){
+    return ch.entier?String(v):ch.unite?v+" "+ch.unite:conLong(v,3);
+  };
   conGabaritEcarts(g,c,p).forEach(function(e){
     fiche.lignes.push(["↻ "+e.champ.nom,
-      (e.champ.entier?String(e.pose):conLong(e.pose,3))+" au lieu de "+
-      (e.champ.entier?String(e.calcul):conLong(e.calcul,3))]);
+      val(e.champ,e.pose)+" au lieu de "+val(e.champ,e.calcul)]);
   });
   return fiche;
 }
