@@ -476,7 +476,8 @@ ${vals.length>=2&&total<=BAL_MAX?`
   ${vals2.length?'<span>et de <b>'+balEtiquette(vals2[0])+'</b> à <b>'+
     balEtiquette(vals2[vals2.length-1])+'</b> '+aEsc(src2.unite)+'</span>':""}
   ${ANT.modele?'<span>≈ <b>'+antDuree(antBalDuree()*total)+
-    '</b> en tout</span>':""}
+    '</b> en tout</span><span>≈ <b>'+antMemoire(ANT.modele.estimation.memoire_Mo)+
+    '</b> de RAM (un point à la fois)</span>':""}
 </div>
 <p class="note">La valeur courante est <b>${balEtiquette(src.valeur)}
    ${aEsc(src.unite)}</b>. Elle n'est pas modifiée : le balayage travaille sur
@@ -490,6 +491,7 @@ ${b.devis?`<div class="recap${b.devis.refus?" ko":""}">
     ? '<span>'+aEsc(b.devis.refus)+'</span>'
     : '<span><b>'+aEnt(b.devis.cellules/1e6)+'</b> millions de cellules en tout</span>'+
       '<span>≈ <b>'+antDuree(b.devis.duree)+'</b> de calcul</span>'+
+      '<span>au plus ≈ <b>'+antMemoire(b.devis.memoire)+'</b> de RAM</span>'+
       '<span>le point le plus lourd : <b>'+aEnt(b.devis.pire)+'</b> cellules</span>'}
 </div>`:""}
 <p class="note">« Chiffrer » vérifie les ${total} points au serveur — les
@@ -598,6 +600,7 @@ async function antBalayageDevis(){
     ANT.balayage.devis={
       cellules:d.estimation.cellules,
       duree:d.estimation.duree_s,
+      memoire:d.estimation.memoire_Mo,
       pire:Math.max.apply(null,d.points.map(p=>p.cellules))
     };
   }catch(e){

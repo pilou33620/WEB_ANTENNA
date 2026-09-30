@@ -121,6 +121,8 @@ function antTableauSHtml(){
     <span><b>${n}</b> ports, donc <b>${n}</b> simulations</span>
     ${un?'<span>≈ <b>'+antDuree(un*n)+'</b> en tout, contre <b>'+
          antDuree(un)+'</b> pour une seule</span>':""}
+    ${ANT.modele?'<span>≈ <b>'+antMemoire(ANT.modele.estimation.memoire_Mo)+
+         '</b> de RAM (une simulation à la fois)</span>':""}
   </div>
   <div class="champ actions">
     <button class="tb" id="bTsDevis">∑ Chiffrer le tableau</button>
@@ -131,7 +133,8 @@ function antTableauSHtml(){
     ${d.refus
       ? '<span>'+aEsc(d.refus)+'</span>'
       : '<span><b>'+aEnt(d.cellules/1e6)+'</b> millions de cellules en tout</span>'+
-        '<span>≈ <b>'+antDuree(d.duree)+'</b> de calcul</span>'}
+        '<span>≈ <b>'+antDuree(d.duree)+'</b> de calcul</span>'+
+        '<span>au plus ≈ <b>'+antMemoire(d.memoire)+'</b> de RAM</span>'}
   </div>`:""}
   <p class="note">La géométrie ne change pas d'une colonne à l'autre : seul le
      port qui émet change. Les ${n} colonnes partagent donc le même maillage et
@@ -170,7 +173,8 @@ async function antTableauSDevis(){
   ANT_TS_DEVIS=null;
   try{
     const d=await oeTableauS();
-    ANT_TS_DEVIS={cellules:d.estimation.cellules, duree:d.estimation.duree_s};
+    ANT_TS_DEVIS={cellules:d.estimation.cellules, duree:d.estimation.duree_s,
+                  memoire:d.estimation.memoire_Mo};
   }catch(e){
     ANT_TS_DEVIS={refus:String(e.message||e).split(String.fromCharCode(10))[0]};
   }

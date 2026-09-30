@@ -822,6 +822,7 @@ global.aNb=function(v,d){ return Number(v).toFixed(d==null?3:d); };
 global.aEnt=function(v){ return String(Math.round(v)); };
 global.aF=function(v){ return (v/1e9).toFixed(3)+" GHz"; };
 global.antDuree=function(v){ return Math.round(v)+" s"; };
+global.antMemoire=function(v){ return Math.round(v)+" Mo"; };
 global.antBalCouleur=function(){ return "#000"; };
 global.V.fichier="deux-brins.xml";
 charger("29-tableau-s.js");
@@ -1481,6 +1482,10 @@ extraire("13-assistant.js","antDuree");
 extraire("13-assistant.js","aEsc");
 extraire("13-assistant.js","aEnt");
 extraire("13-assistant.js","aNb");
+extraire("13-assistant.js","antMemoire");
+verifie("la RAM s'annonce en Mo sous le Go, en Go au-dessus",
+        antMemoire(480)==="480 Mo" && antMemoire(3072)==="3,0 Go" &&
+        antMemoire(0)==="—");
 extraire("13-assistant.js","antBoutonsEtat");
 extraire("13-assistant.js","antArreter");
 

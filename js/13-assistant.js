@@ -426,7 +426,7 @@ function antBilanRendre(){
   box.innerHTML=
     '<div class="chiffres">'+
       '<span><b>'+aEnt(e.cellules)+'</b> cellules</span>'+
-      '<span><b>'+aEnt(e.memoire_Mo)+'</b> Mo</span>'+
+      '<span>≈ <b>'+antMemoire(e.memoire_Mo)+'</b> de RAM</span>'+
       '<span><b>'+e.lignes.join(' × ')+'</b> lignes</span>'+
       '<span title="'+aEsc(antDebitDit(e))+'">'+
         '≈ <b>'+antDuree(secondes)+'</b></span>'+
@@ -466,6 +466,13 @@ function antDuree(s){
   let h=Math.floor(s/3600), mn=Math.round((s-3600*h)/60);
   if(mn===60){h++;mn=0;}
   return h+" h "+String(mn).padStart(2,"0");
+}
+
+/* La mémoire vive du calcul, en Mo ou en Go. Même promesse que la durée :
+   un ordre de grandeur (cent octets par cellule), pas une mesure. */
+function antMemoire(mo){
+  if(!isFinite(mo)||mo<=0)return "—";
+  return mo<1024 ? Math.max(1,Math.round(mo))+" Mo" : aNb(mo/1024,1)+" Go";
 }
 
 function antAvisHtml(avis){
