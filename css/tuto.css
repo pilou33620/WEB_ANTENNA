@@ -1,0 +1,35 @@
+/* css/tuto.css — mode tuto (voir js/38-tuto.js), le même que commun/tuto.css de WEB_CAO */
+/* Accueil : l'interrupteur */
+.tuto-ligne{position:absolute;top:10px;right:12px;z-index:1}
+.tuto-interrupteur{display:inline-flex;align-items:center;gap:6px}
+.tuto-interrupteur:hover{border-color:var(--yellow)}
+.tuto-interrupteur .tuto-coche{width:12px;height:12px;border:1.5px solid var(--txt-dim);border-radius:3px}
+.tuto-interrupteur.on{border-color:var(--yellow);color:var(--yellow)}
+.tuto-interrupteur.on .tuto-coche{background:var(--yellow);border-color:var(--yellow);box-shadow:inset 0 0 0 2px var(--panel2)}
+
+.tuto-calque{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:9000;pointer-events:none}
+.tuto-spot{position:fixed;z-index:9001;pointer-events:none;border:2px solid var(--yellow);border-radius:7px;
+  box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 18px rgba(242,199,68,.45);transition:all .25s ease}
+
+.tuto-bulle,.tuto-info{position:fixed;z-index:9003;background:var(--panel2);color:var(--txt);
+  border:1px solid var(--border2);border-left:3px solid var(--yellow);border-radius:8px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5);font:13px/1.5 var(--ui)}
+.tuto-bulle{width:340px;padding:14px 16px 12px}
+.tuto-info{width:280px;padding:10px 12px;pointer-events:none}
+.tuto-bulle h4,.tuto-info h4{margin:0 0 6px;font-size:14px;color:#fff}
+.tuto-bulle p,.tuto-info p{margin:0;color:#c9cdd4}
+.tuto-bulle kbd,.tuto-info kbd{font-family:var(--mono);font-size:11px;background:#2a2d33;border:1px solid var(--border2);
+  border-bottom-width:2px;border-radius:3px;padding:0 4px;color:#fff}
+.tuto-num{font-family:var(--mono);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--yellow);margin-bottom:4px}
+.tuto-fin{margin-top:8px!important;font-size:12px;color:var(--txt-dim)!important}
+.tuto-pied{display:flex;align-items:center;gap:8px;margin-top:12px}
+.tuto-pied .tb:first-of-type{margin-left:auto}
+.tuto-points{display:flex;gap:4px}
+.tuto-points i{width:6px;height:6px;border-radius:50%;background:var(--border2)}
+.tuto-points i.fait{background:#7a6a2e}
+.tuto-points i.on{background:var(--yellow);width:14px;border-radius:3px}
+
+.tuto-pastille{position:fixed;z-index:9002;width:17px;height:17px;padding:0;border-radius:50%;cursor:help;
+  border:1px solid #1a1a1a;background:var(--yellow);color:#111;font:bold 11px/15px var(--ui);text-align:center;
+  animation:tuto-pouls 2.4s ease-out infinite}
+@keyframes tuto-pouls{0%{box-shadow:0 0 0 0 rgba(242,199,68,.6)}70%,100%{box-shadow:0 0 0 7px rgba(242,199,68,0)}}
