@@ -1099,14 +1099,16 @@ function conPanneauLier(box){
     };
     el.onchange=function(){ conPanneauRendre(); };
   });
-  /* ON CHANGE L'UNITÉ, PAS LA FRÉQUENCE : 2,45 GHz reste 2,45 GHz quand on
-     passe en MHz, il s'écrit 2450. L'inverse — garder le nombre et changer
-     l'unité — est la faute que cette liste existe pour empêcher. L'assistant
-     est refait avec : c'est SON unité, et son étape « La bande » l'affiche. */
+  /* ON GARDE LE NOMBRE, ON CHANGE L'UNITÉ : 868 écrit en MHz puis passé en
+     GHz vaut 868 GHz. Le champ est relu comme une saisie, dans la nouvelle
+     unité. L'assistant est refait avec : c'est SON unité, et son étape
+     « La bande » l'affiche. */
   box.querySelectorAll("[data-con-uf]").forEach(function(el){
     el.onchange=function(){
       if(!ANT_UNITES_F[el.value])return;
       ANT.uniteF=el.value;
+      const champ=box.querySelector("[data-con-f]");
+      if(champ&&champ.oninput)champ.oninput();
       conPanneauRendre();
       if(typeof antAssistantRendre==="function")antAssistantRendre();
     };

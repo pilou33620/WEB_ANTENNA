@@ -889,11 +889,17 @@ ANT_LIER.bande=function(box){
   antLierNombre(box.querySelector("#antFc"), ANT.bande, "fcible", {facteur: antKf(), min:0});
   antLierNombre(box.querySelector("#antN"), ANT.bande, "n", {min:21, max:4001, defaut:1001, entier:true});
   box.querySelector("#antUF").onchange=function(){
-    /* On change l'unité, pas la fréquence : 2,45 GHz reste 2,45 GHz quand on
-       passe en MHz, il s'affiche 2450. L'inverse — garder le nombre et
-       changer l'unité — est exactement la faute que cette liste existe pour
-       empêcher. */
+    /* ON GARDE LE NOMBRE, ON CHANGE L'UNITÉ : 868 écrit en MHz puis passé en
+       GHz vaut 868 GHz. On corrige l'unité de ce qu'on vient de taper sans le
+       retaper. Les champs refaits sont relus comme une saisie, dans la
+       nouvelle unité. */
+    const ids=["antF1","antF2","antFc"];
+    const lus=ids.map(id=>{const el=box.querySelector("#"+id);return el?el.value:null;});
     ANT.uniteF=this.value; antAssistantRendre(true);
+    ids.forEach(function(id,i){
+      const el=document.getElementById(id);
+      if(el&&lus[i]!=null&&el.onchange){el.value=lus[i];el.onchange();}
+    });
   };
   box.querySelectorAll("[data-bande]").forEach(function(b){
     b.onclick=function(){
