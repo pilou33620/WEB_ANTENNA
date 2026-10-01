@@ -376,7 +376,130 @@ function rapCollecterDonnees(){
     };
   }
 
+  d.etapes = rapEtatEtapes();
   return d;
+}
+
+/* =============================================================================
+   1 bis. L'état des sept étapes
+   -----------------------------------------------------------------------------
+   UNE LIGNE PAR ONGLET, ET CE QUI Y CLOCHE. Les diagnostics disent ce qui ne
+   va pas ; cette section dit OÙ le reprendre. Les avis du serveur n'y portent
+   pas d'étape : on la lit dans leur titre (sans accents, voir
+   python/openems_modele.py), la première règle qui répond l'emporte.
+   ============================================================================= */
+const RAP_AVIS_ETAPE = [
+  [/port|ame |gaine|coaxial|degagement|tableau s/i, "port"],
+  [/cuivre modelise|cuivre suppose|pertes|debye|empilage|valeurs completees/i, "empilage"],
+  [/piece/i, "objets"],
+  [/impulsion|garde-fou|enregistrement/i, "calcul"],
+  [/maillage|maille|cellule|marge|aretes|ecart/i, "boite"],
+  [/./, "cuivre"]
+];
+const RAP_ORDRE = {ok: 0, info: 1, warn: 2, crit: 3};
+
+function rapEtatEtapes(){
+  if(typeof ANT === "undefined" || typeof ANT_ETAPES === "undefined") return [];
+  const m = ANT.modele || {};
+  const E = {};
+  ANT_ETAPES.forEach(function(e){ E[e.id] = {id: e.id, titre: e.titre, lignes: [], pb: []}; });
+  const pb = function(id, rang, t){ E[id].pb.push({rang: rang, t: t}); };
+
+  // 1. Le cuivre
+  const masse = V.parNet && V.parNet[ANT.netMasse];
+  E.cuivre.lignes.push(ANT.nets.size + " net(s) et " + ANT.formes.length + " morceau(x) d'antenne · masse : " +
+    (masse ? masse.nom : "aucune") + " · " + ANT.couches.size + " couche(s) · vias " +
+    (ANT.avecVias ? "oui" : "non") + ", pastilles " + (ANT.avecPastilles ? "oui" : "non"));
+  if(!ANT.nets.size && !ANT.formes.length) pb("cuivre", "crit", "Aucune antenne désignée.");
+  if(ANT.netMasse < 0) pb("cuivre", "warn", "Aucun net de masse : l'antenne n'a pas de contrepoids déclaré.");
+  if(ANT.nets.has(ANT.netMasse)) pb("cuivre", "crit", "Le net de masse est aussi retenu comme antenne.");
+  if(!ANT.couches.size) pb("cuivre", "crit", "Aucune couche de cuivre cochée.");
+  if(ANT.viasSupposes) pb("cuivre", "info", ANT.viasSupposes + " via(s) supposé(s) traversant(s) faute de déclaration.");
+
+  // 2. L'empilage
+  if(!LT.pret) pb("empilage", "crit", "Empilage non lu.");
+  LT.gap.forEach(function(g){
+    E.empilage.lignes.push(g.a + " → " + g.b + " : " + (g.t > 0 ? aL(g.t) : "?") +
+      ", εr " + aNb(g.er, 2) + ", tanδ " + aNb(g.df, 4));
+    if(!(g.t > 0)) pb("empilage", "crit", "Épaisseur inconnue entre " + g.a + " et " + g.b + ".");
+    if(!g.erSrc) pb("empilage", "warn", "εr supposé (" + aNb(g.er, 2) + ") entre " + g.a + " et " + g.b +
+      " : le fichier ne le déclare pas, et c'est lui qui place la résonance.");
+    if(!g.dfSrc) pb("empilage", "info", "tanδ supposé entre " + g.a + " et " + g.b + ".");
+  });
+  E.empilage.lignes.push("cuivre : " + ANT.modeleCuivre + " · pertes : " + ANT.pertes.mode);
+
+  // 3. Autour
+  E.objets.lignes.push(ANT.primitives.length + " primitive(s), " + ANT.pieces.length + " pièce(s) importée(s)");
+
+  // 4. La bande
+  const b = ANT.bande;
+  E.bande.lignes.push(aF(b.f1) + " → " + aF(b.f2) + " · " + b.n + " points · cible " + aF(b.fcible));
+  if(!(b.f2 > b.f1)) pb("bande", "crit", "Bande vide ou inversée.");
+  else if(b.fcible < b.f1 || b.fcible > b.f2) pb("bande", "warn", "La fréquence cible est hors de la bande simulée.");
+  if(b.f2 > 100e9 || b.f1 < 1e6) pb("bande", "warn", "Bande inhabituelle : vérifiez l'unité de fréquence (" + ANT.uniteF + ").");
+
+  // 5. Les ports
+  const poses = ANT.ports.filter(function(p){ return p.pose; });
+  E.port.lignes.push(poses.length + " port(s) posé(s) sur " + ANT.ports.length);
+  if(!poses.length) pb("port", "crit", "Aucun port posé : l'onde n'a pas d'entrée.");
+  ANT.ports.forEach(function(p, i){
+    if(!p.pose){ if(poses.length) pb("port", "warn", "Port " + (i + 1) + " ajouté mais pas posé."); return; }
+    E.port.lignes.push("Port " + (i + 1) + (p.excite ? " (excité)" : "") + " : " + p.type + ", " +
+      (p.de || "?") + " → " + (p.a || "?") + ", " + p.R + " Ω, en (" + aNb(p.x, 3) + " ; " + aNb(p.y, 3) + ")");
+    if(typeof antPortVerdict === "function") antPortVerdict(p).forEach(function(v){
+      if(v.ok !== true) pb("port", v.ok === false ? "crit" : "warn", "Port " + (i + 1) + " : " + v.t);
+    });
+  });
+  const vf = ANT.verif;
+  if(vf && !vf.encours)
+    pb("port", vf.rang, "Vérification par calcul court" +
+      (vf.age !== ANT_AGE ? " (avant la dernière modification)" : "") + " : " + vf.t.replace(/^[✓✗~] /, ""));
+
+  // 6. La boîte
+  const bx = ANT.boite, ml = ANT.maillage;
+  E.boite.lignes.push("marges " + [bx.mx, bx.my, bx.mz_haut, bx.mz_bas]
+      .map(function(v){ return v > 0 ? aL(v) : "auto"; }).join(" / ") +
+    " · PML " + bx.pml + " · pas air " + (ml.res_air > 0 ? aL(ml.res_air) : "auto") +
+    ", diélectrique " + (ml.res_die > 0 ? aL(ml.res_die) : "auto"));
+  if(m.estimation)
+    E.boite.lignes.push(aEnt(m.estimation.cellules) + " cellules · " + antMemoire(m.estimation.memoire_Mo) +
+      " · ≈ " + antDuree(antDureeModele(m)));
+  if(ANT.refus) pb("boite", "crit", "Modèle refusé : " + ANT.refus.message);
+  else if(!ANT.modele) pb("boite", "warn", "Modèle pas encore vérifié par le serveur.");
+
+  // 7. Le calcul
+  const a = m.arret || {};
+  E.calcul.lignes.push("arrêt à " + ANT.arret.energie + " dB · garde-fou " +
+    (a.nmax ? aEnt(a.nmax) + " pas (" + (a.nmax_auto ? "calculé" : "imposé") + ")" : "calculé") +
+    " · diagramme " + (ANT.nf2ff.actif ? "oui" : "non"));
+  const es = ANT.etatServeur;
+  if(!es || !es.lancer)
+    pb("calcul", "crit", "openEMS indisponible sur ce poste" +
+      (es && (es.lancer_detail || es.detail) ? " : " + (es.lancer_detail || es.detail) : "") + ".");
+  const t = ANT.tache;
+  if(t){
+    const av = t.avancement || {};
+    E.calcul.lignes.push("dernier calcul : " + t.etat + ", " + aEnt(av.pas || 0) + " pas, énergie " +
+      (av.energie_dB != null ? aNb(av.energie_dB, 1) + " dB" : "—"));
+    if(t.etat === "echoue") pb("calcul", "crit", "Dernier calcul en échec : " + (t.detail || "voir le journal"));
+    else if(t.etat === "fini" && av.energie_dB != null && av.energie_dB > ANT.arret.energie + 5)
+      pb("calcul", "warn", "Le dernier calcul s'est arrêté sur le garde-fou, l'énergie n'était qu'à " +
+        aNb(av.energie_dB, 1) + " dB.");
+  }
+  if(ANT.resultat && ANT.resultat.diagnostic) pb("calcul", "crit", ANT.resultat.diagnostic);
+
+  // Les avis du serveur, rangés à l'étape qui les corrige
+  (m.avis || []).forEach(function(av){
+    if(av.rang !== "grave" && av.rang !== "attention") return;
+    const id = RAP_AVIS_ETAPE.find(function(r){ return r[0].test(av.titre); })[1];
+    pb(id, av.rang === "grave" ? "crit" : "warn", "Avis du modèle : " + av.titre);
+  });
+
+  return ANT_ETAPES.map(function(e){
+    const x = E[e.id];
+    x.rang = x.pb.reduce(function(r, p){ return RAP_ORDRE[p.rang] > RAP_ORDRE[r] ? p.rang : r; }, "ok");
+    return x;
+  });
 }
 
 /* =============================================================================
@@ -658,6 +781,32 @@ function rapGenererHtml(d, diags){
   h += '    </div>';
   h += '  </div>';
   h += '</div>';
+
+  // 1 bis. État des sept étapes
+  if(d.etapes && d.etapes.length){
+    const nOk = d.etapes.filter(function(x){ return x.rang === "ok" || x.rang === "info"; }).length;
+    const glyphe = {crit: "✗", warn: "⚠", info: "ℹ", ok: "✓"};
+    h += '<div class="rap-sec">';
+    h += '  <div class="rap-sec-head">';
+    h += '    <span class="rap-sec-titre">🧭 État des ' + d.etapes.length + ' étapes de l\'assistant</span>';
+    h += '    <span class="rap-sec-note">' + nOk + ' / ' + d.etapes.length + ' sans réserve</span>';
+    h += '  </div>';
+    h += '  <div class="rap-diags">';
+    d.etapes.forEach(function(x, i){
+      h += '    <div class="rap-diag-item ' + x.rang + '">';
+      h += '      <div class="rap-diag-head">';
+      h += '        <span class="rap-badge-statut ' + x.rang + '">' + x.rang.toUpperCase() + '</span>';
+      h += '        <span class="rap-diag-titre">' + (i + 1) + '. ' + rapEscHtml(x.titre) + '</span>';
+      h += '      </div>';
+      h += '      <div class="rap-diag-desc">' + x.lignes.map(rapEscHtml).join('<br>') + '</div>';
+      x.pb.forEach(function(p){
+        h += '      <div class="rap-diag-desc">' + glyphe[p.rang] + ' ' + rapEscHtml(p.t) + '</div>';
+      });
+      h += '    </div>';
+    });
+    h += '  </div>';
+    h += '</div>';
+  }
 
   // 2. Diagnostics & Analyse des Anomalies
   h += '<div class="rap-sec">';
@@ -957,6 +1106,16 @@ function rapGenererMarkdown(d, diags){
     L.push("- Simulation non exécutée.");
   }
   L.push("");
+
+  // 1 bis. État des étapes
+  if(d.etapes && d.etapes.length){
+    L.push("## État des " + d.etapes.length + " étapes de l'assistant");
+    d.etapes.forEach(function(x, i){
+      L.push("- **[" + x.rang.toUpperCase() + "] " + (i + 1) + ". " + x.titre + "** — " + x.lignes.join(" ; "));
+      x.pb.forEach(function(p){ L.push("  - [" + p.rang.toUpperCase() + "] " + p.t); });
+    });
+    L.push("");
+  }
 
   // 2. Diagnostics
   L.push("## 2. Diagnostics & Analyse des Anomalies FDTD");

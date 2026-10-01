@@ -185,6 +185,7 @@ const ANT={
   refus:null,                  // {message, conseil} quand il n'y en a pas
   tache:null,                  // {id, etat, avancement, …} pendant le calcul
   resultat:null,               // S11, Z, ROE, champ lointain
+  verif:null,                  // le calcul court du bouton « Vérifier le port » (13-assistant.js)
   vue:"2d",
   vueMaillage:false
 };
@@ -397,7 +398,7 @@ function antRaz(){
   ANT.pieces=[];
   ANT.carte3d={position:[0,0,0], rotation:[0,0,0]};
   ANT.dumps.actif=false;
-  ANT.modele=null; ANT.refus=null; ANT.tache=null; ANT.resultat=null;
+  ANT.modele=null; ANT.refus=null; ANT.tache=null; ANT.resultat=null; ANT.verif=null;
 
   /* Ce qu'on peut deviner sans rien demander : les couches de cuivre qui
      portent du cuivre, et le net de masse le plus probable. Deviner n'est pas

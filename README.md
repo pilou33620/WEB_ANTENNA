@@ -35,6 +35,15 @@ python web_antenna.py
 La page s'ouvre toute seule dans votre navigateur. **Le port affiché au démarrage n'est pas
 toujours 8000** : voir « Le port » ci-dessous.
 
+| Option | Effet |
+| :--- | :--- |
+| `--port N` | Port d'écoute (défaut 8000, replis décrits plus bas) |
+| `--local` | N'écoute que sur 127.0.0.1 : aucun accès réseau |
+| `--sans-navigateur` | N'ouvre pas le navigateur au démarrage |
+| `--sans-maj` | Ne vérifie pas les mises à jour GitHub au démarrage |
+| `--sans-banc` | Ne mesure pas la vitesse du poste (les fils du dernier banc restent en vigueur) |
+| `--projets DIR` | Racine des projets pour ce lancement seulement, sans toucher au réglage retenu dans `~/.antenne-openems.json` ([WEB·SUITE](https://github.com/pilou33620/WEB_SUITE) y passe `PROJETS/ANTENNA`, synchronisé avec GitHub) |
+
 Sans carte sous la main :
 
 ```bash
@@ -188,7 +197,9 @@ son propre sous-dossier :
 
 Le chemin saisi est celui du **poste qui fait tourner le serveur**, et non
 celui du navigateur : sur un lecteur réseau, il doit y être connecté. Le choix
-est retenu d'une séance à l'autre, dans `~/.antenne-openems.json`.
+est retenu d'une séance à l'autre, dans `~/.antenne-openems.json`. Lancé avec
+`--projets DIR` (c'est ce que fait WEB·SUITE), le dossier de travail est `DIR`
+pour cette séance seulement, et le réglage retenu n'est pas modifié.
 
 ### Ce qu'un projet garde, et ce qu'il ne garde pas
 
@@ -664,7 +675,10 @@ courbe là où l'impulsion n'a presque rien mis.
 
 Les trois champs partagent une **liste d'unités** Hz / kHz / MHz / GHz. Elle
 n'est pas là par confort : écrire `868` dans un champ étiqueté GHz est une
-faute qui ne se voit pas, et qui ne produit ni refus ni champ vide.
+faute qui ne se voit pas, et qui ne produit ni refus ni champ vide. Changer
+d'unité **garde le nombre écrit** et le relit dans la nouvelle unité, comme une
+saisie : `868` en MHz passé en GHz devient 868 GHz, pas 0,868. On corrige
+l'unité d'un nombre tapé dans la mauvaise, on ne le convertit pas.
 
 ### 5. Les ports — par où l'onde entre, et ce qui en ressort
 

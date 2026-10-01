@@ -347,6 +347,8 @@ function antEtapeActualiser(etapeId,corps){
   }else if(etapeId==="calcul"){
     const nEl=corps.querySelector("#antNmaxNote");
     if(nEl)nEl.innerHTML=antNmaxNoteHtml(m);
+    const vEl=corps.querySelector("#antVerif");
+    if(vEl)vEl.innerHTML=antVerifHtml();
     /* Le bouton du banc s'éteint pendant un calcul et se rallume après. */
     if(typeof antFilsRafraichir==="function")antFilsRafraichir();
   }
@@ -1425,9 +1427,11 @@ ${typeof antFilsHtml==="function"?antFilsHtml():""}
 
 <div class="champ actions">
   <button class="tb" id="bScript2">⤓ Écrire le script Python</button>
+  <button class="tb" id="bVerif"${peut?"":" disabled"} title="Un calcul coupé à une minute environ, même géométrie, sans diagramme : il dit si le port est en court-circuit, en circuit ouvert, ou s'il excite bien l'antenne — avant d'engager le grand calcul.">🔎 Vérifier le port</button>
   <button class="tb on" id="bLancer2"${peut?"":" disabled"}>▶ Lancer openEMS</button>
   <button class="tb danger" id="bArret2" style="display:none">■ Arrêter la simulation</button>
 </div>
+<div id="antVerif">${antVerifHtml()}</div>
 <div class="sim-assist-box" id="assistSimBox" style="display:none"></div>
 
 ${typeof antVoirHtml==="function"?antVoirHtml():""}
@@ -1482,6 +1486,8 @@ ANT_LIER.calcul=function(box){
   box.querySelector("#bScript2").onclick=antTelechargerScript;
   const l=box.querySelector("#bLancer2");
   if(l&&!l.disabled)l.onclick=antLancer;
+  const bv=box.querySelector("#bVerif");
+  if(bv)bv.onclick=antVerifPort;   // un bouton éteint ne déclenche rien
   const a2=box.querySelector("#bArret2");
   if(a2)a2.onclick=antArreter;
   if(typeof antChampsLier==="function")antChampsLier(box);
@@ -1537,6 +1543,119 @@ async function antLancer(){
   }else if(ANT.tache&&ANT.tache.etat==="echoue"){
     typeof wsHint==="function"&&wsHint("Échec : "+(ANT.tache.detail||"voir le journal du solveur"));
   }
+}
+
+/* ==========================================================================
+   La vérification du port : un calcul court avant le grand
+   --------------------------------------------------------------------------
+   LE MÊME DOCUMENT, COUPÉ. Même cuivre, même maillage — un maillage plus
+   grossier déplacerait le port d'une maille et le verdict ne vaudrait que
+   pour lui —, mais le garde-fou ramené à ce qu'on calcule en une minute, et
+   ni diagramme ni champs. Un calcul coupé ne mesure pas un S₁₁ ; il dit en
+   revanche sans ambiguïté si le port voit un court-circuit (Z ≈ 0) ou un
+   circuit ouvert (Z très grand), les deux pannes d'un port mal posé.
+
+   IL NE TOUCHE PAS AUX RÉSULTATS : la tâche et le résultat d'avant sont
+   rendus à la fin, et le verdict vit à part, dans `ANT.verif`.
+   ========================================================================== */
+const ANT_VERIF_S=45;   // secondes de calcul ; la préparation du maillage s'ajoute
+
+function antVerifNmax(m){
+  const e=m.estimation, a=m.arret;
+  const budget=Math.floor(ANT_VERIF_S*e.mcps_suppose*1e6/Math.max(1,e.cellules));
+  /* L'impulsion doit au moins être sortie : coupée avant, la transformée ne
+     lit plus rien. Le serveur compte QUATRE durées d'impulsion
+     (NMAX_IMPULSIONS) ; une seule suffit à voir un court-circuit. */
+  const imp=((a.nmax_detail&&a.nmax_detail.impulsion)||0)/4;
+  return Math.ceil(Math.max(500,Math.min(a.nmax,Math.max(budget,imp))));
+}
+
+/* Le verdict, sur le résultat du calcul court. Les seuils sont ceux de
+   `antResonance` (16-resultats.js) : le rapport et ce bouton ne peuvent pas
+   se contredire. */
+function antVerifVerdict(r){
+  if(!r||r.z0_re==null||!isFinite(r.z0_re))
+    return {rang:"crit", t:"Le calcul court n'a rendu aucune impédance"+
+      (r&&r.diagnostic?" : "+r.diagnostic:"")+"."};
+  const res=antResonance(r);
+  const z=aNb(r.z0_re,1)+(r.z0_im>=0?" + ":" − ")+aNb(Math.abs(r.z0_im),1)+"j Ω";
+  if(res.panne==="court")
+    return {rang:"crit", t:"✗ Court-circuit (Z = "+z+") : le port touche la "+
+      "masse — par le cuivre, un via, ou un écart que le maillage a refermé. "+
+      "Le grand calcul rendrait un S₁₁ plat à 0 dB."};
+  if(res.panne==="ouvert")
+    return {rang:"crit", t:"✗ Circuit ouvert (Z = "+z+") : une borne du port "+
+      "ne touche aucun cuivre retenu."};
+  if(res.reelle)
+    return {rang:"ok", t:"✓ Le port excite l'antenne (Z = "+z+", S₁₁ jusqu'à "+
+      aNb(r.s11_min_db,1)+" dB vers "+aF(r.f0)+"). Chiffres indicatifs : le "+
+      "calcul a été coupé."};
+  return {rang:"warn", t:"~ Ni court-circuit ni circuit ouvert (Z = "+z+") : "+
+    "le port est vraisemblablement bien posé, mais rien ne résonne encore — "+
+    "attendu sur un calcul coupé ; le grand calcul tranchera."};
+}
+
+function antVerifHtml(){
+  const v=ANT.verif, m=ANT.modele, t=ANT.tache;
+  if(v&&v.encours)return '<p class="note">Vérification du port en cours : '+
+    mdlEntier(v.nmax)+' pas au lieu de '+mdlEntier(v.nmaxPlein)+
+    (v.prepare?' — le serveur prépare le maillage, cela peut prendre un moment sur une grande carte':'')+'…</p>';
+  /* UN BOUTON ÉTEINT DIT POURQUOI : sans quoi le clic « ne fait rien ». */
+  const pourquoi=ANT.refus ? "le modèle est refusé — "+ANT.refus.message
+    : !m ? "le modèle est en cours de vérification par le serveur"
+    : !(ANT.etatServeur&&ANT.etatServeur.lancer) ? "openEMS n'est pas utilisable sur ce poste"
+    : t&&(t.etat==="calcule"||t.etat==="prepare") ? "un calcul tourne déjà"
+    : !m.estimation||!m.arret ? "le modèle n'a pas d'estimation de maillage" : "";
+  let h="";
+  if(pourquoi)h='<p class="note">« Vérifier le port » indisponible : '+aEsc(pourquoi.replace(/\.\s*$/,""))+'.</p>';
+  else if(!v){
+    const n=antVerifNmax(m);
+    h='<p class="note">« Vérifier le port » : '+mdlEntier(n)+' pas au lieu de '+
+      mdlEntier(m.arret.nmax)+', ≈ '+antDuree(m.estimation.cellules*n/
+      (m.estimation.mcps_suppose*1e6))+' de calcul, plus la préparation du maillage.</p>';
+  }
+  if(!v)return h;
+  const cls={crit:"grave",warn:"attention",ok:"info",info:"info"}[v.rang];
+  return h+'<div class="avis"><div class="av '+cls+'"><b>Vérification du port</b>'+
+    '<span>'+aEsc(v.t)+(v.age!==ANT_AGE?" (faite avant la dernière "+
+    "modification du modèle : refaites-la)":"")+'</span></div></div>';
+}
+
+async function antVerifPort(){
+  const m=ANT.modele;
+  if(ANT.verif&&ANT.verif.encours)return;
+  if(!m||!m.estimation||!m.arret){ antAssistantRendre(); return; }
+  const avant={tache:ANT.tache, resultat:ANT.resultat}, age=ANT_AGE;
+  /* L'ÉCRAN CHANGE AVANT L'APPEL : le serveur prépare tout le maillage
+     avant de répondre, et sur une grande carte cela dure — un clic sans
+     effet visible passe pour un bouton cassé. */
+  ANT.verif={encours:true, prepare:true, nmax:antVerifNmax(m), nmaxPlein:m.arret.nmax, age:age};
+  antAssistantRendre(); antBoutonsEtat();
+  try{
+    const doc=antDocument();
+    doc.nom+=" - verif port";
+    doc.arret.nmax=ANT.verif.nmax;
+    doc.nf2ff.actif=false;
+    doc.dumps.actif=false;
+    ANT.tache=await oePost(OE_ROUTE+"/lancer",doc);
+  }catch(e){
+    ANT.verif={rang:"crit", t:"Vérification refusée : "+(e.message||e), age:age};
+    antAssistantRendre(); antBoutonsEtat();
+    return;
+  }
+  ANT.verif.prepare=false;
+  antAssistantRendre(); antJournalRendre(); antBoutonsEtat();
+  await oeSuivre(function(){ antJournalRendre(); antBoutonsEtat(); });
+  const t=ANT.tache;
+  const v=t.etat==="fini" ? antVerifVerdict(ANT.resultat)
+    : t.etat==="arrete" ? {rang:"info", t:"Vérification arrêtée avant la fin."}
+    : {rang:"crit", t:"Le calcul court a échoué ("+t.etat+")"+
+        (t.detail?" : "+t.detail:"")+"."};
+  v.age=ANT.verif.age;
+  ANT.verif=v;
+  ANT.tache=avant.tache; ANT.resultat=avant.resultat;
+  antJournalRendre(); antAssistantRendre(); antBoutonsEtat();
+  typeof wsHint==="function"&&wsHint("Vérification du port : "+v.t);
 }
 
 /* ==========================================================================
@@ -1641,6 +1760,9 @@ function antBoutonsEtat(){
   if(bl2){
     bl2.disabled=!pret||!(ANT.etatServeur&&ANT.etatServeur.lancer)||!!encours;
   }
+  const bv=aE("bVerif");
+  if(bv)bv.disabled=!pret||!(ANT.etatServeur&&ANT.etatServeur.lancer)||!!encours||
+                    !!(ANT.verif&&ANT.verif.encours);
 
   /* 2. Boutons d'arrêt */
   const ba=aE("bArreter"), ba2=aE("bArret2");

@@ -2891,6 +2891,41 @@ charger("36-port-verdict.js");
   Object.assign(ANT.port,JSON.parse(garde.port));
 })();
 
+console.log("Verification du port et etat des etapes");
+(function(){
+  ["aNb","aEnt","aF","aL","antMemoire","antDuree","antVerifNmax","antVerifVerdict"]
+    .forEach(f=>extraire("13-assistant.js",f));
+  extraire("16-resultats.js","antResonance");
+  (0,eval)("var ANT_SEUIL_RESONANCE_DB=-3, ANT_VERIF_S=45;");
+  charger("31-rapport.js");
+
+  const m={estimation:{cellules:1e6, mcps_suppose:100},
+           arret:{nmax:80000, nmax_detail:{impulsion:12000}}};
+  verifie("le calcul court tient en ~45 s de pas", antVerifNmax(m)===4500, antVerifNmax(m));
+  m.estimation.cellules=1e8;
+  verifie("... mais laisse au moins sortir l'impulsion", antVerifNmax(m)===3000, antVerifNmax(m));
+  m.arret.nmax=2000;
+  verifie("... et ne depasse jamais le grand calcul", antVerifNmax(m)===2000, antVerifNmax(m));
+
+  const r=(s,re,im)=>({f:[1e9,2e9,3e9], f0:2e9, s11_min_db:s, z0_re:re, z0_im:im});
+  verifie("Z ~ 0 : court-circuit", antVerifVerdict(r(-0.1,0.5,8)).rang==="crit");
+  verifie("Z enorme : circuit ouvert", /ouvert/.test(antVerifVerdict(r(-0.1,900,-800)).t));
+  verifie("S11 qui descend : le port excite", antVerifVerdict(r(-12,45,5)).rang==="ok");
+  verifie("aucune impedance : echec", antVerifVerdict({diagnostic:"x"}).rang==="crit");
+
+  const garde={nets:ANT.nets, couches:ANT.couches, modele:ANT.modele, gap:LT.gap};
+  ANT.nets=new Set(); ANT.couches=new Set(); ANT.modele={avis:[
+    {rang:"grave", titre:"Le maillage soude l'antenne a la masse (2 endroits)"},
+    {rang:"attention", titre:"Piece de biais dans la grille"}]};
+  LT.gap=[];
+  const E=rapEtatEtapes(), de=id=>E.find(x=>x.id===id);
+  verifie("sept etapes, dans l'ordre", E.length===7&&E[0].id==="cuivre"&&E[6].id==="calcul");
+  verifie("rien de designe : le cuivre est critique", de("cuivre").rang==="crit");
+  verifie("l'avis de maillage va a la boite", de("boite").pb.some(p=>/soude/.test(p.t)));
+  verifie("l'avis de piece va a « Autour »", de("objets").rang==="warn");
+  Object.assign(ANT,{nets:garde.nets, couches:garde.couches, modele:garde.modele}); LT.gap=garde.gap;
+})();
+
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")
                                             :"toutes passees."));
