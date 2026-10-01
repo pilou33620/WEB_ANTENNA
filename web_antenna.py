@@ -1281,6 +1281,9 @@ def main(argv=None):
                     default=True,
                     help="ne pas mesurer la vitesse du poste au demarrage "
                          "(les fils du dernier banc restent en vigueur)")
+    ap.add_argument("--projets", default=None, metavar="DOSSIER",
+                    help="racine des projets pour ce lancement seulement (WEB_SUITE"
+                         " y passe PROJETS/ANTENNA ; n'ecrit pas ~/.antenne-openems.json)")
     args = ap.parse_args(argv)
 
     # LA MISE A JOUR AVANT TOUT LE RESTE, ET AVANT LA BASCULE DANS LE VENV.
@@ -1292,6 +1295,13 @@ def main(argv=None):
         if verifier_et_appliquer_maj(ROOT):
             redemarrer_application(argv)
     _reexecuter_dans_env()
+
+    if args.projets and projet is not None:
+        # Comme --lib de WEB_CAO : vaut pour ce lancement, sans toucher au
+        # reglage retenu (definir_racine, lui, l'ecrirait dans le profil).
+        chemin = os.path.abspath(os.path.expanduser(args.projets))
+        os.makedirs(chemin, exist_ok=True)
+        projet._RACINE = chemin
 
     hote = "127.0.0.1" if args.local else ""
 
