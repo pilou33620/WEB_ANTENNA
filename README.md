@@ -1193,12 +1193,15 @@ sont donc proposées telles quelles — *longueur du patch*, *encastrement*,
 le bouton du panneau : la carte et le port suivent la cote, la bande et l'arrêt
 ne bougent pas.
 
-Elles ne sont proposées **que si le dessin est encore la copie exacte du
-motif**. Reposer efface ce qu'on aurait ajouté à la main, et cela sur tous les
-points à la fois : une famille de courbes décrirait alors une autre antenne que
-celle qu'on a sous les yeux, sans que rien ne le dise. Une forme ajoutée, un
-via déplacé, et les cotes du motif disparaissent de la liste — celles des
-formes, elles, restent.
+Elles ne sont proposées **que si le motif lui-même n'a pas été retouché**.
+Reposer effacerait la retouche, et cela sur tous les points à la fois : une
+famille de courbes décrirait alors une autre antenne que celle qu'on a sous
+les yeux, sans que rien ne le dise. Un via du motif déplacé, et ses cotes
+disparaissent de la liste — celles des formes, elles, restent. Des formes
+**ajoutées** par-dessus le motif, en revanche, ne l'empêchent pas : à chaque
+point, le motif est reposé et elles sont recollées telles quelles, aux mêmes
+coordonnées. Elles ne suivent donc pas le motif quand il s'allonge — un stub
+posé au bord d'un patch reste où il était.
 
 **Deux cotes se croisent** quand elles ne se lisent pas l'une sans l'autre.
 Sur un patch alimenté par ligne encastrée, la longueur pose la *résonance* et

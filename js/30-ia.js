@@ -377,6 +377,38 @@
              " par " + nbp(ANT.balayage.pas, 4) + ".");
     }
 
+    /* -- un balayage termine : ses points EN TABLEAU ----------------------- */
+    /* Un modele qui doit comparer neuf points d'un croisement les lit mieux
+       en colonnes qu'en prose : une ligne par point, les memes colonnes que
+       le tableau de la page, plus le S11 A la frequence visee. */
+    const rb = (typeof ANT !== "undefined") ? ANT.resultat : null;
+    if(rb && rb.balayage && Array.isArray(rb.points) && rb.points.length){
+      const fc = (ANT.bande && ANT.bande.fcible > 0) ? ANT.bande.fcible : 0;
+      const lignes = Array.isArray(rb.lignes) ? rb.lignes : [];
+      L.push("");
+      L.push("=== BALAYAGE TERMINE : " + rb.points.length + " POINTS (tableau, " +
+             "separateur ;) ===");
+      L.push([(rb.nom || "cote") + (rb.unite ? " (" + rb.unite + ")" : "")]
+             .concat(rb.croise ? [(rb.nom2 || "cote 2") +
+                                  (rb.unite2 ? " (" + rb.unite2 + ")" : "")] : [])
+             .concat(["f0 (GHz)", "S11 min (dB)"],
+                     fc ? ["S11 a " + fHz(fc) + " (dB)"] : [],
+                     ["Re Z (ohm)", "Im Z (ohm)", "rendement (%)"]).join(";"));
+      rb.points.forEach(function(p, k){
+        const q = p.resultat || {}, l = lignes[k] || {};
+        const c = v => (v == null || !isFinite(v)) ? "" : nbp(v, 3);
+        const n = q.nf2ff || {};
+        L.push([c(p.valeur)].concat(rb.croise ? [c(p.valeur2)] : [],
+               [c(q.f0 != null ? q.f0 / 1e9 : l.f0 / 1e9),
+                c(q.s11_min_db != null ? q.s11_min_db : l.s11_min_db)],
+               fc ? [c(s11ALaCible(q, fc))] : [],
+               [c(q.z0_re != null ? q.z0_re : l.z0_re),
+                c(q.z0_im != null ? q.z0_im : l.z0_im),
+                c(n.rendement != null ? 100 * n.rendement :
+                  (l.rendement != null ? 100 * l.rendement : NaN))]).join(";"));
+      });
+    }
+
     /* -- le dernier resultat ---------------------------------------------- */
     const r = resultatCourant();
     if(r){
@@ -1106,9 +1138,10 @@
       p.avis.push("Le dessin effacé est un motif calculé : sa fiche et le "+
                   "balayage de ses cotes s'en vont avec lui.");
     else if(!p.remplacer && CON.gabarit && CON.elements.length)
-      p.avis.push("Ces formes s'AJOUTENT au motif dessiné : il cesse d'en "+
-                  "être la copie exacte, et le balayage de ses cotes ne sera "+
-                  "plus proposé.");
+      p.avis.push("Ces formes s'AJOUTENT au motif dessiné. Ses cotes restent "+
+                  "balayables : à chaque point, le motif est reposé et ces "+
+                  "formes recollées aux mêmes coordonnées — elles ne suivent "+
+                  "pas le motif quand il s'allonge.");
     if(!p.port && !ANT.port.pose && (p.els.length || p.remplacer))
       p.avis.push("Aucun port n'est posé et cette carte n'en pose pas : rien "+
                   "ne se simulera tant qu'il n'y en aura pas un.");
@@ -1311,6 +1344,17 @@
      −33,9 dB… à 2,40 GHz pour 2,45 visés (A-FAIRE.md § 1). Sans courbes ou
      sans cible, on retombe sur le S₁₁ minimal, et l'on dit de combien le
      point désigné résonne à côté de la cible. */
+  /* Le S11 d'un résultat À la fréquence `fc`, lu sur sa courbe ; NaN sans
+     courbe, sans cible, ou cible hors de la bande simulée. */
+  function s11ALaCible(r, fc){
+    const F = r && r.f, S = r && r.s11_db;
+    if(!(fc > 0) || !Array.isArray(F) || !Array.isArray(S) || F.length < 2 ||
+       fc < F[0] || fc > F[F.length - 1]) return NaN;
+    let k = 1;
+    while(k < F.length - 1 && F[k] < fc) k++;
+    return S[k - 1] + (S[k] - S[k - 1]) * (fc - F[k - 1]) / (F[k] - F[k - 1]);
+  }
+
   function lireBalayage(bal, dire){
     const pts = (Array.isArray(bal.lignes) && bal.lignes.length) ? bal.lignes
       : (bal.points || []).map(p => Object.assign(
@@ -1340,14 +1384,7 @@
     const fc = (ANT.bande && ANT.bande.fcible > 0) ? ANT.bande.fcible : 0;
     const courbes = {};
     (bal.points || []).forEach(function(p){ courbes[p.etiquette] = p.resultat || p; });
-    const aLaCible = function(p){
-      const r = courbes[p.etiquette] || p, F = r.f, S = r.s11_db;
-      if(!fc || !Array.isArray(F) || !Array.isArray(S) || F.length < 2 ||
-         fc < F[0] || fc > F[F.length - 1]) return NaN;
-      let k = 1;
-      while(k < F.length - 1 && F[k] < fc) k++;
-      return S[k - 1] + (S[k] - S[k - 1]) * (fc - F[k - 1]) / (F[k] - F[k - 1]);
-    };
+    const aLaCible = p => s11ALaCible(courbes[p.etiquette] || p, fc);
     const s11c = new Map(bons.map(p => [p, aLaCible(p)]));
     const parCible = fc > 0 && bons.every(p => isFinite(s11c.get(p)));
     const best = parCible
@@ -3220,6 +3257,9 @@ grammaire(),
      serait une capacité que le modèle n'utiliserait jamais, et personne ne
      s'en apercevrait — elle ne casse rien, elle ne sert simplement à rien. */
   window.iaPromptSysteme = promptSysteme;
+  /* Le contexte envoyé au modèle, tel quel : le banc y relit le tableau d'un
+     balayage terminé. */
+  window.iaContexte = extraireContexteOpenems;
   /* LA REQUÊTE ET SA LECTURE, sans réseau : le banc vérifie que la clé Google
      reste dans l'en-tête et qu'aucune ne part vers un serveur local. */
   window.iaRequete = requeteIa;

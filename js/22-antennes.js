@@ -1441,14 +1441,29 @@ function conGabaritTrace(g,c,q){
    la copie exacte, la cote est balayable ; sinon elle n'est pas proposée, et
    les cotes des formes le restent, elles. */
 function conGabaritConforme(){
+  const a=conGabaritAjouts();
+  return !!a&&!a.length;
+}
+
+/* CE QUI A ÉTÉ AJOUTÉ PAR-DESSUS LE MOTIF : le dessin commence par le motif
+   tel que son tracé le rend, et ce qui suit a été posé à la main (une carte
+   « formes », un outil de dessin). Rend la liste des ajouts — vide si le
+   dessin EST le motif —, ou null si le motif lui-même a été retouché : alors
+   le reposer effacerait la retouche, et ses cotes ne se balayent plus. Les
+   ajouts, eux, se recollent tels quels sur chaque point d'un balayage. */
+function conGabaritAjouts(){
   const g=conGabarit(CON.gabarit);
-  if(!g||!CON.gabaritP)return false;
+  if(!g||!CON.gabaritP)return null;
   let r=null;
   try{ r=conGabaritTrace(g,conContexte(),
                          conGabaritCotes(g,conContexte(),CON.gabaritP)); }
-  catch(e){ return false; }
-  if(!r||r.elements.length!==CON.elements.length)return false;
-  return JSON.stringify(r.elements)===JSON.stringify(CON.elements);
+  catch(e){ return null; }
+  if(!r)return null;
+  const n=r.elements.length;
+  if(CON.elements.length<n||
+     JSON.stringify(r.elements)!==JSON.stringify(CON.elements.slice(0,n)))
+    return null;
+  return CON.elements.slice(n);
 }
 
 /* Poser le motif `id` avec les cotes `p` (celles du calcul si `p` manque).

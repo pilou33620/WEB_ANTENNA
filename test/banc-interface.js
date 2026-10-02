@@ -1020,14 +1020,21 @@ verifie("les cotes du motif sont proposees au balayage",
 verifie("et portent la cote posee, pas celle du calcul",
         srcs7.find(s=>s.id==="m.g").valeur===mP.g);
 
-/* LE GARDE-FOU. Un dessin qui n'est plus le motif ne propose plus ses cotes :
-   reposer effacerait ce qu'on y a ajoute, sur tous les points a la fois. */
-CON.elements.push({type:"rect",cu:conCuivres()[0].e.uid,net:"",
-                   x1:0,y1:0,x2:1,y2:1});
-verifie("un dessin retouche ne propose plus les cotes du motif",
-        !conGabaritConforme()&&
-        !balSources().some(s=>String(s.id).indexOf("m.")===0));
+/* LE GARDE-FOU. Un motif RETOUCHE ne propose plus ses cotes : le reposer
+   effacerait la retouche, sur tous les points a la fois. Une forme AJOUTEE
+   par-dessus, elle, ne l'empeche pas : elle est recollee a chaque point. */
+const AJOUT7={type:"rect",cu:conCuivres()[0].e.uid,net:"",x1:0,y1:0,x2:1,y2:1};
+CON.elements.push(JSON.parse(JSON.stringify(AJOUT7)));
+verifie("une forme ajoutee laisse les cotes du motif balayables",
+        !conGabaritConforme()&&conGabaritAjouts().length===1&&
+        balSources().some(s=>s.id==="m.L"));
 CON.elements.pop();
+const RETOUCHE7=JSON.stringify(CON.elements[0]);
+CON.elements[0]=Object.assign({},CON.elements[0],{retouche:1});
+verifie("un motif retouche ne propose plus ses cotes",
+        conGabaritAjouts()===null&&
+        !balSources().some(s=>String(s.id).indexOf("m.")===0));
+CON.elements[0]=JSON.parse(RETOUCHE7);
 verifie("et il les repropose des que le dessin redevient le motif",
         conGabaritConforme()&&balSources().some(s=>s.id==="m.L"));
 
@@ -1092,6 +1099,19 @@ verifie("l'excitation n'a pas change de port",
 antPortRetirer(1);
 verifie("le dessin est toujours celui de depart apres tout cela",
         JSON.stringify(antDocument())===D0);
+
+/* UNE FORME AJOUTEE SUIT CHAQUE POINT : le motif est repose, la forme
+   recollee a la suite, aux memes coordonnees ; et tout revient ensuite. */
+CON.elements.push(JSON.parse(JSON.stringify(AJOUT7)));
+const D1=JSON.stringify(antDocument());
+const dA=balDocumentPour([{src:sg7, v:mP.g+1}]);
+verifie("un point de balayage garde la forme ajoutee, a sa place",
+        dA.formes.length===d0.formes.length+1&&
+        JSON.stringify(dA.formes[dA.formes.length-1])===JSON.stringify(AJOUT7)&&
+        JSON.stringify(dA.formes.slice(0,-1))!==JSON.stringify(d0.formes));
+verifie("et le dessin revient en place, forme ajoutee comprise",
+        JSON.stringify(antDocument())===D1);
+CON.elements.pop();
 
 /* -- le croisement de deux cotes de motif -------------------------------- */
 ANT.balayage={actif:true, source:"m.g", min:mP.g-1, max:mP.g+1, pas:1,
@@ -1595,6 +1615,17 @@ verifie("avec les courbes, le meilleur point est celui qui s'adapte A la cible",
         IA_L.length===1&&IA_L[0].texte.indexOf("à 2.45 GHz est -22 dB en « 27.5 »")>=0&&
         IA_L[0].titre.indexOf("dans la plage")>=0,
         IA_L.map(a=>a.texte).join(" | "));
+/* LE CONTEXTE ENVOYE AU MODELE porte le balayage EN TABLEAU : une ligne par
+   point, et la colonne du S11 a la cible. */
+const IA_MDL=ANT.modele; ANT.modele=null;   // le faux modele d'un essai plus haut
+const IA_CTX=window.iaContexte().split(String.fromCharCode(10));
+ANT.modele=IA_MDL;
+const IA_T=IA_CTX.indexOf(IA_CTX.find(l=>l.indexOf("=== BALAYAGE TERMINE : 3 POINTS")===0));
+verifie("le contexte porte le balayage en tableau, S11 a la cible compris",
+        IA_T>=0&&IA_CTX[IA_T+1].split(";").length===7&&
+        IA_CTX[IA_T+1].indexOf("S11 a 2.45 GHz")>=0&&
+        IA_CTX[IA_T+3].split(";")[0]==="27.5"&&IA_CTX[IA_T+3].split(";")[3]==="-22",
+        IA_CTX.slice(IA_T,IA_T+5).join(" / "));
 
 /* LE CROISEMENT L × y0 DU 02/10 (`croisement-L-y0.json`), sans ses courbes :
    le S11 minimal designe 28,2 × 7 (-33,9 dB a 2,40 GHz), et la lecture doit

@@ -113,12 +113,13 @@ function balSources(){
      c'est SA cote qu'on corrige.
 
      Chaque point repose donc le motif, exactement comme le bouton du panneau
-     — d'où le garde-fou de `conGabaritConforme` : si le dessin n'est plus la
-     copie exacte du motif, ces cotes ne sont pas proposées. Reposer
-     effacerait ce qu'on y aurait ajouté à la main, sur tous les points à la
-     fois, et rien dans la famille de courbes ne le dirait. */
+     — d'où le garde-fou de `conGabaritAjouts` : si le motif lui-même a été
+     retouché, ces cotes ne sont pas proposées, car le reposer effacerait la
+     retouche sur tous les points à la fois. Des formes AJOUTÉES par-dessus,
+     elles, ne l'empêchent pas : elles sont recollées telles quelles, aux
+     mêmes coordonnées, sur chaque point. */
   if(typeof CON!=="undefined"&&CON.actif&&
-     typeof conGabaritConforme==="function"&&conGabaritConforme()){
+     typeof conGabaritAjouts==="function"&&conGabaritAjouts()){
     const g=conGabarit(CON.gabarit);
     g.champs.forEach(function(ch){
       const v=CON.gabaritP[ch.id];
@@ -243,6 +244,7 @@ function balDocumentPour(poses){
      `conGabaritConforme` qui le garantit —, et les poser avant serait les
      poser sur un dessin qu'on s'apprête à remplacer. */
   const elAvant=motifs.length?CON.elements:null;
+  const ajouts=motifs.length?(conGabaritAjouts()||[]):[];
   /* LE TABLEAU DES PORTS EST REMIS TEL QUEL, objets compris, et non remplacé
      par une copie. `conPoser` le tronque à un seul port ; rendre à la place un
      tableau neuf laisserait tout ce qui tient une référence sur un port —
@@ -262,7 +264,14 @@ function balDocumentPour(poses){
     for(const m of motifs)q[m.src.motif]=m.v;
     const r=conGabaritTrace(g,c,conGabaritCotes(g,c,q));
     if(r){
-      CON.elements=r.elements;
+      /* Les formes ajoutées par-dessus le motif sont recollées à la suite, et
+         une cote de forme qui en désigne une suit son nouveau rang : le
+         motif a pu changer de nombre d'éléments (les replis d'un méandre). */
+      const decale=r.elements.length-(elAvant.length-ajouts.length);
+      for(const q of formes)
+        if(q.src.forme>=elAvant.length-ajouts.length)
+          q.src=Object.assign({},q.src,{forme:q.src.forme+decale});
+      CON.elements=r.elements.concat(JSON.parse(JSON.stringify(ajouts)));
       /* LA CARTE SUIT LE MOTIF, et c'est le contour du document : un patch
          rallongé sur une carte restée courte dépasserait du substrat, et le
          modèle serait faux sans que la géométrie du cuivre ait tort. Même
