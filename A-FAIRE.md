@@ -159,9 +159,9 @@ Même document, 420 000 cellules par point, 46 minutes. Données dans
 * **Le meilleur S₁₁ du tableau n'est pas la bonne antenne.** Le −33,9 dB de
   `L` = 28,2 résonne à 2,40 GHz. La relecture d'un balayage par l'assistant
   (`lireBalayage`, js/30-ia.js) classe les points par le seul S₁₁ minimal :
-  sur un balayage de `L`, elle désignerait ce point-là. *Le travail* : qu'elle
-  pèse aussi l'écart à la fréquence visée — le S₁₁ **à** `fcible`, et non son
-  minimum, quand une cible est posée.
+  sur un balayage de `L`, elle désignerait ce point-là. **Corrigé le même
+  jour** : avec les courbes, elle juge le S₁₁ **à** `fcible` ; sans elles, elle
+  garde le S₁₁ minimal et dit de combien le point désigné résonne à côté.
 
 **Une dixième simulation confirme le meilleur point, hors balayage** — gabarit
 posé avec `g` = 1,49 et `y₀` = 8,51, maillage refait pour lui seul, ligne

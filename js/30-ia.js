@@ -1303,9 +1303,14 @@
      l'étape « Le calcul », devis en main.
 
      Les points sont lus dans `lignes`, le tableau que le serveur assemble
-     (`_assembler`, openems_run.py) ; à défaut, dans `points[].resultat`. Le
-     critère est le S₁₁ minimal, celui du tableau : la résonance d'un point
-     s'en déduit, et c'est l'adaptation qu'un balayage de cote vient chercher. */
+     (`_assembler`, openems_run.py) ; à défaut, dans `points[].resultat`.
+
+     LE CRITÈRE EST LE S₁₁ À LA FRÉQUENCE VISÉE, quand une cible est posée et
+     que les courbes sont là. Le S₁₁ minimal, celui du tableau, désigne le
+     creux le plus profond OÙ QU'IL TOMBE : sur le croisement L × y₀, c'était
+     −33,9 dB… à 2,40 GHz pour 2,45 visés (A-FAIRE.md § 1). Sans courbes ou
+     sans cible, on retombe sur le S₁₁ minimal, et l'on dit de combien le
+     point désigné résonne à côté de la cible. */
   function lireBalayage(bal, dire){
     const pts = (Array.isArray(bal.lignes) && bal.lignes.length) ? bal.lignes
       : (bal.points || []).map(p => Object.assign(
@@ -1314,22 +1319,51 @@
     const bons = pts.filter(p => isFinite(p.s11_min_db) && isFinite(p.valeur) &&
                                  (!bal.croise || isFinite(p.valeur2)));
     if(bons.length < 2) return;
-    const best = bons.reduce((a, p) => (p.s11_min_db < a.s11_min_db ? p : a));
     const seuil = (typeof ANT_SEUIL_RESONANCE_DB !== "undefined")
                     ? ANT_SEUIL_RESONANCE_DB : -3;
-    const tete = "Sur " + bons.length + " points" +
-                 (bons.length < pts.length
-                    ? " (" + (pts.length - bons.length) + " sans résultat)" : "") +
-                 ", le meilleur S11 est " + nb(best.s11_min_db, 2) + " dB en « " +
-                 best.etiquette + " »";
-    if(best.s11_min_db > seuil){
+    const plusCreux = bons.reduce((a, p) => (p.s11_min_db < a.s11_min_db ? p : a));
+    const avant = "Sur " + bons.length + " points" +
+                  (bons.length < pts.length
+                     ? " (" + (pts.length - bons.length) + " sans résultat)" : "");
+    if(plusCreux.s11_min_db > seuil){
       dire("attention", "Aucun point du balayage ne résonne",
-           tete + " : au-dessus de " + nb(seuil, 0) + " dB, aucun creux n'est "+
+           avant + ", le meilleur S11 est " + nb(plusCreux.s11_min_db, 2) +
+           " dB en « " + plusCreux.etiquette + " » : au-dessus de " +
+           nb(seuil, 0) + " dB, aucun creux n'est "+
            "une résonance. La plage ne contient pas l'antenne qu'on cherche — "+
            "ou le port ne la voit pas. Regardez l'impédance d'un point avant "+
            "de prolonger quoi que ce soit.");
       return;
     }
+
+    /* Le S11 de chaque point À la cible, lu sur sa courbe. */
+    const fc = (ANT.bande && ANT.bande.fcible > 0) ? ANT.bande.fcible : 0;
+    const courbes = {};
+    (bal.points || []).forEach(function(p){ courbes[p.etiquette] = p.resultat || p; });
+    const aLaCible = function(p){
+      const r = courbes[p.etiquette] || p, F = r.f, S = r.s11_db;
+      if(!fc || !Array.isArray(F) || !Array.isArray(S) || F.length < 2 ||
+         fc < F[0] || fc > F[F.length - 1]) return NaN;
+      let k = 1;
+      while(k < F.length - 1 && F[k] < fc) k++;
+      return S[k - 1] + (S[k] - S[k - 1]) * (fc - F[k - 1]) / (F[k] - F[k - 1]);
+    };
+    const s11c = new Map(bons.map(p => [p, aLaCible(p)]));
+    const parCible = fc > 0 && bons.every(p => isFinite(s11c.get(p)));
+    const best = parCible
+      ? bons.reduce((a, p) => (s11c.get(p) < s11c.get(a) ? p : a)) : plusCreux;
+    const tete = avant + ", le meilleur S11 " +
+                 (parCible ? "à " + fHz(fc) + " est " + nb(s11c.get(best), 2)
+                           : "est " + nb(best.s11_min_db, 2)) +
+                 " dB en « " + best.etiquette + " »";
+    const ecart = (!parCible && fc > 0 && isFinite(best.f0))
+                    ? 100 * (best.f0 - fc) / fc : 0;
+    const horsCible = Math.abs(ecart) > 1
+      ? "Ce point résonne à " + nb(Math.abs(ecart), 1) + " % " +
+        (ecart < 0 ? "sous" : "au-dessus de") + " la cible (" + fHz(fc) +
+        ") : son creux est profond, mais ailleurs. Sans les courbes, le S11 à "+
+        "la cible ne se lit pas — rouvrez les résultats du balayage. "
+      : "";
 
     const axes = [{nom:bal.nom, u:bal.unite, cle:"valeur"}];
     if(bal.croise) axes.push({nom:bal.nom2, u:bal.unite2, cle:"valeur2"});
@@ -1351,7 +1385,7 @@
     const mesure = tete + " — résonance " + fHz(best.f0) +
       (isFinite(best.z0_re) && isFinite(best.z0_im)
          ? ", Z = " + nb(best.z0_re, 1) + (best.z0_im >= 0 ? " + " : " − ") +
-           nb(Math.abs(best.z0_im), 1) + "j Ω" : "") + ". ";
+           nb(Math.abs(best.z0_im), 1) + "j Ω" : "") + ". " + horsCible;
     if(bords.length)
       dire("attention", "L'optimum du balayage est au bord de la plage",
            mesure + "Il est " + bords.join(" ; et ") + "." +

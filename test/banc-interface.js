@@ -1572,6 +1572,44 @@ verifie("et il est a la borne basse des DEUX cotes : c'est un coin",
 verifie("la lecture ne propose aucune carte et n'ecrit rien dans les reglages",
         IA_L.every(a=>!a.prop)&&
         JSON.stringify([ANT.bande,ANT.balayage,ANT.maillage,ANT.boite])===IA_AVANT);
+
+/* LE CREUX LE PLUS PROFOND N'EST PAS LA BONNE ANTENNE s'il tombe a cote de
+   la cible : avec les courbes, on juge le S11 A la frequence visee. */
+const IA_CIBLE_AVANT=ANT.bande.fcible;
+ANT.bande.fcible=2.45e9;
+const iaCourbe=function(f0,smin){
+  const f=[], s=[];
+  for(let k=0;k<=30;k++){
+    const x=2.3e9+1e7*k;
+    f.push(x); s.push(smin/(1+Math.pow((x-f0)/2e7,2)));
+  }
+  return {f:f, s11_db:s, f0:f0, s11_min_db:smin, z0_re:50, z0_im:0};
+};
+ANT.resultat={balayage:true, croise:false, nom:"Patch rectangulaire — longueur",
+              unite:"mm", nom2:"", unite2:"",
+              points:[[27,2.50e9,-18],[27.5,2.45e9,-22],[28,2.40e9,-34]].map(q=>
+                ({etiquette:String(q[0]), valeur:q[0], valeur2:null,
+                  resultat:iaCourbe(q[1],q[2])}))};
+IA_L=iaLecture();
+verifie("avec les courbes, le meilleur point est celui qui s'adapte A la cible",
+        IA_L.length===1&&IA_L[0].texte.indexOf("à 2.45 GHz est -22 dB en « 27.5 »")>=0&&
+        IA_L[0].titre.indexOf("dans la plage")>=0,
+        IA_L.map(a=>a.texte).join(" | "));
+
+/* LE CROISEMENT L × y0 DU 02/10 (`croisement-L-y0.json`), sans ses courbes :
+   le S11 minimal designe 28,2 × 7 (-33,9 dB a 2,40 GHz), et la lecture doit
+   dire que ce creux tombe 2 % sous la cible. */
+const IA_LY=JSON.parse(fs.readFileSync(path.join(__dirname,"..","croisement-L-y0.json"),"utf8"));
+ANT.resultat=Object.assign({balayage:true, lignes:IA_LY.lignes,
+                            points:IA_LY.points.map(p=>({etiquette:p.etiquette,
+                              valeur:p.valeur, valeur2:p.valeur2, resultat:p}))},
+                           IA_LY.balayage);
+IA_L=iaLecture();
+verifie("sans courbes, le creux le plus profond est dit hors de la cible",
+        IA_L.length===1&&IA_L[0].texte.indexOf("28,2 × 7")>=0&&
+        IA_L[0].texte.indexOf("sous la cible")>=0,
+        IA_L.map(a=>a.texte).join(" | "));
+ANT.bande.fcible=IA_CIBLE_AVANT;
 ANT.resultat=null;
 
 /* -- le second fournisseur : la requete, sans reseau ---------------------- */

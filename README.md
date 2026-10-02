@@ -1581,7 +1581,7 @@ des réglages :
 | le maillage | moins de trois cellules en travers de la ligne d'alimentation : le cas exact qui fait disparaître la résonance du patch de cet outil |
 | le motif patch | un encastrement `y₀` laissé au calcul du gabarit, dont **on sait qu'il est faux** (voir plus bas) |
 | le dernier résultat | une résonance au bord de la bande ; un écart à la cible, avec le sens de la correction ; une désadaptation, en séparant ce qui vient de la réactance de ce qui vient de la partie réelle |
-| un balayage terminé | le meilleur point, chiffres à l'appui, et s'il est **au bord** de la plage, cote par cote — coin compris sur un croisement : un optimum de bord n'est que le meilleur des points essayés. La règle lit et n'écrit rien : prolonger une plage, ce sont des simulations de plus, et cela se décide au devis |
+| un balayage terminé | le meilleur point — jugé par son S₁₁ **à la fréquence visée**, pas par son creux le plus profond où qu'il tombe —, chiffres à l'appui, et s'il est **au bord** de la plage, cote par cote — coin compris sur un croisement : un optimum de bord n'est que le meilleur des points essayés. La règle lit et n'écrit rien : prolonger une plage, ce sont des simulations de plus, et cela se décide au devis |
 
 L'audit sort en markdown, avec ses corrections en blocs `action` — c'est-à-dire
 **par le même rendu que la réponse du modèle**. Une correction locale et une
