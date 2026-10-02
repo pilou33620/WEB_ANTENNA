@@ -2761,9 +2761,10 @@ grammaire(),
 
     const appelerApi = async (body) => {
       return await fetch(IA_URL + encodeURIComponent(endpointModel) +
-                         ":generateContent?key=" + encodeURIComponent(_cleApi), {
+                         ":generateContent", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // la clé en en-tête, pas dans l'URL : une URL finit dans les journaux et les proxys
+        headers: { "Content-Type": "application/json", "x-goog-api-key": _cleApi },
         body: JSON.stringify(body)
       });
     };

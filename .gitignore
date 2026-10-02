@@ -96,10 +96,10 @@ rapport*.md
 # =============================================================================
 # Fichiers de fabrication et cartes locales (IPC-2581 lourds)
 # =============================================================================
-# Seuls les fichiers d'essai du dépôt (antenna4c.xml, test/*.xml) sont suivis.
+# Seuls les fichiers d'essai fabriqués (test/*.xml) sont suivis. antenna4c.xml,
+# export réel, reste local : le dépôt est public.
 # Les exports industriels lourds testés localement ne doivent pas être versionnés.
 *.xml
-!antenna4c.xml
 !test/*.xml
 !test/**/*.xml
 *.cvg

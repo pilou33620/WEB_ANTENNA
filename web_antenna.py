@@ -1238,17 +1238,31 @@ def verifier_et_appliquer_maj(dossier_racine=None):
         )
         stashed = (stash_res.returncode == 0)
 
+    # --ff-only : on n'applique que la suite exacte de ce qu'on a. Un historique
+    # distant reecrit (force-push) ou divergent est refuse, jamais fusionne en
+    # silence dans le code qu'on va executer.
     pull = subprocess.run(
-        ["git", "pull"],
+        ["git", "pull", "--ff-only"],
         cwd=racine, capture_output=True, text=True, timeout=30, env=env_git
     )
 
     if stashed:
         print("  Restauration des modifications locales...")
-        subprocess.run(
+        pop = subprocess.run(
             ["git", "stash", "pop"],
             cwd=racine, capture_output=True, text=True, timeout=10, env=env_git
         )
+        # Un « pop » en conflit laisse les modifications dans la reserve (et
+        # des marqueurs de conflit dans les fichiers) : le taire, c'etait
+        # laisser croire qu'elles etaient perdues.
+        if pop.returncode != 0:
+            err = pop.stderr.strip() or pop.stdout.strip()
+            print("[!] Vos modifications locales n'ont pas pu etre reappliquees"
+                  " automatiquement :")
+            print("    %s" % err)
+            print("    Elles sont conservees dans la reserve Git : voir"
+                  " « git stash list », puis « git stash pop » une fois le"
+                  " conflit resolu.")
 
     if pull.returncode != 0:
         err = pull.stderr.strip() or pull.stdout.strip()
