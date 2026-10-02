@@ -137,7 +137,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── openems_antenne.py  la façade : les seules fonctions que web_antenna.py connaît
 │   ├── projet.py           les projets sur le disque : où on les range, et comment on les rouvre
 │   └── test/
-│       ├── banc-openems.py   le banc principal : 852 vérifications sans solveur, 23 sections
+│       ├── banc-openems.py   le banc principal : sans solveur, 23 sections
 │       ├── banc-champs.py    le format .vtr, l'inventaire, le découpage
 │       └── banc-serveur.py   ce que le serveur sert et refuse (.git, chemins Windows, Host)
 ├── test/
@@ -1892,7 +1892,7 @@ tous les outils liraient sans broncher et dont la moitié serait inventée.
 python python/test/banc-openems.py
 ```
 
-852 vérifications sans solveur réparties en 23 sections : cotes en z, sens des
+Des vérifications sans solveur réparties en 23 sections : cotes en z, sens des
 polygones, maillage, refus attendus, conversion pouces/millimètres, script
 généré, les deux modèles de pertes, les quatre primitives, les pièces
 importées (recollage, corps ouvert refusé, lignes sur les parois, rotation, et
@@ -1944,8 +1944,8 @@ du code de ce dépôt au sens ordinaire :
    peut pas s'écarter de la liste que la page applique, et que ce qui revient du
    réseau est échappé avant d'être affiché.
 
-Le **serveur** a son propre banc (`python python/test/banc-serveur.py`, 23
-vérifications, quelques secondes) : il ne sert que `index.html`, `css/` et `js/` —
+Le **serveur** a son propre banc (`python python/test/banc-serveur.py`,
+quelques secondes) : il ne sert que `index.html`, `css/` et `js/` —
 ni `.git/`, ni `env/`, ni la clé du mode IA, ni un chemin Windows comme
 `/C:%5cWindows%5cwin.ini` — et refuse un en-tête `Host` qui n'est ni une IP, ni
 `localhost`, ni le nom du poste (DNS rebinding). Les trois routes qui désignent un
@@ -1953,7 +1953,7 @@ chemin du disque (racine des projets, import d'un calcul, ouverture de
 l'explorateur) ne répondent qu'à ce poste, comme la clé du mode IA.
 
 Un bloc à part éprouve le **lecteur de champs** (`python/test/banc-champs.py`,
-appelé lui aussi par le banc principal, 26 vérifications). Il n'a besoin ni
+appelé lui aussi par le banc principal). Il n'a besoin ni
 d'openEMS ni d'un dossier de calcul : il **écrit ses propres `.vtr`**, compressés
 et non compressés, avec des grilles de tailles volontairement quelconques — c'est
 quand la longueur de l'en-tête n'est pas un multiple de trois octets que le
@@ -1971,8 +1971,8 @@ python python/test/banc-champs.py <dossier-de-calcul>
 
 Les deux derniers blocs sont en JavaScript et tournent sous **node**, que le
 banc appelle lui-même quand il est installé : le découpage des découpes
-(`test/banc-polygones.js`, 13 vérifications, cas dégénérés compris) et la logique
-de la page (`test/banc-interface.js`, **397 vérifications**) :
+(`test/banc-polygones.js`, cas dégénérés compris) et la logique
+de la page (`test/banc-interface.js`) :
 - la classification des nets (GND, PWR, Signal), l'auto-détection, les filtres et les préréglages ;
 - la mise en cache vectorielle `Path2D` du cuivre, de la grille Yee FDTD et du quadrillage ;
 - la fidélité stricte des champs (`antChampsFideles`) neutralisant les valeurs fantômes du navigateur ;

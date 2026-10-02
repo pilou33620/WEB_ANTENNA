@@ -2,9 +2,9 @@
 
 État relevé le **15/09/2026**, après la séance qui a traité les quatre
 chantiers ouverts de la version précédente et qui a mené la mesure que le
-premier réclamait. Le banc passe :
-`python python/test/banc-openems.py` → **466 vérifications, toutes passées**,
-bancs JavaScript compris. Aucun `TODO` ni `FIXME` dans le code.
+premier réclamait. Le banc passe (relevé du 02/10/2026) :
+`python python/test/banc-openems.py` → **969 vérifications, toutes passées**,
+bancs JavaScript compris ; `--simuler` (deux vraies simulations FDTD) aussi. Aucun `TODO` ni `FIXME` dans le code.
 
 Ce qui a été fait — et qui ne se redécouvre donc plus ici : le **balayage
 d'une cote de motif** (c'est lui qui a rendu la mesure possible), le
