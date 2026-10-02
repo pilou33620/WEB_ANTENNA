@@ -12,8 +12,12 @@
 #                et liste dans design.ignored_layers.
 #              - Un calque SANS layerFunction reste lu, comme avant : mieux
 #                vaut un calque de trop qu'un cuivre perdu.
-#              - IPC2581Parser(..., tout_garder=True) retrouve l'ancien
-#                comportement.
+#              - Le tri est demande par l'appelant : IPC2581Parser(...,
+#                tout_garder=False). Par defaut tout est lu, comme avant --
+#                la visionneuse de WEB_CAO affiche serigraphie et masque ;
+#                WEB_ANTENNA, qui simule, demande le tri.
+#              - Ce fichier est le meme dans WEB_CAO et WEB_ANTENNA (la CI de
+#                WEB_SUITE le verifie) : une correction se fait des deux cotes.
 #
 # Liste des fonctions ajoutees/modifiees :
 # - [+] _role_calque
@@ -188,9 +192,10 @@ _RE_FONCTION_CUIVRE = re.compile(r"COND|SIGNAL|PLANE|POWER|GROUND|MIXED")
 
 
 class IPC2581Parser:
-    def __init__(self, xml_file: str, tout_garder: bool = False):
+    def __init__(self, xml_file: str, tout_garder: bool = True):
         self.xml_file = xml_file
-        # False : seuls cuivre, percages et contour sont lus (voir _role_calque)
+        # False : seuls cuivre, percages et contour sont lus (voir _role_calque) ;
+        # True (defaut) : tout est lu, la visionneuse veut aussi la serigraphie
         self.tout_garder = tout_garder
         self.tree = None
         self.root = None

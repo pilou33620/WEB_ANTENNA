@@ -337,7 +337,9 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         data = self._corps(MAX_IPC)
         nom = os.path.basename((self._params().get("nom") or [""])[0])[:200]
         try:
-            modele = ipc2581_json.ipc2581_en_dict(data, nom)
+            # tout_garder=False : seuls cuivre, percages et contour entrent
+            # dans une simulation (la serigraphie y serait prise pour du metal)
+            modele = ipc2581_json.ipc2581_en_dict(data, nom, tout_garder=False)
         except ipc2581_json.IPC2581ParseError as exc:
             raise Refus(422, str(exc))
         except MemoryError:

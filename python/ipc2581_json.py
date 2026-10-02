@@ -197,6 +197,33 @@ def _pad_en_dict(pad, nets):
     return out
 
 
+def _natures_nets(composants, noms_nets):
+    """Nature de chaque net (Masse, Alimentation, Horloge, Rapide, RF,
+    Analogique) par le meme moteur que la schematique : noms de nets, motifs
+    (quartz, regulateurs...) et composants relies. Un echec n'empeche pas
+    l'import : la visionneuse retombe alors sur « Lent ».
+    ponytail: les detecteurs de motifs balaient composants x nets ; a surveiller
+    sur une tres grosse carte."""
+    try:
+        import pattern_recognition
+    except ImportError:
+        return {}
+    comps = {}
+    nets = {nom: [] for nom in noms_nets if nom}
+    for c in composants:
+        comps[c["ref"]] = {"val": c["val"], "type": c["type"]}
+        for p in c.get("pads", []) + c.get("pins", []):
+            n = p.get("n")
+            if n is not None and 0 <= n < len(noms_nets) and noms_nets[n]:
+                nets[noms_nets[n]].append({"ref": c["ref"], "pin": p.get("pin") or p.get("num") or ""})
+    try:
+        res = pattern_recognition.analyser_motifs_schema({"components": comps, "nets": nets})
+    except Exception:
+        return {}
+    return {"classes": res["classes_suggerees"], "raisons": res["raisons_classes"],
+            "paires": res["paires_diff"], "bruyants": sorted(res["nets_bruyants"])}
+
+
 def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
     """IPCDesign -> dictionnaire JSON pour la visionneuse."""
     couches = _Index()
@@ -328,6 +355,13 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
 
     padstacks = {}
     for nom, pdef in design.padstacks.items():
+        # Un padstack « inline » nait d'un <Pad> lu dans un <LayerFeature> : sa
+        # couche est une vraie couche de features, meme si elle ne porte que des
+        # pastilles (pate, masque). Absente de la table, la visionneuse prenait
+        # la pastille pour un « ALL » et la posait sur tous les cuivres.
+        if nom.startswith("inline_pad_"):
+            for p in pdef.pads:
+                couches.rang(p.layer_ref)
         padstacks[nom] = {
             "trou": _r(pdef.hole_diameter),
             "pad": _r(pdef.pad_diameter),
@@ -385,6 +419,7 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
         "couches": couches.noms,
         "nets": nets.noms,
         "classes_nets": classes_nets,
+        "natures_nets": _natures_nets(composants, nets.noms),
         "pistes": pistes,
         "arcs": arcs,
         "plans": plans,
@@ -416,12 +451,13 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
     }
 
 
-def charger_octets(data: bytes, nom: str = "") -> IPCDesign:
+def charger_octets(data: bytes, nom: str = "", tout_garder: bool = True) -> IPCDesign:
     """Octets d'un fichier (XML ou ZIP) -> IPCDesign.
 
     Le parseur accepte un objet fichier autant qu'un chemin : les octets
     arrivent du navigateur, rien n'oblige a les poser sur le disque d'abord.
-    Leve IPC2581ParseError, comme le parseur.
+    Leve IPC2581ParseError, comme le parseur. tout_garder=False ne garde que
+    les calques utiles a une simulation (voir IPC2581Parser._role_calque).
     """
     if not data:
         raise IPC2581ParseError("Fichier vide.")
@@ -464,12 +500,12 @@ def charger_octets(data: bytes, nom: str = "") -> IPCDesign:
                 octets.append(morceau)
         data = b"".join(octets)
 
-    return IPC2581Parser(_Flux(data, interne or nom or "(flux)")).parse()
+    return IPC2581Parser(_Flux(data, interne or nom or "(flux)"), tout_garder).parse()
 
 
-def ipc2581_en_dict(data: bytes, nom: str = "") -> dict:
+def ipc2581_en_dict(data: bytes, nom: str = "", tout_garder: bool = True) -> dict:
     """Octets d'un fichier IPC-2581 (ou ZIP) -> dictionnaire JSON."""
-    return design_en_dict(charger_octets(data, nom), nom)
+    return design_en_dict(charger_octets(data, nom, tout_garder), nom)
 
 
 if __name__ == "__main__":
