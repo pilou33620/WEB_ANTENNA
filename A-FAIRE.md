@@ -81,7 +81,8 @@ changeait rien.
 
 1. ~~**Prolonger le croisement vers le bas**~~ — **fait le 02/10/2026**, voir
    plus bas : l'optimum est maintenant dans la plage.
-2. **Puis croiser `L` × `y₀`.** La résonance reste 4,5 % sous la cible dans
+2. ~~**Puis croiser `L` × `y₀`.**~~ — **fait le 02/10/2026**, voir plus
+   bas : le patch est à 2,450 GHz et à −40 dB. La résonance reste 4,5 % sous la cible dans
    tout le tableau : `L` doit raccourcir, et cela déplacera l'adaptation.
    Les deux cotes ne se lisent pas l'une sans l'autre — c'est le cas d'école
    du croisement.
@@ -123,6 +124,44 @@ Ce qui en sort :
   FR-4 (tan δ 0,02), plus l'adaptation.
 * **La résonance reste à 2,33 GHz, 4,9 % sous la cible** : c'est l'étape 2,
   `L` × `y₀`, autour de `g` = 1,5 mm et `y₀` = 7 mm.
+
+**L'étape 2, `L` × `y₀` à `g` = 1,5 mm (02/10/2026), a fini le réglage.**
+Même document, 420 000 cellules par point, 46 minutes. Données dans
+`croisement-L-y0.json`.
+
+| S₁₁ min · résonance · Z au port | y₀ = 6 | y₀ = 7 | y₀ = 8 |
+|---|---|---|---|
+| **L = 27,2** | −26,37 dB · 2,4757 GHz · 45,7 − 1,7 j | −23,29 dB · 2,4739 GHz · 57,3 − 0,4 j | −12,80 dB · 2,4684 GHz · 78,5 − 7,6 j |
+| **L = 27,7** | −22,32 dB · 2,4408 GHz · 43,2 − 2,2 j | −26,68 dB · 2,4390 GHz · 54,8 − 0,7 j | −14,39 dB · 2,4353 GHz · 73,0 − 4,5 j |
+| **L = 28,2** | −21,38 dB · 2,4004 GHz · 42,3 − 1,9 j | −33,94 dB · 2,3986 GHz · 52,0 + 0,3 j | −16,22 dB · 2,3949 GHz · 68,2 − 1,5 j |
+
+* **`L` fait la fréquence, et presque seul** : −75 MHz par millimètre, à
+  moins de 10 MHz près quel que soit `y₀`. **`y₀` fait l'adaptation** : la
+  partie réelle traverse 50 Ω entre 6 et 7 mm sur chaque ligne. Les deux
+  cotes sont presque indépendantes autour de l'optimum : ce que le
+  croisement devait vérifier, et qui permet d'interpoler.
+* **Le point interpolé, simulé seul** — `L` = 27,55 mm, `y₀` = 6,6 mm,
+  `g` = 1,5 mm :
+
+| | |
+|---|---|
+| résonance | **2,4500 GHz** (cible 2,45) |
+| S₁₁ minimal | **−39,9 dB** |
+| Z au port · au pied de l'antenne | 50,9 − 0,5 j Ω · 50,9 + 0,4 j Ω |
+| bande à −10 dB | 2,4206 à 2,4794 GHz, **58,8 MHz** (2,4 %) |
+| directivité · gain réalisé · rendement | 5,90 dBi · **2,26 dBi** · 43 % |
+
+* **Ce que le gabarit propose, et ce qu'il faut** (FR-4 1,6 mm, 2,45 GHz) :
+  `L` 29,14 → **27,55 mm** (−5,5 %), `y₀` 11,51 → **6,6 mm** (−43 %), `g`
+  2,49 → **1,5 mm**. La bande à −10 dB ne couvre pas toute la bande ISM
+  (2,400 à 2,4835 GHz) : c'est la limite d'un patch sur 1,6 mm de FR-4, pas
+  d'un réglage — l'élargir demande un substrat plus épais ou moins tenu.
+* **Le meilleur S₁₁ du tableau n'est pas la bonne antenne.** Le −33,9 dB de
+  `L` = 28,2 résonne à 2,40 GHz. La relecture d'un balayage par l'assistant
+  (`lireBalayage`, js/30-ia.js) classe les points par le seul S₁₁ minimal :
+  sur un balayage de `L`, elle désignerait ce point-là. *Le travail* : qu'elle
+  pèse aussi l'écart à la fréquence visée — le S₁₁ **à** `fcible`, et non son
+  minimum, quand une cible est posée.
 
 **Une dixième simulation confirme le meilleur point, hors balayage** — gabarit
 posé avec `g` = 1,49 et `y₀` = 8,51, maillage refait pour lui seul, ligne
