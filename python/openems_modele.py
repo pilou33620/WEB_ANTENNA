@@ -4098,6 +4098,27 @@ def _proj_point_seg(px, py, a, b):
     return (a[0] + t * dx, a[1] + t * dy)
 
 
+def _couper_seg(seg, boite):
+    """Le morceau du segment qui tombe dans la boite (Liang-Barsky), ou None."""
+    (ax, ay), (bx, by) = seg
+    x0, y0, x1, y1 = boite
+    dx, dy = bx - ax, by - ay
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, ax - x0), (dx, x1 - ax), (-dy, ay - y0), (dy, y1 - ay)):
+        if p == 0:
+            if q < 0:
+                return None
+        else:
+            t = q / p
+            if p < 0:
+                t0 = max(t0, t)
+            else:
+                t1 = min(t1, t)
+            if t0 > t1:
+                return None
+    return ((ax + t0 * dx, ay + t0 * dy), (ax + t1 * dx, ay + t1 * dy))
+
+
 def _proches_seg_seg(a, b, c, d):
     """Distance entre deux segments, et les deux points qui la realisent --
     le premier sur [a, b], le second sur [c, d]. Nulle s'ils se coupent."""
@@ -4242,14 +4263,27 @@ def _ponts_couche(couche, ant, mas, mx, my, portee, pas, budget, grappes=True):
         if grappes and any(abs(x - s["x"]) <= 2 * portee and abs(y - s["y"]) <= 2 * portee
                and s["couche"] == couche for s in out):
             continue
-        # L'ECART DESSINE, au voisinage du noeud : la plus courte distance entre
-        # un bord d'antenne et un bord de masse. Nulle, c'est un contact voulu.
-        # Les deux points qui le realisent disent aussi OU le couper : c'est
-        # entre eux que `_ouvrir_ecarts` pose ses lignes.
+        cx = max(mx[i] - mx[i - 1] if i > 0 else 0.0,
+                 mx[i + 1] - mx[i] if i + 1 < len(mx) else 0.0)
+        cy = max(my[j] - my[j - 1] if j > 0 else 0.0,
+                 my[j + 1] - my[j] if j + 1 < len(my) else 0.0)
+        # L'ECART DESSINE, AU NOEUD : la plus courte distance entre un bord
+        # d'antenne et un bord de masse. Nulle, c'est un contact voulu.
+        # A UNE MAILLE DU NOEUD, PAS DANS TOUT LE SEAU : les aretes du noeud
+        # n'atteignent pas plus loin. Mesure sur tout le voisinage, la patte de
+        # court-circuit de l'IFA de P01x274PCB-C.xml -- un contact dessine, a
+        # 4,7 mm -- donnait un ecart nul au pied de l'alimentation, soude a
+        # 0,21 mm de la masse : pris pour un contact voulu, il n'etait ni
+        # ouvert ni dit, et le port voyait un court-circuit.
+        r = max(cx, cy)
+        boite = (x - r, y - r, x + r, y + r)
+        bords_ant = [s for s in (_couper_seg(sa, boite)
+                                 for sa in a_ant.autour(x, y, r)) if s]
+        bords_mas = [s for s in (_couper_seg(sm, boite)
+                                 for sm in a_mas.autour(x, y, r)) if s]
         proche = min((_proches_seg_seg(sa[0], sa[1], sm[0], sm[1])
-                      for sa in a_ant.autour(x, y, portee)
-                      for sm in a_mas.autour(x, y, portee)),
-                     key=lambda r: r[0], default=None)
+                      for sa in bords_ant for sm in bords_mas),
+                     key=lambda d: d[0], default=None)
         if proche is None or proche[0] < PONT_CONTACT_MM:
             continue
         ecart = proche[0]
@@ -4267,10 +4301,6 @@ def _ponts_couche(couche, ant, mas, mx, my, portee, pas, budget, grappes=True):
                     + math.hypot(fa[0] - x, fa[1] - y)
                 if g is None or d < g:
                     pa, pm, g = fa, fm, d
-        cx = max(mx[i] - mx[i - 1] if i > 0 else 0.0,
-                 mx[i + 1] - mx[i] if i + 1 < len(mx) else 0.0)
-        cy = max(my[j] - my[j - 1] if j > 0 else 0.0,
-                 my[j + 1] - my[j] if j + 1 < len(my) else 0.0)
         site = {"couche": couche, "x": x, "y": y, "ecart": ecart,
                 "cx": cx, "cy": cy,
                 "pa": [pa[0], pa[1]], "pm": [pm[0], pm[1]]}
