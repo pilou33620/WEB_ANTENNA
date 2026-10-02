@@ -1557,15 +1557,15 @@
              "y0 vaut " + nb(y0, 2) + " mm, tel que le gabarit le propose. La "+
              "mesure faite sur cet outil dit que la formule surestime la "+
              "résistance de bord d'un facteur 3,5 : l'encastrement est trop "+
-             "profond d'un bon quart. Sur le cas mesuré, 11,5 mm rendaient "+
-             "-2,5 dB et 8,5 mm en rendent -13. Balayez-le plutôt que de le "+
+             "profond de 40 %. Sur le cas mesuré, 11,5 mm rendaient "+
+             "-2,5 dB et 7 mm en rendent -34. Balayez-le plutôt que de le "+
              "croire.",
              /* « m. » et non « f. » : ce sont les cotes DU MOTIF, celles que
                 24-balayage.js propose en reposant le gabarit à chaque point. */
              {type:"balayage",
-              titre:"Balayer l'encastrement autour de " + nb(y0 * 0.74, 2) + " mm",
-              source:"m.y0", min:+(y0 * 0.6).toFixed(2),
-              max:+(y0 * 1.05).toFixed(2), pas:+(y0 * 0.09).toFixed(2)});
+              titre:"Balayer l'encastrement autour de " + nb(y0 * 0.61, 2) + " mm",
+              source:"m.y0", min:+(y0 * 0.45).toFixed(2),
+              max:+(y0 * 0.8).toFixed(2), pas:+(y0 * 0.07).toFixed(2)});
     }
 
     /* -- 8. ce que le résultat dit du réglage ---------------------------- */
@@ -1831,8 +1831,8 @@
 "  premier dessin est un point de depart, pas une antenne finie ;",
 "- le gabarit patch calcule son encastrement y0 par le modele de cavite, et ce",
 "  modele SURESTIME la resistance de bord d'un facteur 3,5 : l'encastrement",
-"  propose est trop profond d'environ un quart. Mesure sur FR-4 1,6 mm a",
-"  2,45 GHz : y0 = 11,5 mm rendait -2,5 dB, y0 = 8,5 mm rend -13 dB ;",
+"  propose est trop profond d'environ 40 %. Mesure sur FR-4 1,6 mm a",
+"  2,45 GHz : y0 = 11,5 mm rendait -2,5 dB, y0 = 7 mm rend -34 dB (g 1,25 mm) ;",
 "- sur ce meme patch, resserrer les encoches g de 3,5 a 1,5 mm gagne 8 dB :",
 "  elles ajoutent une capacite que le modele de cavite ignore ;",
 "- lambda/20 dans le dielectrique NE SUFFIT PAS quand une ligne d'alimentation",

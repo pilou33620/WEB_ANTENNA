@@ -227,8 +227,8 @@ const CON_MOTIF_PATCH={
     {id:"y0", nom:"encastrement",
      aide:"la profondeur d'entrée de la ligne dans le patch : c'est le "+
           "réglage d'adaptation, et la cote la moins sûre du motif. Mesuré "+
-          "sur FR-4 1,6 mm à 2,45 GHz, il faut l'écourter d'un bon quart : "+
-          "le calcul proposait 11,5 mm pour −2,5 dB, 8,5 mm en rend −13. "+
+          "sur FR-4 1,6 mm à 2,45 GHz, il faut l'écourter de 40 % : le "+
+          "calcul proposait 11,5 mm pour −2,5 dB, 7 mm en rend −34. "+
           "Balayez-le"},
     {id:"wf", nom:"largeur de la ligne", piste:true, z50:true,
      aide:"synthétisée pour 50 Ω sur ce substrat"},

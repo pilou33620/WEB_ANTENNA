@@ -70,6 +70,7 @@ calculs/
 .antenne-openems.json
 croisement-*.json
 !croisement-g-y0.json
+!croisement-g-y0-bas.json
 
 # =============================================================================
 # Exports de simulation (Touchstone, vidéos, rapports)

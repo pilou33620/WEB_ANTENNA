@@ -79,8 +79,8 @@ changeait rien.
 
 *À faire*, dans cet ordre :
 
-1. **Prolonger le croisement vers le bas** : `y₀` de 5 à 9 mm, `g` de 0,5 à
-   2 mm. Neuf points de plus, et l'optimum sera dans la plage.
+1. ~~**Prolonger le croisement vers le bas**~~ — **fait le 02/10/2026**, voir
+   plus bas : l'optimum est maintenant dans la plage.
 2. **Puis croiser `L` × `y₀`.** La résonance reste 4,5 % sous la cible dans
    tout le tableau : `L` doit raccourcir, et cela déplacera l'adaptation.
    Les deux cotes ne se lisent pas l'une sans l'autre — c'est le cas d'école
@@ -92,6 +92,37 @@ changeait rien.
    c'est de le **dire** dans la fiche du motif — c'est fait.
 
 Le croisement complet est dans `croisement-g-y0.json`, à la racine.
+
+**Le prolongement vers le bas (02/10/2026) a trouvé l'optimum — et il est
+encadré.** Neuf points de plus, même document (FR-4 **1,6 mm** : depuis le
+18/09 la page propose 1,53 mm d'âme pour 1,6 mm de carte, il a fallu le
+remettre pour que les deux tableaux se lisent ensemble), mêmes réglages,
+430 000 cellules par point, 56 minutes en tout. Données dans
+`croisement-g-y0-bas.json`.
+
+| S₁₁ min · résonance · Z au port | y₀ = 5 | y₀ = 7 | y₀ = 9 |
+|---|---|---|---|
+| **g = 0,5** | −9,72 dB · 2,3195 GHz · 31,2 − 19,8 j | −10,10 dB · 2,3214 GHz · 31,3 − 18,2 j | −10,32 dB · 2,3232 GHz · 31,0 − 16,6 j |
+| **g = 1,25** | −14,90 dB · 2,3306 GHz · 36,2 − 7,2 j | **−33,87 dB** · 2,3306 GHz · **48,1 − 0,6 j** | −11,82 dB · 2,3214 GHz · 83,0 − 9,1 j |
+| **g = 2** | −16,33 dB · 2,3361 GHz · 37,7 − 5,3 j | −30,50 dB · 2,3342 GHz · 53,1 + 0,3 j | −10,32 dB · 2,3232 GHz · 90,7 − 14,2 j |
+
+Ce qui en sort :
+
+* **L'adaptation est réglée** : `g` ≈ 1,25 à 2 mm, `y₀` ≈ 7 mm, S₁₁ sous
+  −30 dB et une impédance à 1 Ω de 50 Ω. Le point est entouré de moins bons
+  sur les deux axes : ce n'est plus un coin. Bande à −10 dB : 57 MHz, 2,4 %.
+* **`y₀` est la cote sensible**, `g` beaucoup moins : entre 1,25 et 2 mm le
+  S₁₁ reste sous −30 dB, mais ± 2 mm sur `y₀` le ramènent vers −12 / −16 dB.
+  C'est la cote à tenir. Des encoches trop fines (0,5 mm) plafonnent à
+  −10 dB quel que soit `y₀` : la partie réelle reste à 31 Ω.
+* **Le calcul de `y₀` se trompe de 40 %** : il propose 11,5 mm, l'optimum est
+  à 7. La règle « ne pas corriger la formule sur un seul relevé » tient
+  toujours ; l'aide de la cote le dit.
+* **Le rendement ne bouge plus** : 39 à 40 % sur les neuf points, gain
+  réalisé 1,8 dBi au meilleur. Ce qui limite maintenant, ce sont les pertes du
+  FR-4 (tan δ 0,02), plus l'adaptation.
+* **La résonance reste à 2,33 GHz, 4,9 % sous la cible** : c'est l'étape 2,
+  `L` × `y₀`, autour de `g` = 1,5 mm et `y₀` = 7 mm.
 
 **Une dixième simulation confirme le meilleur point, hors balayage** — gabarit
 posé avec `g` = 1,49 et `y₀` = 8,51, maillage refait pour lui seul, ligne
