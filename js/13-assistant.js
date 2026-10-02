@@ -1484,10 +1484,13 @@ ANT_LIER.calcul=function(box){
     ANT.nf2ff.actif=this.checked; antMaj(true);
   };
   box.querySelector("#bScript2").onclick=antTelechargerScript;
+  /* BRANCHÉS TOUJOURS, ALLUMÉS OU NON : `antBoutonsEtat` les rallume sans
+     repasser par ici, et un bouton éteint au rendu restait muet une fois
+     rallumé. Un bouton éteint ne déclenche rien de toute façon. */
   const l=box.querySelector("#bLancer2");
-  if(l&&!l.disabled)l.onclick=antLancer;
+  if(l)l.onclick=antLancer;
   const bv=box.querySelector("#bVerif");
-  if(bv)bv.onclick=antVerifPort;   // un bouton éteint ne déclenche rien
+  if(bv)bv.onclick=antVerifPort;
   const a2=box.querySelector("#bArret2");
   if(a2)a2.onclick=antArreter;
   if(typeof antChampsLier==="function")antChampsLier(box);
@@ -1520,12 +1523,17 @@ async function antTelechargerScript(){
 }
 
 async function antLancer(){
+  if(ANT.envoi||(ANT.verif&&ANT.verif.encours))return;
+  ANT.envoi=true; antBoutonsEtat();
+  typeof wsHint==="function"&&wsHint("Lancement : le serveur prépare le maillage…");
   try{
     await oeLancer();
   }catch(e){
     typeof wsHint==="function"&&wsHint("Lancement refusé : "+(e.message||e));
     antAssistantRendre();
     return;
+  }finally{
+    ANT.envoi=false; antBoutonsEtat();
   }
   ANT.etape=ANT_ETAPES.findIndex(e=>e.id==="calcul");
   antAssistantRendre();
@@ -1623,7 +1631,7 @@ function antVerifHtml(){
 
 async function antVerifPort(){
   const m=ANT.modele;
-  if(ANT.verif&&ANT.verif.encours)return;
+  if(ANT.envoi||(ANT.verif&&ANT.verif.encours))return;
   if(!m||!m.estimation||!m.arret){ antAssistantRendre(); return; }
   const avant={tache:ANT.tache, resultat:ANT.resultat}, age=ANT_AGE;
   /* L'ÉCRAN CHANGE AVANT L'APPEL : le serveur prépare tout le maillage
@@ -1748,21 +1756,23 @@ function antBoutonsEtat(){
   const pct=Math.max(0,Math.min(100,Math.round(av.pourcent||0)));
   const bal=t&&t.balayage;
 
-  /* 1. Boutons du lanceur */
+  /* 1. Boutons du lanceur. UN CALCUL QUI SE PRÉPARE OCCUPE AUTANT QU'UN
+     CALCUL QUI TOURNE : la requête de « Lancer » ou de « Vérifier le port »
+     attend le maillage du serveur, et un second clic pendant ce temps-là
+     part en double. */
+  const occupe=!!encours||ANT.envoi||!!(ANT.verif&&ANT.verif.encours);
+  const off=!pret||!(ANT.etatServeur&&ANT.etatServeur.lancer)||occupe;
   const bs=aE("bScript"), bl=aE("bLancer"), bl2=aE("bLancer2");
   if(bs)bs.disabled=!pret;
   if(bl){
-    bl.disabled=!pret||!(ANT.etatServeur&&ANT.etatServeur.lancer)||!!encours;
+    bl.disabled=off;
     bl.textContent=encours
       ? (av.restant_s!=null ? "⏳ ≈ "+antDuree(av.restant_s) : "⏳ En cours…")
-      : "▶ Lancer";
+      : ANT.envoi ? "⏳ Préparation…" : "▶ Lancer";
   }
-  if(bl2){
-    bl2.disabled=!pret||!(ANT.etatServeur&&ANT.etatServeur.lancer)||!!encours;
-  }
+  if(bl2)bl2.disabled=off;
   const bv=aE("bVerif");
-  if(bv)bv.disabled=!pret||!(ANT.etatServeur&&ANT.etatServeur.lancer)||!!encours||
-                    !!(ANT.verif&&ANT.verif.encours);
+  if(bv)bv.disabled=off;
 
   /* 2. Boutons d'arrêt */
   const ba=aE("bArreter"), ba2=aE("bArret2");

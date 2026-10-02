@@ -2479,6 +2479,36 @@ verifie("... et aucun ecart ouvrable n'est soude a cote",
         not [s for s in _pts if s["ecart"] >= openems_modele.ECART_OUVRABLE_MM],
         [(s["ecart"], s["x"], s["y"]) for s in _pts])
 
+# L'IFA DE P01x274, SUITE : sa patte touche la masse a 4,7 mm du pied de
+# l'alimentation, soude a 0,21 mm. L'ecart etait mesure sur tout le voisinage :
+# le contact de la patte le rendait nul, et la soudure passait pour voulue --
+# ni ouverte, ni dite, et le port voyait un court-circuit. Grille et cuivre
+# poses a la main : un noeud dans l'ecart de 0,2 mm, une patte a 2 mm.
+
+
+def _pr(x0, y0, w, h):
+    return [(x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h)]
+
+
+def _ponts_patte(patte):
+    polys = [{"o": _pr(0, 0, 20, 20), "t": [_pr(5, 5, 3, 3.2)[::-1]], "m": True},
+             {"o": _pr(5.2, 6, 1, 2)}]
+    if patte:
+        polys.append({"o": _pr(6.6, 7.4, 0.4, 0.8)})   # touche le bord y = 8,2
+    return openems_modele._ponts_de_maille({
+        "cuivre": [{"couche": "L", "polys": polys}],
+        "maillage": {"x": [0, 1, 2, 3, 4, 4.6, 5.1, 5.6, 6.6, 7.4, 8.5, 9.5]
+                          + list(range(10, 21)),
+                     "y": [k * 0.5 for k in range(41)]},
+        "resolution": {"die": 1.2}})
+
+
+_sp = _ponts_patte(True)
+verifie("un contact dessine a 2 mm ne cache pas la soudure d'a cote",
+        _ponts_patte(False) and len(_sp) == 1
+        and abs(_sp[0]["ecart"] - 0.2) < 1e-6,
+        [(s["x"], s["y"], s["ecart"]) for s in _sp])
+
 # Une languette d'antenne qui TOUCHE la masse (la patte d'un IFA) : le contact
 # est dessine, pas fabrique par la grille.
 _di = json.loads(json.dumps(_d))

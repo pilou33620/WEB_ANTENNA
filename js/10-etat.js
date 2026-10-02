@@ -127,6 +127,12 @@ const ANT={
      que créé au vol : un état qui change le sens d'un clic sur la carte doit
      se lire dans la liste des états, pas se découvrir dans un gestionnaire. */
   posePort:false,
+  /* Vrai entre le clic sur « Lancer » et la réponse du serveur. Il prépare
+     tout le maillage avant de répondre — plus d'une minute sur P01x274PCB-C
+     —, et sans cet état le bouton restait allumé et muet : on recliquait, ou
+     l'on lançait « Vérifier le port » par-dessus, et l'un des deux calculs
+     se faisait refuser ou perdait son suivi. */
+  envoi:false,
   /* Combien de vias sont entrés dans le modèle avec une portée SUPPOSÉE
      traversante faute de déclaration. Rempli par `antVias`, affiché à
      l'étape 1 : « vide » ne veut pas dire « traversant ». */
