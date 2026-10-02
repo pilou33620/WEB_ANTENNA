@@ -138,7 +138,8 @@ essais figure dans l'état renvoyé à la page.
 │   ├── projet.py           les projets sur le disque : où on les range, et comment on les rouvre
 │   └── test/
 │       ├── banc-openems.py   le banc principal : 852 vérifications sans solveur, 23 sections
-│       └── banc-champs.py    le format .vtr, l'inventaire, le découpage
+│       ├── banc-champs.py    le format .vtr, l'inventaire, le découpage
+│       └── banc-serveur.py   ce que le serveur sert et refuse (.git, chemins Windows, Host)
 ├── test/
 │   ├── carte-antenne.py    fabrique une carte d'essai IPC-2581
 │   ├── patch-2450.xml      … celle qu'elle produit
@@ -1942,6 +1943,14 @@ du code de ce dépôt au sens ordinaire :
    revenir remet exactement ce qui était là, que la consigne envoyée au modèle ne
    peut pas s'écarter de la liste que la page applique, et que ce qui revient du
    réseau est échappé avant d'être affiché.
+
+Le **serveur** a son propre banc (`python python/test/banc-serveur.py`, 23
+vérifications, quelques secondes) : il ne sert que `index.html`, `css/` et `js/` —
+ni `.git/`, ni `env/`, ni la clé du mode IA, ni un chemin Windows comme
+`/C:%5cWindows%5cwin.ini` — et refuse un en-tête `Host` qui n'est ni une IP, ni
+`localhost`, ni le nom du poste (DNS rebinding). Les trois routes qui désignent un
+chemin du disque (racine des projets, import d'un calcul, ouverture de
+l'explorateur) ne répondent qu'à ce poste, comme la clé du mode IA.
 
 Un bloc à part éprouve le **lecteur de champs** (`python/test/banc-champs.py`,
 appelé lui aussi par le banc principal, 26 vérifications). Il n'a besoin ni

@@ -47,6 +47,7 @@
 
 import argparse
 import http.server
+import ipaddress
 import json
 import os
 import posixpath
@@ -125,6 +126,36 @@ ORIGINES = re.compile(
     r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
     r")(:\d+)?$")
 
+# CE QUE LA PAGE CHARGE, ET RIEN D'AUTRE. Le dossier servi est aussi celui
+# du depot : .git/, env/, openEMS/, la cle du mode IA, les cartes posees a la
+# racine. Aucun ne regarde un client du reseau. Un segment ne commence jamais
+# par un point (ni « .. », ni fichier cache), et ni « \ » ni « : » ne passent :
+# sous Windows, « /C:%5cWindows%5cwin.ini » sortait du depot.
+STATIQUE = re.compile(r"^/(?:index\.html)?$|^/(?:css|js)(?:/[\w-][\w.-]*)+$")
+
+
+def hote_permis(entete):
+    """L'en-tete Host designe-t-il ce poste ? (parade au DNS rebinding)
+
+    Une page piegee qui fait resoudre son nom vers 127.0.0.1 devient « de
+    meme origine » et lit nos reponses ; elle envoie alors SON nom dans Host.
+    Une adresse IP litterale, elle, ne se rebranche pas : on accepte toutes
+    les IP (la tablette tape celle du poste), localhost et le nom du poste.
+    """
+    h = (entete or "").strip().lower().rstrip(".")
+    if h.startswith("["):
+        h = h[1:].split("]")[0]
+    elif h.count(":") == 1:
+        h = h.split(":")[0]
+    nom = socket.gethostname().lower()
+    if h in ("", "localhost", nom, nom + ".local"):
+        return True
+    try:
+        ipaddress.ip_address(h.split("%")[0])
+        return True
+    except ValueError:
+        return False
+
 
 class Refus(Exception):
     """Refus explicite : code HTTP + message lisible par un humain."""
@@ -168,6 +199,22 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         return self.TYPES.get(ext) or super().guess_type(path)
 
     # -- garde-fous ------------------------------------------------------
+    def parse_request(self):
+        if not super().parse_request():
+            return False
+        if not hote_permis(self.headers.get("Host")):
+            self.send_error(403, "Host non autorise (protection DNS rebinding)")
+            return False
+        return True
+
+    def _statique(self):
+        """Fichier de la page ? Sinon 404, sans dire s'il existe."""
+        chemin = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+        if STATIQUE.match(chemin):
+            return True
+        self.send_error(404, "File not found")
+        return False
+
     def _route(self):
         return urllib.parse.urlsplit(self.path).path.rstrip("/") or "/"
 
@@ -551,7 +598,19 @@ class Poste(http.server.SimpleHTTPRequestHandler):
                          % (nom, charge.get("dossier", "")))
         return charge
 
+    def _ce_poste(self):
+        """Les routes qui designent un chemin du disque restent a ce poste.
+
+        Meme raison que pour la cle du mode IA (voir `_boucle_locale`) : sans
+        cela, un client du reseau deplacait la racine des projets n'importe
+        ou sur le disque, ou y lisait un dossier quelconque. La tablette garde
+        tout le reste : ouvrir, enregistrer, archiver dans la racine choisie.
+        """
+        if not self._boucle_locale():
+            raise Refus(403, "Seul ce poste peut choisir un dossier du disque.")
+
     def _pr_racine(self):
+        self._ce_poste()
         doc = self._document(4096)
         chemin = (doc or {}).get("chemin") if isinstance(doc, dict) else None
         self._pr_action(lambda: projet.definir_racine(chemin))
@@ -579,7 +638,8 @@ class Poste(http.server.SimpleHTTPRequestHandler):
 
     def _pr_dossier(self):
         """Ouvre dans l'explorateur la racine, ou le dossier d'un projet."""
-        nom = (self._params().get("nom") or [""])[0]
+        self._ce_poste()
+        nom =(self._params().get("nom") or [""])[0]
         return self._pr_action(lambda: projet.ouvrir_explorateur(nom or None))
 
     def _pr_archiver(self):
@@ -654,6 +714,7 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         ne retrouverait pas apres un redemarrage du serveur.
         """
         self._pr()
+        self._ce_poste()
         if openems_antenne is None:
             raise Refus(503, "Execution indisponible : %s" % ERREUR_OPENEMS)
         chemin = (self._document(4096) or {}).get("chemin") or ""
@@ -783,13 +844,15 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         if route.startswith("/api/"):
             self._json({"detail": "Route inconnue : %s" % route}, 404)
             return
-        super().do_GET()
+        if self._statique():
+            super().do_GET()
 
     def do_HEAD(self):
         if self._route().startswith("/api/"):
             self.do_GET()
             return
-        super().do_HEAD()
+        if self._statique():
+            super().do_HEAD()
 
     def do_POST(self):
         if not self._csrf():
