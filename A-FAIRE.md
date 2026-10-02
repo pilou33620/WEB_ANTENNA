@@ -3,7 +3,7 @@
 État relevé le **15/09/2026**, après la séance qui a traité les quatre
 chantiers ouverts de la version précédente et qui a mené la mesure que le
 premier réclamait. Le banc passe (relevé du 02/10/2026) :
-`python python/test/banc-openems.py` → **969 vérifications, toutes passées**,
+`python python/test/banc-openems.py` → **991 vérifications, toutes passées**,
 bancs JavaScript compris ; `--simuler` (deux vraies simulations FDTD) aussi. Aucun `TODO` ni `FIXME` dans le code.
 
 Ce qui a été fait — et qui ne se redécouvre donc plus ici : le **balayage
@@ -170,6 +170,8 @@ passe par la liste blanche `IA_CHAMPS`, et le banc en éprouve la barrière
 (section 9 de `test/banc-interface.js`). Le README le décrit en entier ; ce qui
 suit est ce qui reste ouvert.
 
+Faits le 02/10/2026, et décrits au README : la **relecture d'un balayage terminé** (l'optimum est-il au bord de la plage, cote par cote), un **modèle local** compatible OpenAI à côté de Google, et la règle qui relève **une couche déclarée masse sans cuivre** (le dipôle imprimé en géométrie libre).
+
 **1. Les règles locales ne connaissent qu'un motif sur six.** Deux d'entre
 elles sont écrites pour le patch : le pas de maillage face à la largeur de
 ligne, et l'encastrement `y₀`. Le monopôle, l'IFA, le MIFA et le dipôle n'ont
@@ -177,43 +179,19 @@ rien d'équivalent — or chacun a sa cote la moins sûre, et aucune n'est
 chiffrée comme celle du patch l'est. *Le travail* : une mesure par motif, comme
 le croisement `g` × `y₀` en a fait une. C'est du temps de calcul, pas du code.
 
-**2. Rien ne relit un balayage terminé.** La règle la plus utile serait celle
-qu'on ne peut pas encore écrire : « vos quarante courbes disent que l'optimum
-est hors de la plage balayée, du côté des petites valeurs ». `ANT.resultat`
-porte les points, la lecture reste à faire.
-
-**3. Le contexte est un texte, pas des données.** Il se lit très bien et tient
+**2. Le contexte est un texte, pas des données.** Il se lit très bien et tient
 en soixante lignes, mais un modèle qui devrait comparer neuf points d'un
 croisement les recevrait en prose. Si cela devient utile, c'est un tableau
 qu'il faudra joindre — pas une phrase de plus.
 
-**4. `css/ia.css` est une copie, et une copie diverge.** La feuille vient de
+**3. `css/ia.css` est une copie, et une copie diverge.** La feuille vient de
 `commun/ia-assistant.css` de WEB_CAO, et ce qui est propre à cet outil-ci est
 ajouté **en fin de fichier**, jamais au milieu — pour qu'une version suivante
 de WEB_CAO se reprenne par un `cp` et non par une fusion. Le jour où les deux
 dépôts auront trois feuilles communes, ce sera un dossier partagé qu'il faudra,
 pas une troisième copie.
 
-**5. Un seul fournisseur.** L'appel est écrit pour Google AI Studio, en dur.
-Un poste sans accès réseau n'a que les vérifications locales — ce qui est
-délibéré, mais un modèle local (Ollama et consorts) tiendrait dans la même
-fonction : c'est une URL et une forme de corps de requête, le reste ne bouge
-pas.
-
-**6. La géométrie libre ne déclare pas le rôle des couches.** La carte `formes`
-pose du cuivre, la carte, le port — mais elle ne touche pas à l'empilage, et
-c'est volontaire : `IA_CHAMPS` ne porte aucun chemin de rôle, et une carte qui
-transformerait un plan de masse en signal ferait disparaître une masse sans
-qu'aucune ligne ne le dise. La conséquence se paie sur une antenne équilibrée :
-un dipôle imprimé n'a **aucune** masse, et la seconde couche reste déclarée
-« gnd » d'usine — `conRoleSeconde()` ne le corrige que pour les six motifs, qui
-le savent. *Le travail* : soit un champ `role` dans la carte `formes`, avec son
-avis et son annulation, soit une règle de l'audit local qui relève « une couche
-déclarée masse ne porte aucun cuivre », ce qui attrape le cas sans donner un
-droit d'écriture de plus. La seconde est la moins chère, et probablement la
-bonne.
-
-**7. Une géométrie libre ne sait rien d'elle-même.** Pas de fiche, pas de
+**4. Une géométrie libre ne sait rien d'elle-même.** Pas de fiche, pas de
 résonance estimée, pas de cote balayable : `conGabaritConforme()` rend faux dès
 qu'une forme est ajoutée au dessin, et le balayage de cote cesse d'être proposé
 — la carte le dit dans un avis, mais le dire n'est pas le réparer. Balayer une

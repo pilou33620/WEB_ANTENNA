@@ -1575,12 +1575,13 @@ des réglages :
 | Ce qui est vérifié | Ce qui est attrapé |
 |---|---|
 | la bande et la cible | une fréquence visée hors de la bande simulée ; une bande trop étroite pour qu'un creux y apparaisse ; une bande hors du vraisemblable, c'est-à-dire une faute d'unité |
-| le cuivre, l'empilage | rien de désigné ; un intervalle sans épaisseur saisie |
+| le cuivre, l'empilage | rien de désigné ; un intervalle sans épaisseur saisie ; une couche déclarée masse qui ne porte aucun cuivre — le dipôle imprimé dessiné en géométrie libre, dont la seconde couche reste « masse » d'usine |
 | les ports | aucun port posé ; un port qui relie une couche à elle-même ; un coaxial qui ne fait pas son impédance de référence |
 | l'arrêt | un garde-fou qui coupera avant que l'énergie soit descendue — ce qui rend une descente tronquée, et une transformée sur une descente tronquée n'est pas une mesure |
 | le maillage | moins de trois cellules en travers de la ligne d'alimentation : le cas exact qui fait disparaître la résonance du patch de cet outil |
 | le motif patch | un encastrement `y₀` laissé au calcul du gabarit, dont **on sait qu'il est faux** (voir plus bas) |
 | le dernier résultat | une résonance au bord de la bande ; un écart à la cible, avec le sens de la correction ; une désadaptation, en séparant ce qui vient de la réactance de ce qui vient de la partie réelle |
+| un balayage terminé | le meilleur point, chiffres à l'appui, et s'il est **au bord** de la plage, cote par cote — coin compris sur un croisement : un optimum de bord n'est que le meilleur des points essayés. La règle lit et n'écrit rien : prolonger une plage, ce sont des simulations de plus, et cela se décide au devis |
 
 L'audit sort en markdown, avec ses corrections en blocs `action` — c'est-à-dire
 **par le même rendu que la réponse du modèle**. Une correction locale et une
@@ -1588,9 +1589,19 @@ correction proposée par l'IA donnent la même carte, avec la même barrière
 derrière : deux chemins de rendu auraient fini par diverger, et c'est celui qui
 écrit dans l'état qu'on ne veut pas voir diverger.
 
-**Poser une question**, en revanche, appelle Google AI Studio. C'est pour tout
-ce qu'une règle ne sait pas faire : *pourquoi* la résonance est 80 MHz trop
-basse, *quoi* balayer en premier, ce diagramme est-il crédible.
+**Poser une question**, en revanche, appelle un modèle de langage. C'est pour
+tout ce qu'une règle ne sait pas faire : *pourquoi* la résonance est 80 MHz
+trop basse, *quoi* balayer en premier, ce diagramme est-il crédible.
+
+Deux fournisseurs, au choix dans la barre de connexion : **Google AI Studio**
+(avec sa clé), ou un **modèle local** compatible OpenAI — Ollama, LM Studio,
+llama.cpp, vLLM, tout ce qui sert `/v1/chat/completions`. Pour le local, on
+donne l'adresse (`http://localhost:11434` pour Ollama, `…:1234/v1` pour LM
+Studio) et le nom du modèle ; **aucune clé ne lui est envoyée**, et le résumé
+ne part que vers ce serveur-là. Le choix vit comme la clé : dans l'onglet,
+oublié à la fermeture du panneau. Ollama n'accepte d'emblée que les pages
+servies par `localhost` : une page ouverte par l'adresse réseau du poste
+(`--reseau`) est refusée tant que `OLLAMA_ORIGINS` ne la nomme pas.
 
 ### Ce qui sort du poste, et il faut le dire
 
@@ -1598,7 +1609,8 @@ Le reste de l'outil ne dépend d'aucun service tiers — three.js est dans le
 dépôt pour cette raison, et une simulation qui dépendrait d'un serveur
 extérieur ne serait pas reproductible. Ce mode-ci fait exception, et il
 l'annonce : quand la case **« Contexte projet »** est cochée, un résumé des
-réglages part chez Google.
+réglages part chez Google — ou vers le modèle local choisi, et alors il ne
+quitte pas le réseau.
 
 Le **résumé**, et rien d'autre : la bande, l'empilage, le cuivre retenu en
 nombre d'objets, les ports, la boîte, le maillage, l'arrêt, les chiffres que

@@ -1467,6 +1467,169 @@ verifie("la carte d'une geometrie libre liste chaque forme qu'elle pose",
 verifie("et elle affiche le refus a cote de ce qu'elle pose",
         IA_HF.indexOf("ia-action-refus")>=0&&IA_HF.indexOf("trapeze")>=0);
 
+/* -- une couche declaree masse qui ne porte aucun cuivre ------------------ */
+/* LE DIPOLE IMPRIME EN GEOMETRIE LIBRE : ses deux bras sur le dessus, et la
+   seconde couche restee « masse » d'usine — une carte « formes » ne touche
+   pas aux roles, et c'est voulu. La regle le RELEVE sans rien ecrire : c'est
+   la moins chere des deux reponses d'A-FAIRE, et la seule qui n'ouvre pas de
+   droit de plus dans la liste blanche. */
+CON.pile=conPileDefaut();
+const IA_CU=conCuivres();
+IA_CU[0].e.role="signal"; IA_CU[1].e.role="gnd";
+CON.elements=[
+  {type:"rect", cu:IA_CU[0].e.uid, net:"ANTENNE", trou:false, x1:2, y1:20, x2:19, y2:22},
+  {type:"rect", cu:IA_CU[0].e.uid, net:"ANTENNE", trou:false, x1:21, y1:20, x2:38, y2:22},
+  /* ni une decoupe ni un via ne font un plan : ils ne doivent pas faire
+     taire l'avis */
+  {type:"rect", cu:IA_CU[1].e.uid, net:"", trou:true, x1:1, y1:1, x2:3, y2:3},
+  {type:"via",  cu:IA_CU[1].e.uid, net:"GND", trou:false, x:5, y:5, d:0.6}];
+const iaMasseVide=()=>iaControles().filter(a=>a.titre.indexOf("déclarée masse")>=0);
+let IA_MV=iaMasseVide();
+verifie("une couche declaree masse sans cuivre est relevee, en la nommant",
+        IA_MV.length===1&&IA_MV[0].titre.indexOf(IA_CU[1].e.nom)>=0&&
+        IA_MV[0].rang==="attention",
+        IA_MV.map(a=>a.titre).join(" | "));
+verifie("et la remarque ne propose aucune ecriture : le role n'est pas dans la liste blanche",
+        IA_MV.length===1&&!IA_MV[0].prop&&
+        !Object.keys(IA_CHAMPS).some(c=>c.indexOf("role")>=0));
+IA_CU[1].e.role="signal";
+verifie("declaree signal, la meme couche vide ne dit plus rien",
+        iaMasseVide().length===0);
+IA_CU[1].e.role="gnd";
+CON.elements.push({type:"rect", cu:IA_CU[1].e.uid, net:"GND", trou:false,
+                   x1:0, y1:0, x2:40, y2:15});
+verifie("une masse qui porte un plan ne dit rien non plus",
+        iaMasseVide().length===0);
+CON.elements=[];
+
+/* -- relire un balayage termine ------------------------------------------ */
+/* « Vos courbes disent que l'optimum est hors de la plage » : la regle que
+   le croisement g × y0 aurait du ecrire tout seul. Elle LIT, et rien ne doit
+   bouger dans les reglages quand elle a lu. */
+const iaBalSimple=function(s11){
+  return {balayage:true, croise:false, nom:"Patch rectangulaire — longueur",
+          unite:"mm", nom2:"", unite2:"",
+          points:s11.map(function(s,i){
+            const v=30+i;
+            return {etiquette:String(v), valeur:v, valeur2:null,
+                    resultat:{f0:2.40e9+1e7*i, s11_min_db:s, z0_re:50+5*i,
+                              z0_im:-10+3*i}};
+          })};
+};
+const iaLecture=()=>iaControles().filter(a=>a.titre.indexOf("L'optimum du balayage")===0);
+const IA_AVANT=JSON.stringify([ANT.bande,ANT.balayage,ANT.maillage,ANT.boite]);
+ANT_BAL_POINT=0;
+
+ANT.resultat=iaBalSimple([-5,-9,-14,-10,-6]);
+let IA_L=iaLecture();
+verifie("un optimum interieur est dit DANS la plage, chiffres a l'appui",
+        IA_L.length===1&&IA_L[0].rang==="info"&&
+        IA_L[0].titre.indexOf("dans la plage")>=0&&
+        IA_L[0].texte.indexOf("-14 dB")>=0&&IA_L[0].texte.indexOf("« 32 »")>=0&&
+        IA_L[0].texte.indexOf("2.42 GHz")>=0,
+        IA_L.map(a=>a.texte).join(" | "));
+
+ANT.resultat=iaBalSimple([-15,-12,-9,-6,-4]);
+IA_L=iaLecture();
+verifie("un optimum a la borne basse dit de prolonger vers les petites valeurs",
+        IA_L.length===1&&IA_L[0].rang==="attention"&&
+        IA_L[0].titre.indexOf("au bord")>=0&&
+        IA_L[0].texte.indexOf("borne basse")>=0&&
+        IA_L[0].texte.indexOf("petites valeurs")>=0&&
+        IA_L[0].texte.indexOf("COIN")<0,
+        IA_L.map(a=>a.texte).join(" | "));
+ANT.resultat=iaBalSimple([-4,-6,-9,-12,-15]);
+IA_L=iaLecture();
+verifie("et a la borne haute, vers les grandes",
+        IA_L.length===1&&IA_L[0].texte.indexOf("borne haute")>=0&&
+        IA_L[0].texte.indexOf("grandes valeurs")>=0);
+
+ANT.resultat=iaBalSimple([-1,-2,-1.5]);
+verifie("un balayage dont aucun point ne resonne ne designe pas d'optimum",
+        iaLecture().length===0&&
+        iaControles().some(a=>a.titre.indexOf("Aucun point du balayage")===0));
+
+/* LES NEUF POINTS DU CROISEMENT g × y0, tels que le serveur les a rendus
+   (`croisement-g-y0.json`, a la racine) : le meilleur est g = 1,49 et
+   y0 = 8,51 — le coin bas-bas. C'est le cas qui a fait ecrire la regle. */
+const IA_X=JSON.parse(fs.readFileSync(path.join(__dirname,"..","croisement-g-y0.json"),"utf8"));
+ANT.resultat=Object.assign({balayage:true, pente_hz_par_unite:null,
+                            lignes:IA_X.lignes,
+                            points:IA_X.points.map(p=>({etiquette:p.etiquette,
+                              valeur:p.valeur, valeur2:p.valeur2, resultat:p}))},
+                           IA_X.balayage);
+IA_L=iaLecture();
+verifie("le croisement g × y0 : le meilleur point est nomme, avec son S11",
+        IA_L.length===1&&IA_L[0].texte.indexOf("1,4896 × 8,5112")>=0&&
+        IA_L[0].texte.indexOf("-16,02 dB")>=0&&
+        IA_L[0].texte.indexOf("Sur 9 points")>=0,
+        IA_L.map(a=>a.texte).join(" | "));
+verifie("et il est a la borne basse des DEUX cotes : c'est un coin",
+        IA_L.length===1&&
+        IA_L[0].texte.indexOf("borne basse de « "+IA_X.balayage.nom+" »")>=0&&
+        IA_L[0].texte.indexOf("borne basse de « "+IA_X.balayage.nom2+" »")>=0&&
+        IA_L[0].texte.indexOf("COIN")>=0);
+verifie("la lecture ne propose aucune carte et n'ecrit rien dans les reglages",
+        IA_L.every(a=>!a.prop)&&
+        JSON.stringify([ANT.bande,ANT.balayage,ANT.maillage,ANT.boite])===IA_AVANT);
+ANT.resultat=null;
+
+/* -- le second fournisseur : la requete, sans reseau ---------------------- */
+/* Ce qui est prouve ici est ce qu'un appel reel ne montrerait pas : OU part
+   la cle. Google la recoit dans l'en-tete, jamais dans l'URL ; un serveur
+   local ne la recoit pas du tout — il n'en demande pas, et la lui envoyer
+   serait la donner a quiconque ecoute sur ce port. */
+const iaRequete=window.iaRequete, iaTexteRep=window.iaTexteReponse;
+const IA_HIST=[{role:"user", parts:[{text:"Q1"}]},
+               {role:"model", parts:[{text:"R1"}]},
+               {role:"user", parts:[{text:"Q2"}]}];
+const IA_RG=iaRequete("google",{cle:"CLE-ESSAI", url:"http://localhost:11434",
+  modele:"gemma-4-31b-it", systeme:"CONSIGNE", contents:IA_HIST,
+  genConfig:{temperature:0.7}});
+const IA_RGB=JSON.parse(IA_RG.init.body);
+verifie("Google : la cle part dans l'en-tete x-goog-api-key, pas dans l'URL",
+        IA_RG.init.headers["x-goog-api-key"]==="CLE-ESSAI"&&
+        IA_RG.url.indexOf("CLE-ESSAI")<0&&IA_RG.init.body.indexOf("CLE-ESSAI")<0&&
+        /\/models\/gemma-4-31b-it:generateContent$/.test(IA_RG.url));
+verifie("Google : la consigne en systemInstruction, l'historique tel quel",
+        IA_RGB.systemInstruction.parts[0].text==="CONSIGNE"&&
+        IA_RGB.contents.length===3&&IA_RGB.contents[1].role==="model");
+verifie("Google : le repli sans consigne n'envoie pas de systemInstruction",
+        !("systemInstruction" in JSON.parse(iaRequete("google",{cle:"K",
+          modele:"m", systeme:"", contents:IA_HIST, genConfig:{}}).init.body)));
+
+const IA_RL=iaRequete("local",{cle:"CLE-ESSAI", url:"http://localhost:11434/",
+  modele:"llama3.1", systeme:"CONSIGNE", contents:IA_HIST, genConfig:{}});
+const IA_RLB=JSON.parse(IA_RL.init.body);
+verifie("local : la route OpenAI d'Ollama, a partir de l'adresse nue",
+        IA_RL.url==="http://localhost:11434/v1/chat/completions"&&
+        IA_RL.init.method==="POST",IA_RL.url);
+verifie("local : AUCUNE cle ne part vers le serveur local",
+        JSON.stringify(IA_RL).indexOf("CLE-ESSAI")<0&&
+        !Object.keys(IA_RL.init.headers).some(h=>/key|auth/i.test(h)));
+verifie("local : la consigne en message system, model devenu assistant",
+        IA_RLB.model==="llama3.1"&&IA_RLB.stream===false&&
+        IA_RLB.messages.map(m=>m.role).join(",")==="system,user,assistant,user"&&
+        IA_RLB.messages[0].content==="CONSIGNE"&&IA_RLB.messages[3].content==="Q2");
+verifie("local : une adresse deja en /v1 (LM Studio) ne double pas le /v1",
+        iaRequete("local",{url:"http://127.0.0.1:1234/v1", modele:"m",
+          contents:[]}).url==="http://127.0.0.1:1234/v1/chat/completions");
+let IA_URL_REFUS=0;
+for(const u of ["localhost:11434","javascript:alert(1)",""]){
+  try{ iaRequete("local",{url:u, modele:"m", contents:[]}); }
+  catch(e){ IA_URL_REFUS++; }
+}
+verifie("local : une adresse sans http(s):// est refusee avant tout appel",
+        IA_URL_REFUS===3);
+verifie("les deux reponses se lisent, pensees de Google ecartees",
+        iaTexteRep("local",{choices:[{message:{content:"Bonjour"}}]})==="Bonjour"&&
+        iaTexteRep("google",{candidates:[{content:{parts:[
+          {text:"je pense", thought:true},{text:"Bonjour"}]}}]})==="Bonjour"&&
+        iaTexteRep("local",{})==="");
+verifie("ce que rend le modele local est echappe comme le reste",
+        iaMd(iaTexteRep("local",{choices:[{message:{content:
+          "<img src=x onerror=alert(1)>"}}]})).indexOf("<img")<0);
+
 CON.actif=false;
 CON.elements=[]; CON.sel=-1;
 ANT.ports=[antPortNeuf(true)]; ANT.portActif=0;

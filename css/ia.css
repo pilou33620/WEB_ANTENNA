@@ -902,3 +902,9 @@
   border-radius: 4px;
   padding: 5px 8px;
 }
+
+/* Le choix du fournisseur garde sa taille : ce sont les champs qui s'étirent. */
+#iaFournisseur {
+  flex: none;
+  width: auto;
+}

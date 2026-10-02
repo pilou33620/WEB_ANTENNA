@@ -1,7 +1,8 @@
 "use strict";
 /* =============================================================================
    Antenne openEMS — 30-ia.js
-   Assistant IA technique — Google AI Studio.
+   Assistant IA technique — Google AI Studio, ou un modèle local compatible
+   OpenAI (Ollama, LM Studio…).
 
    LA MÊME INTERFACE QUE CELLE DE WEB_CAO, et ce n'est pas un hasard : les
    modules 00 à 06 de cet outil viennent de la visionneuse de WEB_CAO
@@ -57,6 +58,19 @@
 
   const IA_SESSION_CLE = "openems_ia_cle";
   const IA_URL = "https://generativelanguage.googleapis.com/v1beta/models/";
+
+  /* LE SECOND FOURNISSEUR : UN MODÈLE LOCAL, compatible OpenAI — Ollama,
+     LM Studio, llama.cpp, vLLM parlent tous `/v1/chat/completions`. Il tient
+     dans la même fonction d'appel (`requeteIa`) : une URL et une forme de
+     corps, le reste ne bouge pas — même contexte, même consigne, même
+     nettoyage, même rendu échappé, même barrière `IA_CHAMPS` derrière les
+     cartes. Son choix vit COMME LA CLÉ : en mémoire vive et dans le
+     `sessionStorage` de l'onglet, oublié à la fermeture du panneau. Pas de
+     clé : un serveur local n'en demande pas, et en inventer une ici serait
+     une seconde chose à garder. */
+  let _fournisseur = "google";      // "google" | "local"
+  let _local = {url:"http://localhost:11434", modele:""};
+  const IA_SESSION_LOCAL = "openems_ia_local";
 
   /* ==========================================================================
      Écrire les nombres
@@ -1276,6 +1290,84 @@
      ce qui suit porte sur ce que le serveur NE PEUT PAS voir, c'est-à-dire
      l'intention — ce qu'on visait, et ce qu'on a mesuré.
      ========================================================================== */
+
+  /* RELIRE UN BALAYAGE TERMINÉ. Le meilleur point d'une famille de courbes
+     n'est un optimum que s'il est ENCADRÉ : au bord de la plage, c'est
+     seulement le meilleur des points essayés, et le vrai est au-delà. C'est
+     exactement ce que le croisement g × y₀ a montré (A-FAIRE.md § 1) — le
+     meilleur point était un coin du tableau, et personne ne l'aurait lu sans
+     regarder les bornes une à une. La règle le fait, axe par axe.
+
+     Elle LIT et n'écrit rien : pas de carte d'action. Prolonger une plage est
+     une décision de calcul — dix simulations de plus — et elle se prend dans
+     l'étape « Le calcul », devis en main.
+
+     Les points sont lus dans `lignes`, le tableau que le serveur assemble
+     (`_assembler`, openems_run.py) ; à défaut, dans `points[].resultat`. Le
+     critère est le S₁₁ minimal, celui du tableau : la résonance d'un point
+     s'en déduit, et c'est l'adaptation qu'un balayage de cote vient chercher. */
+  function lireBalayage(bal, dire){
+    const pts = (Array.isArray(bal.lignes) && bal.lignes.length) ? bal.lignes
+      : (bal.points || []).map(p => Object.assign(
+          {etiquette:p.etiquette, valeur:p.valeur, valeur2:p.valeur2},
+          p.resultat || {}));
+    const bons = pts.filter(p => isFinite(p.s11_min_db) && isFinite(p.valeur) &&
+                                 (!bal.croise || isFinite(p.valeur2)));
+    if(bons.length < 2) return;
+    const best = bons.reduce((a, p) => (p.s11_min_db < a.s11_min_db ? p : a));
+    const seuil = (typeof ANT_SEUIL_RESONANCE_DB !== "undefined")
+                    ? ANT_SEUIL_RESONANCE_DB : -3;
+    const tete = "Sur " + bons.length + " points" +
+                 (bons.length < pts.length
+                    ? " (" + (pts.length - bons.length) + " sans résultat)" : "") +
+                 ", le meilleur S11 est " + nb(best.s11_min_db, 2) + " dB en « " +
+                 best.etiquette + " »";
+    if(best.s11_min_db > seuil){
+      dire("attention", "Aucun point du balayage ne résonne",
+           tete + " : au-dessus de " + nb(seuil, 0) + " dB, aucun creux n'est "+
+           "une résonance. La plage ne contient pas l'antenne qu'on cherche — "+
+           "ou le port ne la voit pas. Regardez l'impédance d'un point avant "+
+           "de prolonger quoi que ce soit.");
+      return;
+    }
+
+    const axes = [{nom:bal.nom, u:bal.unite, cle:"valeur"}];
+    if(bal.croise) axes.push({nom:bal.nom2, u:bal.unite2, cle:"valeur2"});
+    const bords = [];
+    axes.forEach(function(ax){
+      const v = Array.from(new Set(bons.map(p => p[ax.cle]))).sort((a, b) => a - b);
+      if(v.length < 2) return;
+      const x = best[ax.cle], u = ax.u ? " " + ax.u : "";
+      const bas = (x === v[0]);
+      if(!bas && x !== v[v.length - 1]) return;
+      bords.push("à la borne " + (bas ? "basse" : "haute") + " de « " + ax.nom +
+                 " » (" + nb(x, 3) + u + ", plage " + nb(v[0], 3) + " à " +
+                 nb(v[v.length - 1], 3) + u + ", " + v.length + " valeurs) : "+
+                 "prolongez le balayage vers les " +
+                 (bas ? "petites" : "grandes") + " valeurs" +
+                 (v.length < 3 ? " — deux valeurs n'encadrent rien" : ""));
+    });
+
+    const mesure = tete + " — résonance " + fHz(best.f0) +
+      (isFinite(best.z0_re) && isFinite(best.z0_im)
+         ? ", Z = " + nb(best.z0_re, 1) + (best.z0_im >= 0 ? " + " : " − ") +
+           nb(Math.abs(best.z0_im), 1) + "j Ω" : "") + ". ";
+    if(bords.length)
+      dire("attention", "L'optimum du balayage est au bord de la plage",
+           mesure + "Il est " + bords.join(" ; et ") + "." +
+           (bords.length > 1 ? " C'est un COIN du tableau : les deux cotes "+
+                               "sont à leur borne." : "") +
+           " Un optimum de bord n'est que le meilleur des points essayés : le "+
+           "vrai est au-delà, et la pente des courbes dit seulement de quel "+
+           "côté.");
+    else
+      dire("info", "L'optimum du balayage est dans la plage",
+           mesure + "Il est encadré par ses voisins sur " +
+           (axes.length > 1 ? "les deux axes" : "l'axe balayé") + " : la "+
+           "plage le contient. Si la précision compte, resserrez le pas "+
+           "autour de lui plutôt que d'élargir.");
+  }
+
   function controles(){
     const out = [];
     const dire = function(rang, titre, texte, prop){
@@ -1346,6 +1438,36 @@
              "saisie. Un substrat d'épaisseur nulle n'a pas de résonance : la "+
              "hauteur commande la longueur électrique autant que la "+
              "permittivité. Étape 2 de l'assistant.");
+    }
+
+    /* -- 3 bis. une couche déclarée masse qui ne porte rien -------------- */
+    /* LE CAS DU DIPÔLE IMPRIMÉ EN GÉOMÉTRIE LIBRE. `conRoleSeconde()` met la
+       seconde couche en « signal » pour les motifs qui le savent ; une carte
+       « formes » ne touche pas aux rôles — `IA_CHAMPS` n'en porte aucun, et
+       c'est voulu : une carte qui changerait un plan de masse en signal ferait
+       disparaître une masse sans qu'aucune ligne ne le dise. La seconde couche
+       reste donc « masse » d'usine sur une antenne qui n'en a pas. On le
+       RELÈVE au lieu de le corriger : zéro droit d'écriture de plus, et la
+       règle attrape aussi la masse qu'on a oublié de dessiner.
+       Un via ne compte pas : il traverse, il ne fait pas un plan. */
+    if(con && typeof conCuivres === "function"){
+      conCuivres().forEach(function(c){
+        if(c.e.role !== "gnd") return;
+        const porte = CON.elements.some(el => el.cu === c.e.uid && !el.trou &&
+                                              el.type !== "via");
+        if(!porte)
+          dire("attention", "« " + c.e.nom + " » est déclarée masse et ne "+
+               "porte aucun cuivre",
+               "Aucune forme n'est dessinée sur cette couche. Le solveur n'y "+
+               "verra rien — une couche vide n'entre pas dans le modèle —, "+
+               "mais le reste de l'outil la croit là : un port posé à la main "+
+               "va par défaut vers la masse la plus proche, donc vers une "+
+               "couche vide, et c'est un circuit ouvert ; le document et le "+
+               "contexte envoyé à l'IA décrivent une antenne à plan de masse. "+
+               "Sur une antenne équilibrée (dipôle imprimé), déclarez-la "+
+               "« signal / antenne » dans l'empilage du mode conception ; si "+
+               "un plan devait y être, c'est lui qui manque.");
+      });
     }
 
     /* -- 4. les ports ---------------------------------------------------- */
@@ -1504,6 +1626,9 @@
              "la largeur affichée est un minorant, pas une mesure.");
     }
 
+    /* -- 8 bis. un balayage terminé : l'optimum est-il DANS la plage ? ---- */
+    if(ANT.resultat && ANT.resultat.balayage) lireBalayage(ANT.resultat, dire);
+
     /* -- 9. le balayage armé --------------------------------------------- */
     if(ANT.balayage && ANT.balayage.actif && typeof balCombien === "function"){
       const n = balCombien();
@@ -1605,7 +1730,9 @@
       "- **Les ports** : aucun port posé, un port qui relie une couche à elle-même, un coaxial qui ne fait pas son impédance de référence.\n" +
       "- **L'arrêt** : un garde-fou qui coupera avant que l'énergie soit descendue — une transformée sur une descente tronquée n'est pas une mesure.\n" +
       "- **Le maillage** : moins de trois cellules en travers de la ligne d'alimentation, le cas exact qui fait disparaître la résonance d'un patch.\n" +
-      "- **Le dernier résultat** : une résonance au bord de la bande, un écart à la cible *avec le sens de la correction*, une désadaptation en séparant ce qui vient de la réactance de ce qui vient de la partie réelle.\n\n" +
+      "- **L'empilage dessiné** : une couche déclarée masse qui ne porte aucun cuivre — le dipôle imprimé posé en géométrie libre, dont la seconde couche reste « masse » d'usine.\n" +
+      "- **Le dernier résultat** : une résonance au bord de la bande, un écart à la cible *avec le sens de la correction*, une désadaptation en séparant ce qui vient de la réactance de ce qui vient de la partie réelle.\n" +
+      "- **Un balayage terminé** : où est le meilleur point, chiffres à l'appui, et s'il est **au bord** de la plage balayée — cote par cote, coin compris sur un croisement. Un optimum de bord n'est que le meilleur des points essayés.\n\n" +
       "---\n\n" +
       "### 2. ⚡ Cartes d'action — les réglages appliqués en 1 clic\n" +
       "L'assistant ne se contente pas d'expliquer : quand il préconise des valeurs, il produit une **carte d'action cliquable** qui montre **l'avant en face de l'après** avant d'écrire quoi que ce soit.\n" +
@@ -1637,6 +1764,7 @@
       "- **Purge automatique** : à la fermeture du panneau (✕, Alt+I, Échap, *« Oublier clé »*), elle est effacée et redemandée à la prochaine ouverture.\n" +
       "- **Sans la taper** : posez-la dans `api_key_free_ia_studio.txt` à la racine du dépôt, ou dans la variable d'environnement `GEMINI_API_KEY` — le serveur la rendra à la page, et le fichier est ignoré par git.\n" +
       "- **Ce qui est transmis** quand *« Contexte projet »* est coché : le **résumé** des réglages — bande, empilage, cuivre retenu en nombre d'objets, ports, boîte, maillage, arrêt, chiffres du serveur, motif ouvert, cotes balayables, dernier résultat. **Ni le fichier IPC-2581, ni les polygones de cuivre, ni les courbes.**\n" +
+      "- **Un modèle local** : choisissez « Local » dans la barre de connexion, donnez l'adresse du serveur (`http://localhost:11434` pour Ollama) et le nom du modèle. Le même résumé part alors vers CE serveur, et nulle part ailleurs ; aucune clé ne lui est envoyée. Choix oublié à la fermeture, comme la clé.\n" +
       "- **Sans réseau** : le manuel et la vérification des réglages marchent quand même. C'est pour cela qu'ils existent."
     );
   }
@@ -1982,6 +2110,7 @@ grammaire(),
      Rendu de l'historique
      ========================================================================== */
   function nomModele(){
+    if(_fournisseur === "local") return "Local · " + (_local.modele || "?");
     const sel = document.getElementById("iaModelSelect");
     if(sel && sel.selectedIndex >= 0) return sel.options[sel.selectedIndex].text;
     return _modele;
@@ -2203,7 +2332,7 @@ grammaire(),
     if(!q){ iaOuvrir(); return; }
     _questionEnAttente = q;
     iaOuvrir();
-    if(_cleApi){
+    if(_cleApi || _fournisseur === "local"){
       const input = document.getElementById("iaInput");
       if(input){
         input.value = q;
@@ -2331,14 +2460,22 @@ grammaire(),
         /* 1. Barre de connexion (tant qu'il n'y a pas de clé) */
         '<div class="ia-panel-connect" id="iaPanelConnect">' +
           '<form class="ia-connect-row" id="iaKeyForm" onsubmit="return false;">' +
-            '<span class="ia-lock-ico" title="Sécurité éphémère : clé conservée en mémoire vive uniquement">🔒</span>' +
+            '<select id="iaFournisseur" class="ia-model-select" title="Fournisseur du modèle de langage" aria-label="Fournisseur">' +
+              '<option value="google">Google</option>' +
+              '<option value="local">Local</option>' +
+            '</select>' +
+            '<span class="ia-lock-ico" id="iaLockIco" title="Sécurité éphémère : clé conservée en mémoire vive uniquement">🔒</span>' +
             '<input type="password" id="iaKeyInput" class="ia-key-input-compact" autocomplete="off" spellcheck="false" placeholder="Clé API Google AI Studio (AIzaSy...)" aria-label="Clé API Google AI Studio">' +
             '<button type="button" class="ia-btn-eye-compact" id="iaBtnEye" title="Afficher/Masquer la clé">👁</button>' +
+            /* Le modèle local : son adresse et son nom. Rien de secret, donc
+               du texte en clair — mais la même vie que la clé. */
+            '<input type="text" id="iaUrlInput" class="ia-key-input-compact" hidden autocomplete="off" spellcheck="false" value="' + echapperHtml(_local.url) + '" placeholder="http://localhost:11434" aria-label="Adresse du serveur local compatible OpenAI">' +
+            '<input type="text" id="iaModeleLocalInput" class="ia-key-input-compact" hidden autocomplete="off" spellcheck="false" placeholder="modèle (llama3.1…)" aria-label="Nom du modèle local">' +
             '<button type="submit" class="ia-btn-ok-compact" id="iaBtnSubmitKey">Valider</button>' +
           '</form>' +
           '<div class="ia-connect-hint">' +
-            '<span>🔒 Mémoire vive seule · Oubliée à la fermeture</span>' +
-            '<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Clé gratuite ↗</a>' +
+            '<span id="iaConnectHintTxt">🔒 Mémoire vive seule · Oubliée à la fermeture</span>' +
+            '<a id="iaLienCle" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Clé gratuite ↗</a>' +
           '</div>' +
           /* SANS CLÉ, LE PANNEAU N'EST PAS INUTILE, et il faut le dire ici :
              c'est le seul endroit où quelqu'un qui n'en a pas regardera. */
@@ -2424,6 +2561,10 @@ grammaire(),
       btnEye.textContent = estPswd ? "🙈" : "👁";
     });
 
+    document.getElementById("iaFournisseur").addEventListener("change", function(){
+      montrerFournisseur(this.value);
+    });
+
     document.getElementById("iaKeyForm").addEventListener("submit", function(e){
       e.preventDefault();
       validerCle();
@@ -2483,10 +2624,61 @@ grammaire(),
     const i = document.getElementById("iaKeyInput");
     if(c) c.hidden = false;
     if(s) s.hidden = true;
-    if(i){ i.value = ""; setTimeout(() => i.focus(), 50); }
+    if(i) i.value = "";
+    const f = document.getElementById("iaFournisseur");
+    montrerFournisseur(f ? f.value : "google");
+  }
+
+  /* Le formulaire de connexion selon le fournisseur : la clé pour Google,
+     l'adresse et le nom du modèle pour un serveur local. */
+  function montrerFournisseur(f){
+    const local = (f === "local");
+    ["iaLockIco", "iaKeyInput", "iaBtnEye", "iaLienCle"].forEach(function(id){
+      const el = document.getElementById(id);
+      if(el) el.hidden = local;
+    });
+    ["iaUrlInput", "iaModeleLocalInput"].forEach(function(id){
+      const el = document.getElementById(id);
+      if(el) el.hidden = !local;
+    });
+    const h = document.getElementById("iaConnectHintTxt");
+    if(h) h.textContent = local
+      ? "🖥 Ollama, LM Studio… (/v1/chat/completions) · Oublié à la fermeture"
+      : "🔒 Mémoire vive seule · Oubliée à la fermeture";
+    const cible = document.getElementById(local ? "iaModeleLocalInput" : "iaKeyInput");
+    if(cible) setTimeout(() => cible.focus(), 50);
+  }
+
+  function validerLocal(){
+    const iu = document.getElementById("iaUrlInput");
+    const im = document.getElementById("iaModeleLocalInput");
+    const url = (iu ? iu.value : "").trim();
+    const modele = (im ? im.value : "").trim();
+    const faute = !/^https?:\/\/[^\s]+$/i.test(url) ? iu : (!modele ? im : null);
+    if(faute){
+      faute.focus();
+      faute.style.borderColor = "var(--red, #e8443a)";
+      setTimeout(() => faute.style.borderColor = "", 1500);
+      return false;
+    }
+    _fournisseur = "local";
+    _local = {url:url, modele:modele};
+    try{ sessionStorage.setItem(IA_SESSION_LOCAL, JSON.stringify(_local)); }catch(_){}
+    return true;
   }
 
   function validerCle(){
+    const f = document.getElementById("iaFournisseur");
+    if(f && f.value === "local"){
+      if(!validerLocal()) return;
+      basculerVersChat();
+      if(_questionEnAttente){
+        const inputChat = document.getElementById("iaInput");
+        if(inputChat){ inputChat.value = _questionEnAttente; _questionEnAttente = ""; }
+        envoyerMessage();
+      }
+      return;
+    }
     const input = document.getElementById("iaKeyInput");
     const val = (input ? input.value : "").trim();
     if(!val){
@@ -2498,6 +2690,7 @@ grammaire(),
       return;
     }
     _cleApi = val;
+    _fournisseur = "google";
     try{ sessionStorage.setItem(IA_SESSION_CLE, val); }catch(_){}
     input.value = "";                        // vider le champ tout de suite
     basculerVersChat();
@@ -2517,6 +2710,16 @@ grammaire(),
     const s = document.getElementById("iaPanelStatus");
     if(c) c.hidden = true;
     if(s) s.hidden = false;
+
+    /* En local, le sélecteur de modèles Google n'a rien à dire : le nom du
+       modèle est celui qu'on a tapé, et il s'affiche au pied du panneau. */
+    const local = (_fournisseur === "local");
+    const sel = document.getElementById("iaModelSelect");
+    if(sel) sel.hidden = local;
+    const lbl = document.getElementById("iaFooterModelLabel");
+    if(lbl) lbl.textContent = nomModele() + " · Session active";
+    const bp = document.getElementById("iaBtnPurgeKey");
+    if(bp) bp.textContent = local ? "Déconnecter" : "Oublier clé";
 
     const ctx = document.getElementById("iaContextText");
     if(ctx){
@@ -2546,7 +2749,14 @@ grammaire(),
      facturer quelqu'un d'autre. */
   function iaPurgerCle(){
     _cleApi = "";
+    /* Le modèle local part avec : même vie que la clé. L'adresse tapée reste
+       dans son champ — elle n'a rien de secret, et la retaper à chaque
+       ouverture ne protégerait rien. */
+    _fournisseur = "google";
     try{ sessionStorage.removeItem(IA_SESSION_CLE); }catch(_){}
+    try{ sessionStorage.removeItem(IA_SESSION_LOCAL); }catch(_){}
+    const fs = document.getElementById("iaFournisseur");
+    if(fs) fs.value = "google";
     _historique = [];
     _actions.clear();
     _questionEnAttente = "";
@@ -2617,7 +2827,10 @@ grammaire(),
   function nettoyerReponse(texte){
     if(!texte) return "";
     let s = texte.trim();
-    s = s.replace(/<(?:thought|thinking)>[\s\S]*?<\/(?:thought|thinking)>/gi, "").trim();
+    /* « think » : la balise des modèles de raisonnement servis en local
+       (DeepSeek-R1, Qwen3 sous Ollama), qui rendent leurs pensées dans le
+       texte même. */
+    s = s.replace(/<(?:thought|thinking|think)>[\s\S]*?<\/(?:thought|thinking|think)>/gi, "").trim();
 
     /* Les blocs de code sont protégés AVANT le décollage des phrases : une
        carte d'action est du JSON, et y insérer un saut de ligne au milieu
@@ -2652,7 +2865,66 @@ grammaire(),
   }
 
   /* ==========================================================================
-     Envoi à Google AI Studio
+     La requête, selon le fournisseur
+     --------------------------------------------------------------------------
+     UNE FONCTION PURE, et c'est pour le banc : elle rend l'URL et ce que
+     `fetch` reçoit, sans rien envoyer. Ce qui doit y être prouvé tient en
+     trois lignes — la clé Google dans l'en-tête `x-goog-api-key` et JAMAIS
+     dans l'URL (une URL finit dans les journaux et les proxys), aucune clé
+     vers un serveur local, et le même historique sous les deux formes.
+
+     `p` : {cle, url, modele, systeme, contents, genConfig}. `contents` est
+     l'historique à la forme Google ({role:"user"|"model", parts:[{text}]}) :
+     c'est celle de la conversation, et le corps OpenAI s'en déduit. */
+  function requeteIa(fournisseur, p){
+    if(fournisseur === "local"){
+      const base = String(p.url || "").trim().replace(/\/+$/, "");
+      if(!/^https?:\/\/[^\s]+$/i.test(base))
+        throw new Error("L'adresse du modèle local doit commencer par http:// "+
+                        "ou https://.");
+      /* « http://localhost:11434 » (Ollama), « …:1234/v1 » (LM Studio) ou
+         l'adresse complète : les trois désignent la même route. */
+      const url = /\/chat\/completions$/.test(base) ? base
+                : base + (/\/v1$/.test(base) ? "" : "/v1") + "/chat/completions";
+      const messages = [];
+      if(p.systeme) messages.push({role:"system", content:p.systeme});
+      (p.contents || []).forEach(function(m){
+        messages.push({role:(m.role === "model") ? "assistant" : "user",
+                       content:(m.parts && m.parts[0] && m.parts[0].text) || ""});
+      });
+      return {url:url, init:{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({model:p.modele, messages:messages,
+                             temperature:0.2, stream:false})}};
+    }
+    const corps = {contents:p.contents, generationConfig:p.genConfig};
+    if(p.systeme) corps.systemInstruction = {parts:[{text:p.systeme}]};
+    return {url:IA_URL + encodeURIComponent(p.modele) + ":generateContent",
+            init:{
+              method:"POST",
+              // la clé en en-tête, pas dans l'URL : une URL finit dans les journaux et les proxys
+              headers:{"Content-Type":"application/json", "x-goog-api-key":p.cle},
+              body:JSON.stringify(corps)}};
+  }
+
+  /* Le texte de la réponse, sans les pensées du modèle quand il les rend à
+     part. */
+  function texteReponse(fournisseur, d){
+    if(fournisseur === "local"){
+      const c = d && d.choices && d.choices[0];
+      return (c && c.message && typeof c.message.content === "string")
+               ? c.message.content : "";
+    }
+    const c = d && d.candidates && d.candidates[0];
+    if(!(c && c.content && Array.isArray(c.content.parts))) return "";
+    let parts = c.content.parts.filter(q => !q.thought);
+    if(!parts.length) parts = c.content.parts;
+    return parts.map(q => q.text || "").join("");
+  }
+
+  /* ==========================================================================
+     Envoi au modèle — Google AI Studio ou serveur local
      ========================================================================== */
   async function envoyerMessage(){
     if(_enAttente) return;
@@ -2687,8 +2959,8 @@ grammaire(),
       return;
     }
 
-    /* 4. Tout le reste demande la clé. */
-    if(!_cleApi){
+    /* 4. Tout le reste demande la clé — ou un modèle local. */
+    if(!_cleApi && _fournisseur !== "local"){
       _questionEnAttente = q;
       afficherEcranCle();
       const ik = document.getElementById("iaKeyInput");
@@ -2753,56 +3025,46 @@ grammaire(),
       genConfig.thinkingConfig = { thinkingLevel: thinkingLevel };
     }
 
-    const corps = {
-      contents: contents,
-      systemInstruction: { parts: [{ text: promptSysteme() }] },
-      generationConfig: genConfig
-    };
-
-    const appelerApi = async (body) => {
-      return await fetch(IA_URL + encodeURIComponent(endpointModel) +
-                         ":generateContent", {
-        method: "POST",
-        // la clé en en-tête, pas dans l'URL : une URL finit dans les journaux et les proxys
-        headers: { "Content-Type": "application/json", "x-goog-api-key": _cleApi },
-        body: JSON.stringify(body)
-      });
+    const local = (_fournisseur === "local");
+    const params = {cle:_cleApi, url:_local.url,
+                    modele:local ? _local.modele : endpointModel,
+                    systeme:promptSysteme(), contents:contents,
+                    genConfig:genConfig};
+    const appelerApi = async (p) => {
+      const r = requeteIa(_fournisseur, p);
+      return await fetch(r.url, r.init);
     };
 
     try{
-      let rep = await appelerApi(corps);
+      let rep = await appelerApi(params);
 
       /* Retry automatique en cas d'erreur 500 / 503 (transitoire côté Google) */
       if(rep.status >= 500){
         await new Promise(r => setTimeout(r, 1500));
-        rep = await appelerApi(corps);
+        rep = await appelerApi(params);
       }
 
-      /* Repli si le modèle refuse `systemInstruction` (HTTP 400). */
-      if(rep.status === 400 && corps.systemInstruction){
+      /* Repli si le modèle refuse `systemInstruction` (HTTP 400). Propre à
+         Google : un serveur compatible OpenAI prend la consigne comme un
+         message « system », et n'a rien à refuser. */
+      if(!local && rep.status === 400){
         const alt = JSON.parse(JSON.stringify(contents));
         if(alt.length && alt[0].role === "user")
           alt[0].parts[0].text = promptSysteme() + "\n\n" + alt[0].parts[0].text;
-        rep = await appelerApi({
-          contents: alt,
-          generationConfig: corps.generationConfig
-        });
+        rep = await appelerApi(Object.assign({}, params,
+                                             {systeme:"", contents:alt}));
       }
 
       if(!rep.ok){
         let err = {};
         try{ err = await rep.json(); }catch(_){}
-        throw new Error((err.error && err.error.message) || ("Erreur HTTP " + rep.status));
+        /* Google et OpenAI rendent {error:{message}}, Ollama natif {error:"…"}. */
+        const em = err.error && (typeof err.error === "string"
+                                   ? err.error : err.error.message);
+        throw new Error(em || ("Erreur HTTP " + rep.status));
       }
 
-      const donnees = await rep.json();
-      let texte = "";
-      const c = donnees.candidates && donnees.candidates[0];
-      if(c && c.content && Array.isArray(c.content.parts)){
-        let parts = c.content.parts.filter(p => !p.thought);
-        if(!parts.length) parts = c.content.parts;
-        texte = parts.map(p => p.text || "").join("");
-      }
+      let texte = texteReponse(_fournisseur, await rep.json());
       if(!texte) texte = "*(aucune réponse textuelle reçue du modèle)*";
 
       _historique.push({role:"model", modele:nomModele(),
@@ -2814,11 +3076,23 @@ grammaire(),
       if(_historique.length && _historique[_historique.length - 1].role === "user")
         _historique.pop();
       const m = String(e.message || e);
-      console.error("Appel Google AI Studio :", e);
-      afficherErreur(
-        (m.indexOf("API_KEY_INVALID") >= 0 || m.indexOf("API key not valid") >= 0)
+      console.error(local ? "Appel du modèle local :" : "Appel Google AI Studio :", e);
+      /* « Failed to fetch » ne dit pas pourquoi, et en local il y a deux
+         causes, pas une : le serveur n'est pas lancé, ou il refuse l'ORIGINE
+         de la page. Ollama n'accepte d'emblée que localhost et 127.0.0.1 — une
+         page ouverte par l'adresse réseau du poste (--reseau) est refusée tant
+         que OLLAMA_ORIGINS ne la nomme pas. */
+      const pasDeReponse = m.indexOf("Failed to fetch") >= 0 ||
+                           m.indexOf("NetworkError") >= 0;
+      afficherErreur(local
+        ? (pasDeReponse
+            ? "Pas de réponse du modèle local à " + _local.url + " : est-il "+
+              "lancé ? Ollama refuse aussi une page d'une autre origine que "+
+              "localhost tant que OLLAMA_ORIGINS ne la nomme pas."
+            : m)
+        : (m.indexOf("API_KEY_INVALID") >= 0 || m.indexOf("API key not valid") >= 0)
           ? "Clé API Google AI Studio invalide. Vérifiez-la, ou générez-en une autre."
-          : ((m.indexOf("Failed to fetch") >= 0)
+          : (pasDeReponse
               ? "Pas de réponse de Google AI Studio : ce poste a-t-il un accès "+
                 "réseau ? « verifier » et « help », eux, marchent sans."
               : m));
@@ -2847,6 +3121,16 @@ grammaire(),
     }
     const btn = document.getElementById("bIaAssistant");
     if(btn) btn.classList.add("on");
+
+    /* Un modèle local choisi dans cet onglet, et que la fermeture n'a pas
+       encore oublié (un rechargement de page, par exemple) : on le reprend. */
+    if(!_cleApi && _fournisseur !== "local"){
+      try{
+        const l = JSON.parse(sessionStorage.getItem(IA_SESSION_LOCAL) || "null");
+        if(l && l.url && l.modele){ _fournisseur = "local"; _local = l; }
+      }catch(_){}
+    }
+    if(_fournisseur === "local"){ basculerVersChat(); return; }
 
     if(!_cleApi){
       try{
@@ -2902,6 +3186,10 @@ grammaire(),
      serait une capacité que le modèle n'utiliserait jamais, et personne ne
      s'en apercevrait — elle ne casse rien, elle ne sert simplement à rien. */
   window.iaPromptSysteme = promptSysteme;
+  /* LA REQUÊTE ET SA LECTURE, sans réseau : le banc vérifie que la clé Google
+     reste dans l'en-tête et qu'aucune ne part vers un serveur local. */
+  window.iaRequete = requeteIa;
+  window.iaTexteReponse = texteReponse;
   window.iaFormaterMarkdown = formaterMarkdown;
   window.IA_CHAMPS = IA_CHAMPS;
 
@@ -2932,7 +3220,7 @@ grammaire(),
         if(btn && typeof wsPlaceOf === "function"){
           const ouvert = wsPlaceOf("ia") !== "hidden";
           btn.classList.toggle("on", ouvert);
-          if(!ouvert && _cleApi) iaPurgerCle();
+          if(!ouvert && (_cleApi || _fournisseur === "local")) iaPurgerCle();
         }
         return res;
       };
