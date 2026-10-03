@@ -648,7 +648,17 @@ const CON_MOTIF_IFA={
        retient que les clés qui ont un champ, les trois autres (λ₀, développé
        visé, pas de couture) ne servent qu'au tracé et à la fiche. */
     const cl=conIfaClassique(c);
-    return Object.assign({}, cl, {masseTop:1, viasCouture:1});
+    /* LA CORRECTION MESURÉE (A-FAIRE.md § 1, 03/10/2026). Une fois
+       l'alimentation sortie du court-circuit, l'IFA aux proportions
+       classiques résonnait à 2,21 GHz pour 2,45 visés, sous −10 dB. L'écart
+       court-circuit → alimentation déplace la résonance autant que le bras :
+       à 1,8 fois λ₀/40 et le bras à 1,018 fois le calcul, la bande à −10 dB
+       couvre 2,405–2,575 GHz.
+       ponytail: UN SEUL cas mesuré (2,45 GHz, FR-4) ; l'adaptation reste
+       modeste (Z ≈ 33 + 19j), un croisement plus fin la gagnerait. */
+    return Object.assign({}, cl, {La:+(cl.La*1.018).toFixed(3),
+                                  d:+(cl.d*1.8).toFixed(3),
+                                  masseTop:1, viasCouture:1});
   },
   tracer:function(c,p){
     const cl=conIfaClassique(c);
@@ -692,7 +702,10 @@ const CON_MOTIF_IFA={
        fichier : la division se fait TELLE QUELLE. Le facteur 1e-3 qui traînait
        ici prenait le développé pour des mètres et rendait une résonance mille
        fois trop haute — 2 320 GHz au lieu de 2,32. */
-    const festim=CON_C0/(4*dev*Math.sqrt(CON_IFA_EEFF));
+    /* La résonance annoncée se lit sur le développé RAMENÉ de la correction
+       mesurée du bras (× 1,018, voir `defauts`) : avec l'écart d porté à
+       1,8 fois λ₀/40, c'est ce développé-là qui résonne à la cible. */
+    const festim=CON_C0/(4*(dev-La*(1-1/1.018))*Math.sqrt(CON_IFA_EEFF));
 
     const formes=[
       /* Plan de masse inférieur (continu sous toute la zone de masse) */

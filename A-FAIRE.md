@@ -288,12 +288,31 @@ suit est ce qui reste ouvert.
 
 Faits le 02/10/2026, et décrits au README : la **relecture d'un balayage terminé** (l'optimum est-il au bord de la plage, cote par cote), un **modèle local** compatible OpenAI à côté de Google, et la règle qui relève **une couche déclarée masse sans cuivre** (le dipôle imprimé en géométrie libre).
 
-**1. Les règles locales ne connaissent qu'un motif sur six.** Deux d'entre
-elles sont écrites pour le patch : le pas de maillage face à la largeur de
-ligne, et l'encastrement `y₀`. Le monopôle, l'IFA, le MIFA et le dipôle n'ont
-rien d'équivalent — or chacun a sa cote la moins sûre, et aucune n'est
-chiffrée comme celle du patch l'est. *Le travail* : une mesure par motif, comme
-le croisement `g` × `y₀` en a fait une. C'est du temps de calcul, pas du code.
+**1. Les quatre autres motifs — mesurés le 03/10/2026, à 2,45 GHz sur FR-4
+1,53 mm, un cas chacun.** Un croisement « cote de résonance × cote
+d'adaptation » par motif, prolongé quand l'optimum sortait, puis une
+confirmation. Ce qu'il en est sorti :
+
+| motif | ce qui n'allait pas | ce qui est fait | confirmé |
+|---|---|---|---|
+| **dipôle** | bras trop courts : résonance à 2,85 GHz | bras × 1,165 | 2,461 GHz · −34,3 dB · 48 Ω |
+| **monopôle** | brin et masse trop courts : au-dessus de 2,82 GHz ; Lm + 0,43·Lg ≈ cste | brin × 1,29 (masse à 0,8 × brin) | 2,435 GHz · −16,3 dB — réactance de +16j qui reste |
+| **IFA** | **l'alimentation était en court-circuit** : le bout arrondi de la ligne mordait dans la masse du dessus, le décroché s'arrêtant 0,3 mm sous le port. Aucune résonance, 25 % de rendement | décroché descendu sous le bout de la ligne ; puis bras × 1,018 et écart court-circuit → alimentation × 1,8 | 2,48 GHz · bande −10 dB 2,405–2,575 GHz · 92 % de rendement — adaptation modeste (33 + 19j) |
+| **MIFA** | **l'alimentation était en court-circuit** : le brin, synthétisé à 50 Ω (3,1 mm), recouvrait le via de court-circuit à 1,6 mm | brin à la largeur du bras, écart borné | rayonne de nouveau (98 %), mais **résonne au-dessus de 3,5 GHz** |
+
+Les deux courts-circuits sont gardés par le banc (`banc-interface.js`, aux
+trois fréquences). Les facteurs du dipôle, du monopôle et de l'IFA sont **des
+cas uniques** : chacun le dit dans son code (`ponytail:`), et d'autres
+fréquences ou substrats diront s'ils tiennent.
+
+**Reste ouvert — le MIFA.** Son tracé garde le développé égal au quart d'onde
+en raccourcissant les dents quand l'empreinte grandit ; allonger l'empreinte
+le rapproche de 2,45 GHz (2,79 GHz à 14 mm, 2,415 GHz à 17 mm) mais **efface
+le méandre** — c'est un IFA droit qu'on obtient, et le motif perd sa raison
+d'être. La bonne mesure est l'autre : à empreinte fixe, allonger le DÉVELOPPÉ
+visé (des dents plus hautes), et en tirer le facteur qui manque au couplage
+entre dents. Le monopôle, lui, gagnerait un croisement de la largeur du brin
+pour sa réactance.
 
 Faits le 03/10/2026 : le **contexte porte un balayage terminé en tableau**
 (une ligne par point, S₁₁ à la cible compris) ; la **copie de `css/ia.css`
@@ -324,7 +343,7 @@ Trois réponses possibles, et deux d'entre elles ferment le sujet.
 
 | limite | où |
 |---|---|
-| **Les motifs d'antenne sont analytiques**, pas optimisés : 2 à 5 % d'écart sur la résonance, davantage sur substrat épais ou εᵣ élevé. | La limite reste — c'est un point de départ que la simulation corrige, et c'est ce que le balayage rattrape. Mais le patch mesuré tombe à 5,5 %, et son encastrement est franchement faux : § 1. |
+| **Les motifs d'antenne sont analytiques**, pas optimisés : 2 à 5 % d'écart sur la résonance, davantage sur substrat épais ou εᵣ élevé. | La limite reste — c'est un point de départ que la simulation corrige, et c'est ce que le balayage rattrape. Le patch est désormais corrigé par mesure (quatre cas), le dipôle, le monopôle et l'IFA sur un cas chacun ; le MIFA reste à mesurer : § 1. |
 | **Un ruban n'est pas désembedé par le solveur** : l'impédance est mesurée au bord de la carte. | Elle est maintenant **ramenée au pied de l'antenne par le calcul**, quand la ligne est déclarée — avec ses deux réserves. Ce n'est PAS une cause de désadaptation, c'est démontré. Le désembedage par le solveur reste au § 1, « `AddMSLPort` ». |
 
 ### Ce qui est une limite du monde, pas de l'outil

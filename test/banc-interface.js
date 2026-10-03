@@ -425,8 +425,10 @@ verifie("le bras dessine de l'IFA mesure sc + ha + La - wb/2",
    choisie pour boucler le compte, et si la formule de `conIfaClassique` et
    celle de `tracer` cessaient de s'accorder, c'est ici que ca se verrait. */
 const quartIfa=CON_C0/(4*cx.f*Math.sqrt(CON_IFA_EEFF));
-verifie("le developpe de l'IFA vaut le quart d'onde du motif",
-        Math.abs(mesure(tIfa)-quartIfa)<0.02,
+/* SAUF LA CORRECTION MESUREE DU BRAS (x 1,018, octobre 2026) : le
+   developpe dessine depasse le quart d'onde de ce que le bras a gagne. */
+verifie("le developpe de l'IFA vaut le quart d'onde du motif, plus la correction du bras",
+        Math.abs(mesure(tIfa)-pIfa.La*(1-1/1.018)-quartIfa)<0.02,
         mesure(tIfa).toFixed(4)+" pour "+quartIfa.toFixed(4)+" mm");
 /* La resonance annoncee par la fiche doit donc retomber sur la cible : c'est
    la meme egalite, lue du cote de la frequence. */
