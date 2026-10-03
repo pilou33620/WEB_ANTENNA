@@ -318,10 +318,17 @@ const pPatch=conGabaritDefauts(CON_MOTIF_PATCH,cx);
 const eeP=conEeff(cx.er,cx.h,pPatch.W);
 const demi=CON_C0/(2*cx.f*Math.sqrt(eeP));
 const raccourci=(demi-pPatch.L)/demi;
-verifie("la longueur du patch est raccourcie de 2 a 5 % du demi-onde",
-        raccourci>0.015&&raccourci<0.06,
+/* PUIS LA CORRECTION MESUREE (octobre 2026) : 1 - 0,466.racine(h/lambda0),
+   soit -5,2 % sur 1,53 mm de FR-4 a 2,45 GHz. Le tout fait 8 a 11 %. */
+verifie("la longueur du patch est raccourcie des bords, puis de la correction mesuree",
+        raccourci>0.08&&raccourci<0.11&&
+        Math.abs(patchCorrLongueur(cx.h,cx.f)-(1-0.466*Math.sqrt(cx.h/(CON_C0/cx.f))))<1e-12,
         (100*raccourci).toFixed(2)+" % (L="+pPatch.L.toFixed(3)+
         " pour "+demi.toFixed(3)+" mm)");
+verifie("la resistance de bord suit les deux strates mesurees, et s'y borne",
+        Math.abs(patchCorrRbord(0.02)-0.173)<1e-9&&Math.abs(patchCorrRbord(0.0037)-0.722)<1e-9&&
+        patchCorrRbord(0.0009)===patchCorrRbord(0.0037)&&patchCorrRbord(0.05)===patchCorrRbord(0.02)&&
+        patchCorrRbord(0.012)<0.722&&patchCorrRbord(0.012)>0.173);
 verifie("la largeur du patch tombe entre le demi et le plein demi-onde libre",
         pPatch.W>demi&&pPatch.W<CON_C0/(2*cx.f),
         pPatch.W.toFixed(3)+" mm");
@@ -1830,8 +1837,8 @@ verifie("un indice de marqueur hors borne est securise a null",
 // 20. L'antenne exemple et la vue du maillage FDTD
 charger("26-exemple.js");
 charger("15-overlay2d.js");
-verifie("l'exemple patch porte des cotes adaptees",
-        typeof EX==="object"&&EX.cotes&&EX.cotes.L===27.5&&EX.cotes.y0===8.1&&EX.cotes.g===1.49);
+verifie("l'exemple patch pose le gabarit corrige, sans cote reprise a la main",
+        typeof EX==="object"&&EX.cotes===null);
 /* L'EXEMPLE IFA PORTE SES COTES RECALÉES EN 3D FDTD (openEMS) :
    - La = 24.35 mm (corrige le décalage de +9,85 % vers 2,45 GHz)
    - d = 3.80 mm (remonte l'impédance vers 50 Ω au lieu de 33 Ω)

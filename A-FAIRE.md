@@ -86,11 +86,9 @@ changeait rien.
    tout le tableau : `L` doit raccourcir, et cela déplacera l'adaptation.
    Les deux cotes ne se lisent pas l'une sans l'autre — c'est le cas d'école
    du croisement.
-3. **Ne pas corriger la formule de `y₀` sur ce seul relevé.** Un facteur 3,5
-   mesuré sur un substrat, une fréquence et une largeur de patch ne fait pas
-   une loi ; et un motif reste un point de départ que la simulation corrige,
-   ce qui est exactement ce qui vient de se passer. Ce qui vaut, en revanche,
-   c'est de le **dire** dans la fiche du motif — c'est fait.
+3. ~~**Ne pas corriger la formule de `y₀` sur ce seul relevé.**~~ — trois
+   autres cas ont été mesurés le 03/10/2026, et le gabarit est **corrigé**
+   (voir « La correction du gabarit », plus bas).
 
 Le croisement complet est dans `croisement-g-y0.json`, à la racine.
 
@@ -185,6 +183,47 @@ d'étonnant, la ligne fait tourner. C'est bien à ce plan-là que se lit ce qu'i
 reste à corriger **sur l'antenne** — un reste inductif de 15 Ω, qu'un
 encastrement un peu plus court compenserait.
 
+### La correction du gabarit — quatre cas mesurés, une loi pour L, deux strates pour y₀
+
+Le 02 et le 03/10/2026, le même réglage — croisement `L` × `y₀` à `g` = 0,48 ·
+largeur de ligne, centré sur ce que le 2,45 GHz avait appris, prolongé quand
+l'optimum sortait, puis **une simulation de confirmation** du point
+interpolé — sur trois autres cas. Données dans `croisement-patch-2026-10.json`.
+
+| cas | L calcul → réglé | y₀ calcul → réglé | confirmation |
+|---|---|---|---|
+| FR-4 1,6 mm, **868 MHz** | 83,09 → 80,54 mm | 32,82 → 15,0 mm | 0,8673 GHz · **−61,7 dB** · 49,9 Ω · bande 859,5–875,2 MHz (toute la bande 863–870) · gain réalisé −4,0 dBi, rendement 13 % |
+| FR-4 1,6 mm, 2,45 GHz | 29,14 → 27,55 mm | 11,51 → 6,6 mm | 2,4500 GHz · −39,9 dB (étape 2, plus haut) |
+| FR-4 1,6 mm, **5,8 GHz** | 11,88 → 10,92 mm | 4,69 → 2,34 mm | 5,7739 GHz · **−35,6 dB** · 51,6 Ω · bande 5,630–5,909 GHz (toute la bande 5,725–5,875) · 4,6 dBi, 66 % |
+| **RO4350B 0,762 mm**, 2,45 GHz | 31,84 → 30,74 mm | 12,35 → 11,3 mm | balayage de `y₀` à `L` réglé : −34,3 dB à 11,4 mm, 2,448 GHz |
+
+**La longueur suit une loi, et une seule.** Le raccourcissement que la mesure
+ajoute au modèle de cavité vaut 0,463 · √(h/λ₀) à 868 MHz, 0,477 à 2,45 GHz,
+0,481 à 5,8 GHz et 0,444 sur RO4350B : un coefficient de 0,466 tient les
+quatre cas à **0,2 % de fréquence** près. Le gabarit pose donc
+`L = L_cavité · (1 − 0,466·√(h/λ₀))` (`patchCorrLongueur`, 22-antennes.js).
+
+**La résistance de bord dépend du stratifié, pas de la fréquence.** Ramenée de
+l'encastrement réglé par cos²(π·y₀/L), elle vaut 0,151, 0,196 et 0,173 fois la
+conductance de fente sur FR-4 aux trois fréquences — un même 0,17 à ±13 % —,
+et **0,72** sur RO4350B. L'écart suit les pertes (tan δ 0,02 contre 0,0037),
+dans le sens attendu : plus de pertes, moins de résistance au bord,
+encastrement moins profond. Le gabarit interpole en tan δ entre ces deux
+strates et s'y borne (`patchCorrRbord`) ; **c'est une hypothèse à deux
+points**, et l'assistant le dit pour tout stratifié qui n'est ni l'un ni
+l'autre, en proposant de balayer `y₀`. *À mesurer* : le FR-4 haute fréquence
+(tan δ 0,012), qui dira si la droite tient — et un stratifié épais à faibles
+pertes (RO4003C 1,524 mm), qui séparera les pertes de l'épaisseur.
+
+**Les encoches** passent à 0,48 fois la largeur de ligne (1,25 à 2 mm pour une
+ligne de 3,1 mm gardaient −30 dB). **L'exemple patch** ne reprend plus aucune
+cote à la main : il pose le gabarit corrigé.
+
+**Une limite du monde, pas de l'outil** : à 868 MHz, 1,6 mm de FR-4 ne fait
+que 0,5 % de λ₀, et le patch n'y rayonne que 13 % de ce qu'il reçoit
+(−4 dBi). Il s'adapte parfaitement — il chauffe. Un patch sub-GHz demande un
+substrat épais à faibles pertes, ou une autre antenne.
+
 ### Le port microruban désembedé (`AddMSLPort`) — le prix, désormais chiffré
 
 **L'essentiel de ce qu'on en attendait est fait autrement**, et sans lui : la
@@ -249,26 +288,22 @@ rien d'équivalent — or chacun a sa cote la moins sûre, et aucune n'est
 chiffrée comme celle du patch l'est. *Le travail* : une mesure par motif, comme
 le croisement `g` × `y₀` en a fait une. C'est du temps de calcul, pas du code.
 
-**2. Le contexte est un texte, pas des données.** Il se lit très bien et tient
-en soixante lignes, mais un modèle qui devrait comparer neuf points d'un
-croisement les recevrait en prose. Si cela devient utile, c'est un tableau
-qu'il faudra joindre — pas une phrase de plus.
+Faits le 03/10/2026 : le **contexte porte un balayage terminé en tableau**
+(une ligne par point, S₁₁ à la cible compris) ; la **copie de `css/ia.css`
+est surveillée** — la CI de WEB_SUITE vérifie que ses 785 lignes communes
+restent un début de `commun/ia-assistant.css` de WEB_CAO, un dossier partagé
+étant exclu tant que chaque outil doit tourner seul ; et **des formes ajoutées
+par-dessus un motif ne retirent plus ses cotes du balayage** — chaque point
+repose le motif et recolle les ajouts aux mêmes coordonnées.
 
-**3. `css/ia.css` est une copie, et une copie diverge.** La feuille vient de
-`commun/ia-assistant.css` de WEB_CAO, et ce qui est propre à cet outil-ci est
-ajouté **en fin de fichier**, jamais au milieu — pour qu'une version suivante
-de WEB_CAO se reprenne par un `cp` et non par une fusion. Le jour où les deux
-dépôts auront trois feuilles communes, ce sera un dossier partagé qu'il faudra,
-pas une troisième copie.
-
-**4. Une géométrie libre ne sait rien d'elle-même.** Pas de fiche, pas de
-résonance estimée, pas de cote balayable : `conGabaritConforme()` rend faux dès
-qu'une forme est ajoutée au dessin, et le balayage de cote cesse d'être proposé
-— la carte le dit dans un avis, mais le dire n'est pas le réparer. Balayer une
-cote d'un dessin libre demanderait de savoir *laquelle* des coordonnées est une
-cote, c'est-à-dire de reconstruire ce qu'un gabarit sait par construction. Rien
-à faire de simple ici ; c'est l'argument qui fait préférer un motif dès qu'il
-en existe un.
+**2. Une géométrie entièrement libre ne sait toujours rien d'elle-même.** Pas
+de fiche, pas de résonance estimée. Ses formes se balayent (largeur d'un
+rectangle, rayon d'un disque…), mais pas « la longueur de l'antenne » : il
+faudrait savoir *laquelle* des coordonnées est une cote, c'est-à-dire
+reconstruire ce qu'un gabarit sait par construction. Rien à faire de simple ;
+c'est l'argument qui fait préférer un motif dès qu'il en existe un — et,
+depuis qu'on peut lui ajouter des formes sans perdre ses cotes, de partir d'un
+motif même quand l'antenne voulue s'en écarte.
 
 ---
 

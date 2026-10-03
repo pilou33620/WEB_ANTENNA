@@ -85,15 +85,12 @@ const EX={
      s'est arrêté de lui-même à 17 050 pas, énergie à −41,2 dB,
      S₁₁ = −15,3 dB à 2,465 GHz. */
   nmax:0,
-  /* Cotes pré-adaptées issues de l'analyse 3D FDTD (A-FAIRE.md & croisement-g-y0.json) :
-     - L = 27.50 mm (corrige l'allongement effectif pour centrer la résonance à 2,45 GHz)
-     - y0 = 8.10 mm (encastrement optimal évitant la réactance capacitive excessive de la formule théorique)
-     - g = 1.49 mm (fentes resserrées pour minimiser la capacité parasite) */
-  cotes:{
-    L:27.50,
-    y0:8.10,
-    g:1.49
-  },
+  /* AUCUNE COTE REPRISE À LA MAIN : depuis octobre 2026, le gabarit corrige
+     lui-même sa longueur et son encastrement par la mesure (voir
+     `patchCorrLongueur` et `patchCorrRbord`, 22-antennes.js). Les cotes
+     recalées à la main de la version précédente (27,5 / 8,1 / 1,49 mm)
+     figeaient un réglage que le calcul fait maintenant mieux. */
+  cotes:null,
   confirme:"L'exemple remplace le dessin en cours par un patch 2,45 GHz. "+
            "Continuer ?",
   /* Le mot de la fin : ce qui a été posé, et ce qu'on attend en retour. Il est
@@ -101,8 +98,9 @@ const EX={
      lisent côte à côte — c'est là qu'on voit que l'un promet un chiffre et
      l'autre une silhouette. */
   mot:function(){
-    return "Exemple posé : patch 2,45 GHz adapté sur FR-4 1,6 mm "+
-      "(L=27,5 mm, y₀=8,1 mm, g=1,5 mm), port au bout de la ligne, "+
+    const p=CON.gabaritP||{}, c=v=>String(+(+v).toFixed(2)).replace(".",",");
+    return "Exemple posé : patch 2,45 GHz sur FR-4 1,6 mm, cotes du gabarit "+
+      "corrigé (L="+c(p.L)+" mm, y₀="+c(p.y0)+" mm, g="+c(p.g)+" mm), port au bout de la ligne, "+
       "bande 2,08–2,82 GHz, arrêt à −40 dB. Pressez ▶ Lancer pour vérifier "+
       "toute la chaîne (S₁₁ ≤ −15 dB).";
   }

@@ -212,6 +212,30 @@ function conSymbole(ch){
    DANS le patch, à la profondeur où l'impédance vaut 50 Ω — elle varie en
    cos²(π·y/L), ce qui est la seule chose qu'il faut retenir.
    ========================================================================== */
+/* LES DEUX CORRECTIONS MESURÉES DU PATCH (A-FAIRE.md § 1, octobre 2026).
+   Quatre cas réglés par croisement puis confirmés en simulation — FR-4
+   1,6 mm à 868 MHz, 2,45 et 5,8 GHz, RO4350B 0,762 mm à 2,45 GHz :
+
+   - LA LONGUEUR. Le modèle de cavité la surestime, d'autant plus que le
+     substrat est épais devant la longueur d'onde : L = L_formule ·
+     (1 − 0,466·√(h/λ₀)). Les quatre cas tiennent à 0,2 % de fréquence près.
+   - LA RÉSISTANCE DE BORD, d'où sort l'encastrement. La conductance de fente
+     seule la donne trois à six fois trop forte ; le rapport mesuré vaut 0,173
+     sur FR-4 (tan δ 0,02) aux trois fréquences, 0,722 sur RO4350B
+     (tan δ 0,0037). Il suit les pertes, dans le sens attendu : plus de
+     pertes, moins de résistance au bord, encastrement moins profond. */
+const PATCH_K_LONGUEUR=0.466;
+function patchCorrLongueur(h,f){
+  return 1-PATCH_K_LONGUEUR*Math.sqrt(h/(CON_C0/f));
+}
+function patchCorrRbord(df){
+  /* ponytail: deux stratifiés mesurés, interpolés en tan δ et bornés à leurs
+     deux valeurs ; un troisième (FR-4 HF, tan δ 0,012) dira si la droite
+     tient, et en dehors de [0,0037 ; 0,02] c'est une extrapolation bornée. */
+  const t=Math.min(Math.max(isFinite(df)?df:0.02,0.0037),0.02);
+  return 0.722+(t-0.0037)*(0.173-0.722)/(0.02-0.0037);
+}
+
 const CON_MOTIF_PATCH={
   id:"patch", nom:"Patch rectangulaire", role:"gnd",
   aide:"l'antenne imprimée de référence, ligne encastrée à 50 Ω",
@@ -226,10 +250,9 @@ const CON_MOTIF_PATCH={
           "fréquence"},
     {id:"y0", nom:"encastrement",
      aide:"la profondeur d'entrée de la ligne dans le patch : c'est le "+
-          "réglage d'adaptation, et la cote la moins sûre du motif. Mesuré "+
-          "sur FR-4 1,6 mm à 2,45 GHz, il faut l'écourter de 40 % : le "+
-          "calcul proposait 11,5 mm pour −2,5 dB, 7 mm en rend −34. "+
-          "Balayez-le"},
+          "réglage d'adaptation, et la cote la moins sûre du motif. Le "+
+          "calcul est corrigé par mesure (FR-4 et RO4350B) ; sur un autre "+
+          "stratifié, balayez-le"},
     {id:"wf", nom:"largeur de la ligne", piste:true, z50:true,
      aide:"synthétisée pour 50 Ω sur ce substrat"},
     {id:"g",  nom:"largeur des encoches",
@@ -251,16 +274,20 @@ const CON_MOTIF_PATCH={
        électriquement plus long qu'il n'est dessiné. Deux fois 0,4 mm sur un
        FR-4 de 1,6 mm — soit 2 % de la longueur à 2,45 GHz. */
     const dL=0.412*h*(ee+0.3)*(W/h+0.264)/((ee-0.258)*(W/h+0.8));
-    const L=CON_C0/(2*f*Math.sqrt(ee))-2*dL;
-    /* L'impédance au bord, par la conductance de fente. */
+    /* Puis la correction mesurée (voir `patchCorrLongueur`). */
+    const L=(CON_C0/(2*f*Math.sqrt(ee))-2*dL)*patchCorrLongueur(h,f);
+    /* L'impédance au bord, par la conductance de fente, corrigée par la
+       mesure (voir `patchCorrRbord`). */
     const lam0=CON_C0/f;
     const G1=(W/lam0<1)?(1/90)*Math.pow(W/lam0,2):(1/120)*(W/lam0);
-    const Rin=1/(2*G1);
+    const Rin=patchCorrRbord(c.df)/(2*G1);
     return {
       W:W, L:L,
       y0:(Rin>50)?(L/Math.PI)*Math.acos(Math.sqrt(50/Rin)):0,
       wf:c.wf,
-      g:Math.max(c.wf*0.8,0.3),
+      /* Des encoches à la moitié de la ligne : de 1,25 à 2 mm pour 3,1 mm de
+         ligne, le S₁₁ restait sous −30 dB (croisement g × y₀ prolongé). */
+      g:Math.max(c.wf*0.48,0.3),
       Lf:Math.max(6,4*h),
       marge:Math.max(3*h,2)
     };
@@ -288,10 +315,11 @@ const CON_MOTIF_PATCH={
        c'est tout l'intérêt d'une cote qu'on retouche à la main. */
     const ee=conEeff(c.er,c.h,p.W);
     const dL=0.412*c.h*(ee+0.3)*(p.W/c.h+0.264)/((ee-0.258)*(p.W/c.h+0.8));
-    const festim=CON_C0/(2*(p.L+2*dL)*Math.sqrt(ee));
+    const f_cav=CON_C0/(2*(p.L+2*dL)*Math.sqrt(ee));
+    const festim=f_cav*patchCorrLongueur(c.h,f_cav);
     const lam0=CON_C0/c.f;
     const G1=(p.W/lam0<1)?(1/90)*Math.pow(p.W/lam0,2):(1/120)*(p.W/lam0);
-    const Rin=1/(2*G1);
+    const Rin=patchCorrRbord(c.df)/(2*G1);
     const Zin=Rin*Math.pow(Math.cos(Math.PI*p.y0/Math.max(p.L,1e-6)),2);
 
     return {

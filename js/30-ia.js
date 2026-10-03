@@ -1616,27 +1616,29 @@
     }
 
     /* -- 7. le motif patch : ce que la mesure a tranché ------------------ */
-    /* Voir A-FAIRE.md § 1 et le croisement g × y0 : le modèle de cavité
-       surestime la résistance de bord d'un facteur 3,5, et l'encastrement
-       calculé est trop profond d'un bon quart. Ce n'est pas une opinion,
-       c'est neuf simulations sur le document que cette page produit. */
+    /* Voir A-FAIRE.md § 1 : le gabarit corrige désormais sa longueur et sa
+       résistance de bord par la mesure (`patchCorrLongueur`,
+       `patchCorrRbord`, 22-antennes.js). La seconde n'est mesurée que sur
+       DEUX stratifiés, FR-4 et RO4350B ; entre eux et au-delà, c'est une
+       interpolation en tan δ, et l'encastrement qui en sort se balaye. */
     if(con && CON.gabarit === "patch" && !CON.gabaritTouche.y0){
       const y0 = +((CON.gabaritP || {}).y0);
-      if(isFinite(y0) && y0 > 0)
-        dire("attention", "L'encastrement du patch vient du calcul, et ce "+
-             "calcul est faux",
-             "y0 vaut " + nb(y0, 2) + " mm, tel que le gabarit le propose. La "+
-             "mesure faite sur cet outil dit que la formule surestime la "+
-             "résistance de bord d'un facteur 3,5 : l'encastrement est trop "+
-             "profond de 40 %. Sur le cas mesuré, 11,5 mm rendaient "+
-             "-2,5 dB et 7 mm en rendent -34. Balayez-le plutôt que de le "+
-             "croire.",
+      const df = (typeof conSubstrat === "function") ? conSubstrat().df : NaN;
+      const mesure = isFinite(df) && (Math.abs(df - 0.02) < 0.002 ||
+                                       Math.abs(df - 0.0037) < 0.0005);
+      if(isFinite(y0) && y0 > 0 && !mesure)
+        dire("attention", "L'encastrement du patch est interpolé, pas mesuré",
+             "y0 vaut " + nb(y0, 2) + " mm. Le gabarit corrige la résistance "+
+             "de bord du modèle de cavité par la mesure, mais celle-ci n'a été "+
+             "faite que sur FR-4 (tan δ 0,02) et RO4350B (tan δ 0,0037) ; ce "+
+             "stratifié (tan δ " + nb(df, 4) + ") est entre les deux ou au-delà. "+
+             "Balayez l'encastrement plutôt que de le croire.",
              /* « m. » et non « f. » : ce sont les cotes DU MOTIF, celles que
                 24-balayage.js propose en reposant le gabarit à chaque point. */
              {type:"balayage",
-              titre:"Balayer l'encastrement autour de " + nb(y0 * 0.61, 2) + " mm",
-              source:"m.y0", min:+(y0 * 0.45).toFixed(2),
-              max:+(y0 * 0.8).toFixed(2), pas:+(y0 * 0.07).toFixed(2)});
+              titre:"Balayer l'encastrement autour de " + nb(y0, 2) + " mm",
+              source:"m.y0", min:+(y0 * 0.8).toFixed(2),
+              max:+(y0 * 1.2).toFixed(2), pas:+(y0 * 0.1).toFixed(2)});
     }
 
     /* -- 8. ce que le résultat dit du réglage ---------------------------- */
@@ -1900,10 +1902,11 @@
 "  la resonance derive sans que rien ne le signale ;",
 "- un gabarit d'antenne de l'outil tombe a plus ou moins 5 % de sa cible : le",
 "  premier dessin est un point de depart, pas une antenne finie ;",
-"- le gabarit patch calcule son encastrement y0 par le modele de cavite, et ce",
-"  modele SURESTIME la resistance de bord d'un facteur 3,5 : l'encastrement",
-"  propose est trop profond d'environ 40 %. Mesure sur FR-4 1,6 mm a",
-"  2,45 GHz : y0 = 11,5 mm rendait -2,5 dB, y0 = 7 mm rend -34 dB (g 1,25 mm) ;",
+"- le gabarit patch corrige le modele de cavite par la mesure : sa longueur",
+"  (L x (1 - 0,466.racine(h/lambda0)), quatre cas a 0,2 % pres) et sa",
+"  resistance de bord (0,17 fois la conductance de fente sur FR-4, 0,72 sur",
+"  RO4350B, interpolee en tan delta entre les deux). Sans correction, y0",
+"  sortait 40 a 55 % trop profond sur FR-4 ;",
 "- sur ce meme patch, resserrer les encoches g de 3,5 a 1,5 mm gagne 8 dB :",
 "  elles ajoutent une capacite que le modele de cavite ignore ;",
 "- lambda/20 dans le dielectrique NE SUFFIT PAS quand une ligne d'alimentation",
