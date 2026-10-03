@@ -409,9 +409,17 @@ const CON_MOTIF_MONOPOLE={
      aide:"le substrat qui dépasse du bout du brin"}
   ],
   defauts:function(c){
-    const Lm=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
-    const wr=conBorne(c,Math.max(2*c.wf,Lm/6));
+    const Lq=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
+    const wr=conBorne(c,Math.max(2*c.wf,Lq/6));
     const marge=Math.max(3*c.h,2);
+    /* LA CORRECTION MESURÉE (A-FAIRE.md § 1, 03/10/2026). Le quart d'onde dans
+       (εr+1)/2 rend un brin bien trop court : à 2,45 GHz sur FR-4 1,53 mm, la
+       résonance sortait au-dessus de 2,82 GHz. Le croisement brin × masse
+       donne Lm + 0,43·Lg ≈ constante, et avec la masse à 0,8 fois le brin,
+       Lm = 1,29 fois le quart d'onde.
+       ponytail: UN SEUL cas mesuré (2,45 GHz, FR-4) ; d'autres fréquences et
+       substrats diront si le facteur tient. */
+    const Lm=Lq*1.29;
     return {
       Lm:Lm, wr:wr,
       Lg:Math.max(Lm*0.8,10),
@@ -422,7 +430,7 @@ const CON_MOTIF_MONOPOLE={
   },
   tracer:function(c,p){
     const Lb=p.Lb, Wb=p.Lg+p.Lm+p.marge, xc=Lb/2;
-    const festim=CON_C0/(4*p.Lm*Math.sqrt(c.eeffAir));
+    const festim=1.29*CON_C0/(4*p.Lm*Math.sqrt(c.eeffAir));   // la correction mesurée, voir `defauts`
     return {
       carte:{L:Lb, W:Wb},
       formes:[
@@ -705,7 +713,11 @@ const CON_MOTIF_IFA={
     if(p.masseTop){
       /* Plan de masse supérieur avec décroché d'isolation autour de l'alimentation */
       formes.push(gRect("haut","GND",0,0,Lb,yg));
-      formes.push(gRect("haut","",xg1,yd-0.3,xg2,yg,true));
+      /* LE DÉCROCHÉ DESCEND SOUS LE BOUT DE LA LIGNE, de son dégagement : la
+         piste finit en arrondi d'une demi-largeur, et un décroché arrêté à
+         0,3 mm sous le port laissait ce bout mordre dans la masse du dessus —
+         l'alimentation était en court-circuit (A-FAIRE.md § 1, 03/10/2026). */
+      formes.push(gRect("haut","",xg1,yd-wf/2-gd,xg2,yg,true));
     }
 
     if(p.viasCouture){
@@ -825,8 +837,10 @@ const CON_MOTIF_MIFA={
     {id:"gd", nom:"dégagement du décroché",
      aide:"largeur du vide de part et d'autre du brin d'alimentation"},
     {id:"Lg", nom:"plan de masse", aide:"il fait partie de l'antenne"},
-    {id:"wf", nom:"largeur du brin d'alimentation", piste:true, z50:true,
-     aide:"synthétisé pour 50 Ω"},
+    {id:"wf", nom:"largeur du brin d'alimentation", piste:true,
+     aide:"comme le bras : c'est un brin de l'antenne, pas une ligne 50 Ω. "+
+          "Synthétisé à 50 Ω, il faisait 3 mm de large à 1,6 mm du "+
+          "court-circuit, et les deux se touchaient"},
     {id:"dVia", nom:"diamètre du via", aide:"le court-circuit, traversant"},
     {id:"marge", nom:"marge de carte", aide:"le substrat qui dépasse"}
   ],
@@ -835,9 +849,13 @@ const CON_MOTIF_MIFA={
     const ha=Math.max(quart*0.18,2.5);
     const dVia=Math.min(CON.diametreVia,0.8);
     const sc=Math.max(0.8,dVia);
-    const d=Math.max(quart*0.35/4,1.0);
+    const wb=conBorne(c,Math.max(quart/20,0.6));
+    /* Le brin d'alimentation a la largeur du bras, et l'écart au court-
+       circuit ne descend jamais sous ce qui les sépare : deux demi-largeurs
+       et 0,3 mm de vide. */
+    const d=Math.max(quart*0.35/4,1.0,wb+0.3);
     const ed=Math.max(0.8,sc);
-    const gd=Math.max(0.6,+(Math.min(c.wf,Math.max(0.6,(d-dVia)/2-0.2))).toFixed(3));
+    const gd=Math.max(0.6,+(Math.min(wb,Math.max(0.6,(d-dVia)/2-0.2))).toFixed(3));
     return {
       /* Une empreinte au tiers du quart d'onde et deux replis : c'est le
          compromis des modules du commerce — assez court pour que le méandre
@@ -845,11 +863,11 @@ const CON_MOTIF_MIFA={
       Lx:quart*0.35,
       n:2,
       ha:ha,
-      wb:conBorne(c,Math.max(quart/20,0.6)),
+      wb:wb,
       d:d, ed:ed, gd:gd,
       sc:sc,
       Lg:Math.max(quart,15),
-      wf:c.wf,
+      wf:wb,
       dVia:dVia,
       marge:Math.max(3*c.h,2)
     };
@@ -994,10 +1012,17 @@ const CON_MOTIF_DIPOLE={
      aide:"le substrat qui dépasse des bras"}
   ],
   defauts:function(c){
-    const La=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
+    const Lq=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
+    /* LA CORRECTION MESURÉE (A-FAIRE.md § 1, 03/10/2026) : les bras sur deux
+       faces voient moins de substrat que (εr+1)/2 ne le dit ; à 2,45 GHz sur
+       FR-4 1,53 mm, il faut 1,165 fois le quart d'onde pour y résonner, à
+       chevauchement h. L'adaptation, elle, était juste : 48 Ω partout.
+       ponytail: UN SEUL cas mesuré ; d'autres fréquences et substrats diront
+       si le facteur tient. */
+    const La=Lq*1.165;
     return {
       La:La,
-      wd:conBorne(c,Math.max(La/12,1.0)),
+      wd:conBorne(c,Math.max(Lq/12,1.0)),
       ov:Math.max(c.h,0.5),
       marge:Math.max(4*c.h,3)
     };
@@ -1005,7 +1030,7 @@ const CON_MOTIF_DIPOLE={
   tracer:function(c,p){
     const Lb=2*p.La+2*p.marge, Wb=p.wd+4*p.marge;
     const xc=Lb/2, yc=Wb/2;
-    const festim=CON_C0/(4*p.La*Math.sqrt(c.eeffAir));
+    const festim=1.165*CON_C0/(4*p.La*Math.sqrt(c.eeffAir));  // la correction mesurée, voir `defauts`
     return {
       carte:{L:Lb, W:Wb},
       formes:[
@@ -1098,7 +1123,7 @@ const CON_MOTIF_RESEAU={
     }
     /* L'élément central d'abord : c'est lui le port 1, celui du « S₁₁ ». */
     const centre=ports.splice(4,1)[0];
-    const festim=CON_C0/(4*p.La*Math.sqrt(c.eeffAir));
+    const festim=1.165*CON_C0/(4*p.La*Math.sqrt(c.eeffAir));  // les bras du dipôle, corrigés comme lui
     /* Le dépointage attendu : le faisceau part là où les retards de phase
        compensent le chemin, k·p·sin θ + Δφ = 0. Au-delà de |sin θ| = 1 il
        n'y a plus de lobe principal réel — on le dit plutôt que d'afficher NaN. */

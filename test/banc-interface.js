@@ -314,6 +314,23 @@ verifie("une ligne plus large est de plus basse impedance",
    plus qu'un demi-onde naif : il vaut quelques pour cent, et l'ignorer
    decale la resonance d'autant. */
 const cx=conContexte();
+/* L'ALIMENTATION NE TOUCHE NI LA MASSE NI LE COURT-CIRCUIT. Deux gabarits
+   l'ont fait sans que rien ne le dise : le bout arrondi de la ligne de l'IFA
+   mordait dans la masse du dessus, et le brin du MIFA, synthetise a 50 ohms,
+   recouvrait le court-circuit. La simulation rendait 1 a 30 ohms et aucune
+   resonance (A-FAIRE.md, 03/10/2026). */
+for(const f of [868e6,2.45e9,5.8e9]){
+  const cf=Object.assign({},cx,{f:f});
+  const gi=conGabarit("ifa"), qi=conGabaritCotes(gi,cf,conGabaritDefauts(gi,cf));
+  const ri=conGabaritTrace(gi,cf,qi);
+  const trou=ri.elements.find(e=>e.trou&&e.type==="rect");
+  verifie("IFA a "+f/1e9+" GHz : le decroche descend sous le bout de la ligne",
+          !trou||Math.min(trou.y1,trou.y2)<ri.t.port.y-qi.wf/2-1e-9,
+          JSON.stringify(trou)+" port "+JSON.stringify(ri.t.port));
+  const gm=conGabarit("mifa"), qm=conGabaritCotes(gm,cf,conGabaritDefauts(gm,cf));
+  verifie("MIFA a "+f/1e9+" GHz : le brin d'alimentation ne touche pas le court-circuit",
+          qm.d>=(qm.wf+qm.wb)/2+0.2, JSON.stringify({d:qm.d,wf:qm.wf,wb:qm.wb}));
+}
 const pPatch=conGabaritDefauts(CON_MOTIF_PATCH,cx);
 const eeP=conEeff(cx.er,cx.h,pPatch.W);
 const demi=CON_C0/(2*cx.f*Math.sqrt(eeP));
