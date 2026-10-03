@@ -741,6 +741,22 @@ Un port **coaxial** n'en déclare pas : il porte déjà son propre déport de pl
 de référence, ramené à la surface de la carte, et en empiler un second
 reviendrait à compter deux fois.
 
+#### Le port microruban (`MSLPort`), expérimental
+
+Quand la ligne est déclarée, une case du panneau du port la fait mesurer **par
+le solveur** au lieu de la calculer : le port microruban d'openEMS se pose sur
+le ruban dessiné, du point d'alimentation au pied de l'antenne, avec sa
+résistance de source au début et ses sondes de tension et de courant au
+milieu. Il mesure le Z₀ et la propagation de la ligne **telle qu'elle est
+maillée**, et ramène l'impédance au pied par elles. Rien n'est prolongé hors
+de la carte : la géométrie simulée reste celle qui est dessinée. La direction
+du ruban se lit au bord du plan de masse le plus proche du port.
+
+Il reste **expérimental**, et pour une raison chiffrée : sur le patch corrigé
+à 2,45 GHz, il mesure 47,5 Ω de Z₀ (50 calculés) mais déplace la résonance de
++1 % par rapport au port localisé. Le suspect est le maillage plus fin qu'il
+impose le long du ruban ; ce n'est pas vérifié. Comparez les deux.
+
 #### Un port collé sur la grille, au chiffre près
 
 Une boîte d'excitation est **plate dans deux directions** : c'est un segment,

@@ -1805,7 +1805,64 @@ def _ligne_alim(p, ca, cb, dielectriques, k_mm, rang):
             "z0": microruban_z0(er, h, w)}
 
 
-def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu):
+def _port_msl(port, ligne, ca, cb, boite_cu, rang, boites=None):
+    """Le port MICRORUBAN d'openEMS (`MSLPort`), pose SUR la ligne declaree.
+
+    CE QU'IL APPORTE, et que la ligne declaree seule ne donne pas : le Z0 de la
+    ligne TELLE QU'ELLE EST MAILLEE (le port le mesure par ses sondes de
+    tension et de courant, au lieu de le calculer sur un ruban ideal), une
+    constante de propagation mesuree elle aussi, et une excitation en onde
+    progressive dont le retour est absorbe par la resistance de source.
+    L'impedance est ramenee au pied de l'antenne par CETTE propagation-la.
+
+    CE QU'IL NE FAIT PAS : prolonger la ligne hors de la carte jusqu'a la
+    paroi, comme le tutoriel `MSL_NotchFilter`. Le port couvre le ruban
+    dessine, du point d'alimentation au pied de l'antenne ; la geometrie
+    simulee reste celle qui est dessinee.
+
+    LA DIRECTION SE LIT AU BORD DU PLAN DE MASSE -- la couche sous le ruban,
+    dont la ligne part, et non l'ensemble du cuivre : le bout arrondi de la
+    piste d'alimentation depasse du bord d'une demi-largeur, et mesurer depuis
+    lui raccourcissait le port d'autant (3,9 mm au lieu de 5,4 sur le patch).
+    """
+    if port["dir"] != "z":
+        raise ErreurModele(
+            "Le port %d est un port microruban, mais son excitation n'est pas "
+            "verticale." % rang,
+            "Un microruban se mesure entre le ruban et le plan de masse en "
+            "dessous : posez le port entre ces deux couches.")
+    if not boite_cu:
+        raise ErreurModele("Le port %d est un port microruban sans cuivre "
+                           "autour de lui." % rang)
+    haut, bas = (ca, cb) if ca["z0"] > cb["z0"] else (cb, ca)
+    boite_cu = (boites or {}).get(bas["nom"]) or boite_cu
+    x, y, d = port["x"], port["y"], ligne["d"]
+    dist, axe, sens, bord = min(
+        (x - boite_cu[0], "x", 1, boite_cu[0]), (boite_cu[2] - x, "x", -1, boite_cu[2]),
+        (y - boite_cu[1], "y", 1, boite_cu[1]), (boite_cu[3] - y, "y", -1, boite_cu[3]))
+    if dist > 0.5 * d:
+        raise ErreurModele(
+            "Le port %d est un port microruban, mais il n'est pas au bord du "
+            "cuivre (%.2f mm du bord le plus proche, ligne de %.2f mm)."
+            % (rang, dist, d),
+            "Le port microruban part du point d'alimentation, au bord de la "
+            "carte, et suit la ligne jusqu'au pied de l'antenne. Ailleurs, "
+            "gardez le port localise et la ligne declaree.")
+    debut = x if axe == "x" else y
+    fin = bord + sens * d
+    if (fin - debut) * sens <= 0.25 * d:
+        raise ErreurModele(
+            "Le port %d est un port microruban sur une ligne trop courte "
+            "(%.2f mm)." % (rang, abs(fin - debut)),
+            "Il lui faut quelques cellules de ruban entre la source et le pied "
+            "de l'antenne pour y mesurer une onde.")
+    travers = y if axe == "x" else x
+    return {"axe": axe, "debut": debut, "fin": fin,
+            "t1": travers - ligne["w"] / 2.0, "t2": travers + ligne["w"] / 2.0,
+            "z_ruban": haut["z0"], "z_masse": bas["z1"]}
+
+
+def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu, boites=None):
     """Un port : ce qu'il relie, ou il est, et le volume qu'il occupe.
 
     TROIS FAUTES REVIENNENT TOUJOURS, et les trois sont refusees plutot que
@@ -1902,10 +1959,17 @@ def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu):
         ligne = _ligne_alim(p, ca, cb, dielectriques, k_mm, rang)
         if ligne:
             out["ligne"] = ligne
+            if p.get("msl") is True:
+                out["msl"] = _port_msl(out, ligne, ca, cb, boite_cu, rang, boites)
+        elif p.get("msl") is True:
+            raise ErreurModele(
+                "Le port %d est un port microruban sans ligne declaree." % rang,
+                "Le port microruban couvre la ligne d'alimentation : declarez "
+                "sa longueur et sa largeur dans le panneau du port.")
     return out
 
 
-def _ports(doc, conducteurs, dielectriques, k_mm, boite_cu):
+def _ports(doc, conducteurs, dielectriques, k_mm, boite_cu, boites=None):
     """Tous les ports du modele, dans l'ordre ou la page les a poses.
 
     L'ANCIENNE FORME RESTE LUE. Un document qui ne porte qu'un `port` -- ceux
@@ -1928,7 +1992,7 @@ def _ports(doc, conducteurs, dielectriques, k_mm, boite_cu):
             "Au-dela, les volumes de port pesent plus que l'antenne et le "
             "tableau des S devient illisible.")
 
-    out = [_un_port(p, i + 1, conducteurs, dielectriques, k_mm, boite_cu)
+    out = [_un_port(p, i + 1, conducteurs, dielectriques, k_mm, boite_cu, boites)
            for i, p in enumerate(bruts)]
 
     # Plusieurs ports excites : un reseau alimente en phase (voir MAX_PORTS).
@@ -2647,6 +2711,21 @@ def _maillage(modele, bande, res_air, res_die, res_fin=0.0, bandes=None):
         x_obl += [p["x1"], p["x2"]]
         y_obl += [p["y1"], p["y2"]]
         z_obl += [p["z1"], p["z2"]]
+        q = p.get("msl")
+        if q:
+            # LE PORT MICRORUBAN A BESOIN DE LIGNES LE LONG DU RUBAN : ses
+            # trois sondes de tension tombent sur trois lignes voisines au
+            # milieu du port. Ses extremites et les bords du ruban sont
+            # obligatoires ; huit pas au moins le long du ruban.
+            le_long, en_travers = (x_obl, y_obl) if q["axe"] == "x" else (y_obl, x_obl)
+            le_long += [q["debut"], q["fin"]]
+            en_travers += [q["t1"], q["t2"]]
+            z_obl += [q["z_ruban"], q["z_masse"]]
+            # De l'AFFINAGE, comme les bandes fines : rangees dans le
+            # remplissage, le fond les ecarterait.
+            pas = abs(q["fin"] - q["debut"]) / 8.0
+            affiner = x_aff if q["axe"] == "x" else y_aff
+            affiner += _lignes(min(q["debut"], q["fin"]), max(q["debut"], q["fin"]), pas)
         c = p.get("coax")
         if not c:
             continue
@@ -2997,6 +3076,15 @@ def _coller_ports(modele):
             v = _coller(lignes, p[cle])
             pire = max(pire, abs(v - p[cle]))
             p[cle] = v
+        q = p.get("msl")
+        if q:
+            le_long, en_travers = (mx, my) if q["axe"] == "x" else (my, mx)
+            for cle, lignes in (("debut", le_long), ("fin", le_long),
+                                ("t1", en_travers), ("t2", en_travers),
+                                ("z_ruban", mz), ("z_masse", mz)):
+                v = _coller(lignes, q[cle])
+                pire = max(pire, abs(v - q[cle]))
+                q[cle] = v
         c = p.get("coax")
         if not c:
             continue
@@ -3458,7 +3546,10 @@ def normaliser(doc):
      n_absorbes) = _cuivre(doc, conducteurs, k_mm)
     vias = _vias(doc, conducteurs, k_mm)
     bande = _bande(doc)
-    ports = _ports(doc, conducteurs, dielectriques, k_mm, boite_cu)
+    # La boite de chaque couche : le port microruban part du bord du plan.
+    boites = {b["couche"]: _boite_pts([q for p in b["polys"] for q in p["o"]])
+              for b in cuivre if b["polys"]}
+    ports = _ports(doc, conducteurs, dielectriques, k_mm, boite_cu, boites)
     _retards(ports, bande)
     # LE PORT EXCITE RESTE ACCESSIBLE SOUS SON ANCIEN NOM. C'est lui que la
     # vue 3D dessine en rouge, lui que l'export Touchstone nomme, lui dont

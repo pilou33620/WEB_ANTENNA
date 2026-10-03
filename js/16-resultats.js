@@ -126,7 +126,10 @@ function antResultatsRendre(){
         ?'<div class="cle"><b>'+aNb(r.z0_pied_re,1)+' '+
           (r.z0_pied_im>=0?"+":"−")+aNb(Math.abs(r.z0_pied_im),1)+
           'j Ω</b><span>au pied de l\'antenne ('+antLongModele(r.ligne.d)+
-          ' de ruban)</span></div>':"")+
+          ' de ruban'+(r.msl?', port microruban':'')+')</span></div>':"")+
+      (r.msl
+        ?'<div class="cle"><b>'+aNb(r.msl.z_ref_re,1)+' Ω</b><span>Z₀ de la '+
+          'ligne, mesuré par le port</span></div>':"")+
       (bp.existe
         ? '<div class="cle"><b>'+aNb(bp.largeur/1e6,1)+' MHz</b>'+
           '<span>bande à −10 dB ('+aNb(bp.relative,2)+' %)</span></div>'
@@ -491,7 +494,13 @@ function antVerdictTexte(r,bp,nf){
       aF(ANT.bande.fcible)+" — soit "+
       aNb(100*(r.f0-ANT.bande.fcible)/ANT.bande.fcible,1)+" % d'écart. "+
       "Une permittivité de substrat incertaine suffit à l'expliquer."});
-  if(r.ligne&&r.z0_pied_re!=null)
+  if(r.msl)
+    dits.push({rang:"info",t:"Port microruban : l'impédance au pied de "+
+      "l'antenne est ramenée par le SOLVEUR, sur "+antLongModele(r.msl.d)+
+      " de ruban, avec le Z₀ qu'il a mesuré sur la ligne maillée ("+
+      aNb(r.msl.z_ref_re,1)+" Ω, contre "+aNb(r.ligne.z0,1)+" Ω calculés) "+
+      "et la propagation mesurée elle aussi. Le S₁₁ est rapporté à ce Z₀-là."});
+  else if(r.ligne&&r.z0_pied_re!=null)
     dits.push({rang:"info",t:"L'impédance au pied de l'antenne est une "+
       "rotation ANALYTIQUE de celle du port, sur "+antLongModele(r.ligne.d)+
       " de ruban de "+aNb(r.ligne.z0,1)+" Ω (εr effectif "+

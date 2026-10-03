@@ -264,9 +264,16 @@ livré avec le solveur :
    calcule *après* les ports), `openems_script.py`, le panneau des ports, la
    vue 3D qui doit montrer ce prolongement, et le banc.
 
-*La décision* : à prendre quand on aura besoin du Z₀ mesuré plutôt que calculé.
-Ce n'est pas le cas aujourd'hui — l'écart entre les deux est justement ce que
-la réserve écrite à côté du nombre annonce.
+*Fait le 03/10/2026, en expérimental*, et **sans** le prolongement hors carte
+des points 2 à 4 : le port se pose sur le ruban dessiné, du point
+d'alimentation au pied de l'antenne, avec sa résistance de source (`Feed_R`)
+qui absorbe l'onde de retour. Il mesure le Z₀ (47,5 Ω sur la ligne du patch,
+50,2 calculés) et ramène l'impédance au pied par sa propre propagation.
+**Ce qui reste ouvert** : il déplace la résonance du patch de +1 % par rapport
+au port localisé (2,476 contre 2,450 GHz). Le suspect est le maillage plus fin
+qu'il impose le long du ruban — à vérifier en posant ces mêmes lignes de
+maillage sous un port localisé. Tant que ce n'est pas tranché, il reste une
+option, pas le défaut.
 
 ### L'assistant IA — posé, et ce qu'il lui manque
 

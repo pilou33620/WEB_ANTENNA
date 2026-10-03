@@ -2238,6 +2238,46 @@ refuse("une longueur de ligne sans sa largeur",
        dict(_d_lg, port=dict(_d_lg["port"], ligne={"longueur": 6.4})),
        "largeur")
 
+# -- LE PORT MICRORUBAN (MSLPort), pose sur la ligne declaree ---------------
+# Au bord du plan (y = 0,5 mm), la ligne part vers l'interieur sur 6,4 mm.
+_d_msl = document()
+_d_msl["port"] = dict(_d_msl["port"], x=PLAN / 2.0, y=0.5, msl=True,
+                      ligne={"longueur": 6.4, "largeur": _WF})
+_m_msl = openems_modele.normaliser(_d_msl)
+_q = _m_msl["port"].get("msl") or {}
+verifie("le port microruban suit la ligne vers l'interieur, depuis le bord",
+        _q.get("axe") == "y" and abs(_q["fin"] - 6.4) < 0.05 and
+        abs(_q["debut"] - 0.5) < 0.05 and abs(_q["t2"] - _q["t1"] - _WF) < 0.05,
+        repr(_q))
+# Le bout arrondi de la piste depasse du bord d'une demi-largeur : la ligne
+# se mesure quand meme depuis le bord du PLAN, pas du cuivre le plus avance.
+_d_msl2 = dict(_d_msl, cuivre=[dict(_d_msl["cuivre"][0],
+                                    polys=_d_msl["cuivre"][0]["polys"] +
+                                    [{"o": rect(PLAN / 2.0 - 1.556, -1.556, 3.112, 8.0)}]),
+                               _d_msl["cuivre"][1]])
+_q2 = openems_modele.normaliser(_d_msl2)["port"].get("msl") or {}
+verifie("la ligne du port microruban se mesure depuis le bord du plan de masse",
+        abs(_q2.get("fin", 0) - 6.4) < 0.05, repr(_q2))
+_ly = [v for v in _m_msl["maillage"]["y"] if _q and _q["debut"] <= v <= _q["fin"]]
+verifie("le maillage pose au moins huit pas le long du port",
+        len(_ly) >= 9, "%d lignes sur le port" % len(_ly))
+_txt_msl = openems_script.generer(_m_msl, chemin_openems="")
+verifie("le script pose un MSLPort et ramene la mesure au pied",
+        "FDTD.AddMSLPort(1, msl_1" in _txt_msl and
+        "ref_plane_shift=" in _txt_msl and "Z_pied = Zin" in _txt_msl and
+        "_au_pied(Zin" not in _txt_msl)
+try:
+    compile(_txt_msl, "<script msl>", "exec")
+    _ok_msl = True
+except SyntaxError as _e:
+    _ok_msl = str(_e)
+verifie("et ce script se compile", _ok_msl is True, str(_ok_msl))
+refuse("un port microruban loin du bord du cuivre",
+       dict(_d_msl, port=dict(_d_msl["port"], y=35.0)), "bord")
+refuse("un port microruban sans ligne declaree",
+       dict(_d_msl, port={k: v for k, v in _d_msl["port"].items() if k != "ligne"}),
+       "ligne")
+
 # -- LE CALCUL LUI-MEME, EPROUVE SUR LE CODE QUI TOURNE VRAIMENT ----------
 # Le bloc de desembedage n'est pas une fonction de ce depot : c'est du texte
 # ECRIT DANS LE SCRIPT. Le banc l'extrait donc du script genere et l'execute,

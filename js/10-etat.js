@@ -254,7 +254,11 @@ function antPortNeuf(exc){
              l'antenne. Zéro veut dire « non déclarée », et c'est le défaut :
              l'impédance est alors lue là où le port est posé, sans rien
              ajouter. Voir `_ligne_alim` dans python/openems_modele.py. */
-          ligne_d:0, ligne_w:0};
+          ligne_d:0, ligne_w:0,
+          /* Le port MICRORUBAN d'openEMS (MSLPort), posé sur cette même
+             ligne : le solveur mesure alors son Z₀ et sa propagation au lieu
+             de les calculer. Faux par défaut. */
+          msl:false};
 }
 
 Object.defineProperty(ANT,"port",{
@@ -314,6 +318,7 @@ function antPortDoc(p,i){
        de référence, ramené à la surface de la carte, et en empiler un second
        reviendrait à compter deux fois. */
     d.ligne={longueur:p.ligne_d, largeur:p.ligne_w};
+    if(p.msl)d.msl=true;
   }
   return d;
 }

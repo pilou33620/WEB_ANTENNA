@@ -1301,6 +1301,14 @@ def _epilogue(m):
         a("_out['z_pied_im'] = [float(v.imag) for v in Z_pied]\n")
         a("_out['z0_pied_re'] = float(Z_pied[i0].real)\n")
         a("_out['z0_pied_im'] = float(Z_pied[i0].imag)\n")
+    # Le port microruban : le Z0 MESURE de la ligne, a la resonance, et la
+    # longueur sur laquelle le solveur a ramene la mesure.
+    if m["port"].get("msl"):
+        _q = m["port"]["msl"]
+        a("_zr = np.atleast_1d(port.Z_ref) * np.ones(len(f))\n")
+        a("_out['msl'] = {'z_ref_re': float(np.real(_zr[i0])),\n"
+          "               'z_ref_im': float(np.imag(_zr[i0])),\n"
+          "               'd': %r}\n" % abs(_q["fin"] - _q["debut"]))
     a("# La bande passante : ou le S11 reste sous -10 dB (VSWR < 2), la\n")
     a("# convention d'usage pour une antenne. Elle n'a de sens que si la\n")
     a("# resonance est DANS la bande simulee — sinon on mesure un bord.\n")

@@ -1086,6 +1086,14 @@ ${(p.ligne_d>0&&p.ligne_w>0)?(function(){
        '<span>sur <b>'+antLongModele(lg.h)+'</b> de ε<sub>r</sub> = '+aNb(lg.er,2)+'</span>'
       :'<span>le serveur calculera Z₀ et l’ε<sub>r</sub> effectif du ruban</span>'}
 </div>
+<label class="ck"><input type="checkbox" id="antPmsl" ${p.msl?"checked":""}>
+  Port microruban (openEMS <code>MSLPort</code>), <b>expérimental</b> : le solveur
+  <b>mesure</b> le Z₀ et la propagation de la ligne maillée, et ramène lui-même
+  l'impédance au pied de l'antenne. Le port doit être au bord du plan de masse ;
+  la ligne part vers l'intérieur. Sur le patch d'essai, il a mesuré 47,5 Ω pour
+  50 calculés, mais déplacé la résonance de +1 % par rapport au port localisé —
+  écart que rien n'explique encore (le maillage plus fin le long du ruban est
+  le suspect). Comparez les deux avant de vous fier à l'un.</label>
 <p class="note"><b>Cela n'améliore aucune adaptation, et ne le prétend pas.</b>
    Une ligne sans perte dont le Z₀ est celui de référence ne change pas |Γ| :
    elle le fait <b>tourner</b>. Mesuré sur le patch du gabarit, la ligne
@@ -1189,6 +1197,8 @@ ANT_LIER.port=function(box){
   n("#antPepg","ep_gaine",0.001); n("#antPlong","longueur",0.01);
   antLierNombre(box.querySelector("#antPlgd"), ANT.port, "ligne_d", {min:0});
   antLierNombre(box.querySelector("#antPlgw"), ANT.port, "ligne_w", {min:0});
+  const msl=box.querySelector("#antPmsl");
+  if(msl)msl.onchange=function(){ ANT.port.msl=this.checked; antMaj(true); };
   const s=function(id,cle){
     const el=box.querySelector(id);
     if(el)el.onchange=function(){

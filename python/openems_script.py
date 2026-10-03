@@ -993,6 +993,31 @@ def _bloc_ports(m):
     for p in ports:
         n = p["n"]
         c = p.get("coax")
+        q = p.get("msl")
+        if q:
+            a("\n# -- port %d : microruban (MSLPort) ------------------------------\n"
+              % n)
+            a("# Pose SUR la ligne d'alimentation, du point d'alimentation au pied\n")
+            a("# de l'antenne (%s mm). La source et sa resistance de %s ohms sont\n"
+              % (_f(abs(q["fin"] - q["debut"]), 4), _f(p["R"], 3)))
+            a("# au debut ; trois sondes de tension et deux de courant, au milieu,\n")
+            a("# mesurent le Z0 et la propagation de la ligne TELLE QU'ELLE EST\n")
+            a("# MAILLEE. Le depouillement ramene la mesure au pied de l'antenne.\n")
+            a("msl_%d = CSX.AddMetal('msl_%d')\n" % (n, n))
+            if q["axe"] == "x":
+                debut = (q["debut"], q["t1"], q["z_ruban"])
+                fin = (q["fin"], q["t2"], q["z_masse"])
+            else:
+                debut = (q["t1"], q["debut"], q["z_ruban"])
+                fin = (q["t2"], q["fin"], q["z_masse"])
+            a("port_%d = FDTD.AddMSLPort(%d, msl_%d, [%s, %s, %s], [%s, %s, %s],\n"
+              "                         '%s', 'z', excite=%s, Feed_R=%s,\n"
+              "                         priority=50%s)%s\n"
+              % (n, n, n, _f(debut[0]), _f(debut[1]), _f(debut[2]),
+                 _f(fin[0]), _f(fin[1]), _f(fin[2]), q["axe"],
+                 "1.0" if p["excite"] else "0", _f(p["R"], 3), _retard(p),
+                 "" if p["excite"] else "   # en charge : il mesure, il n'emet pas"))
+            continue
         if not c:
             a("\n# -- port %d : element localise ---------------------------------\n"
               % n)
@@ -1107,6 +1132,15 @@ def _bloc_calcport(m):
     a = t.append
     for p in m["ports"]:
         c = p.get("coax")
+        q = p.get("msl")
+        if q:
+            a("# Microruban : Z_ref est le Z0 MESURE de la ligne ; le plan de\n")
+            a("# reference est ramene au pied de l'antenne, %s mm plus loin, par la\n"
+              % _f(abs(q["fin"] - q["debut"]), 4))
+            a("# propagation mesuree elle aussi.\n")
+            a("port_%d.CalcPort(dossier, f, ref_plane_shift=%s)\n"
+              % (p["n"], _f(abs(q["fin"] - q["debut"]), 6)))
+            continue
         if not c:
             a("port_%d.CalcPort(dossier, f)\n" % p["n"])
             continue
@@ -1167,6 +1201,13 @@ def _bloc_ligne(m):
         v = "Z_pied" if p["excite"] else "Z_pied_%d" % p["n"]
         src = "Zin" if p["excite"] else "ports[%d].uf_tot / ports[%d].if_tot" % (
             p["n"] - 1, p["n"] - 1)
+        if p.get("msl"):
+            # LE PORT MICRORUBAN MESURE DEJA AU PIED : sa propagation et son Z0
+            # sont ceux de la ligne maillee, et une seconde rotation analytique
+            # par-dessus compterait la ligne deux fois.
+            a("# port %d : microruban, deja ramene au pied par le solveur.\n" % p["n"])
+            a("%s = %s\n" % (v, src))
+            continue
         a("# port %d : ruban de %s mm de large sur %s mm de substrat er = %s,\n"
           % (p["n"], _f(lg["w"], 4), _f(lg["h"], 4), _f(lg["er"], 3)))
         a("#          soit Z0 = %s ohms et er effectif = %s, sur %s mm.\n"
