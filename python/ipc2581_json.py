@@ -43,7 +43,8 @@ Cle par cle, le dictionnaire produit :
     pistes      {c, n, w (largeur), p (points a plat), f (remplissage)}
     arcs        {c, n, w, s (debut), e (fin), m (centre), h (horaire)}
     plans       {c, n, f, g: [{o, t}]} -- zones de cuivre remplies
-    textes      {c, x, y, r (rotation), m (miroir), t}
+    textes      {c, x, y, r (rotation), m (miroir), t, h (hauteur),
+                 b (boite [x1,y1,x2,y2])}
     percages    {x, y, d (diametre), p (metallise), ps (padstack), n, a (anneau),
                  a_sup (l'anneau vient d'une pastille devinee, pas du fichier),
                  sa / sb (portee : rangs des couches de depart et d'arrivee,
@@ -54,6 +55,7 @@ Cle par cle, le dictionnaire produit :
     padstacks   definitions : {trou, pad, pads: [{c, d, f (forme), a (antipad)}]}
     formes      primitives standard : cercle, rectangle, ovale, polygone...
     formesuser  formes du dictionnaire utilisateur (empreintes complexes)
+    calques     {nom: {f (layerFunction), s (side)}} de chaque calque declare
     stats       comptages, pour l'entete de la visionneuse
 """
 
@@ -281,6 +283,13 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
             item["r"] = _r(texte.rotation)
         if texte.mirror:
             item["m"] = 1
+        # taille et boite, quand le fichier les donne (parseur 1.75+)
+        hauteur = getattr(texte, "height", 0) or 0
+        if hauteur > 0:
+            item["h"] = _r(hauteur)
+        boite = getattr(texte, "bbox", None)
+        if boite:
+            item["b"] = [_r(v) for v in boite]
         textes.append(item)
 
     percages = []
@@ -432,6 +441,10 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
         "formesuser": formesuser,
         # calques du fichier laisses de cote (nom -> layerFunction)
         "ignores": dict(design.ignored_layers),
+        # fonction (SILKSCREEN, SIGNAL...) et face (TOP, BOTTOM) de chaque
+        # calque declare, par nom ; vide pour un parseur anterieur a 1.75
+        "calques": {nom: {"f": i.get("fonction", ""), "s": i.get("face", "")}
+                    for nom, i in getattr(design, "layer_info", {}).items()},
         "stats": {
             "couches": len(couches.noms),
             "empilage": len(empilage),
