@@ -1,3 +1,18 @@
+# [2026-10-07] Version 1.75: textes -- l'attribut de la norme et leur taille
+# Description:
+#              - <Text> se lit par « textString » (la norme), « text » restant
+#                accepte : seul le second etait lu, et les textes d'un export
+#                conforme disparaissaient.
+#              - La taille du texte est relevee : <BoundingBox> (hauteur, et
+#                la boite elle-meme), a defaut fontSize. Elle est posee en
+#                attributs `height` et `bbox` du TextElement, sans changer la
+#                classe : ce fichier reste interchangeable avec WEB_ANTENNA.
+#              - Fonction et face de chaque <Layer> relevees dans
+#                design.layer_info (attribut pose, meme raison) : la
+#                serigraphie n'est pas dans l'empilage, et son nom ne dit pas
+#                toujours sa face.
+#              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
+#
 # [2026-09-22] Version 1.74: seuls les calques utiles a la simulation sont lus
 # Description:
 #              - Un export du commerce porte des dizaines de calques qui ne
@@ -1097,11 +1112,19 @@ class IPC2581Parser:
         self._parse_stackup(cad_data)
 
         layer_functions_map = {}
+        # Fonction et face de CHAQUE calque, empilage ou non : la serigraphie
+        # (« Symbol-A ») n'est pas dans l'empilage et son nom ne dit pas sa
+        # face. Pose en attribut, comme `height` des textes : la classe
+        # IPCDesign n'a pas a changer.
+        self.design.layer_info = {}
         for layer in cad_data.findall(self._tag("Layer")):
             lname = layer.attrib.get("name")
             lfunc = layer.attrib.get("layerFunction", "").upper()
             if lname:
                 layer_functions_map[lname] = lfunc
+                self.design.layer_info[lname] = {
+                    "fonction": lfunc,
+                    "face": layer.attrib.get("side", "").upper()}
                 span = self._lire_span(layer)
                 if span:
                     self.drill_spans[lname] = span
@@ -1641,7 +1664,10 @@ class IPC2581Parser:
                       target_list: List[TextElement]):
         try:
             net = text_elem.attrib.get("net", default_net)
-            text_val = text_elem.attrib.get("text", "")
+            # « textString » est l'attribut de la norme ; « text » celui
+            # qu'ecrivaient les premiers exports lus ici. Les deux sont acceptes.
+            text_val = (text_elem.attrib.get("textString")
+                        or text_elem.attrib.get("text", ""))
             if not text_val:
                 return
 
@@ -1656,6 +1682,22 @@ class IPC2581Parser:
 
             text_obj = TextElement(text=text_val, location=loc, layer_name=layer,
                                    net_name=net, rotation=rot, mirror=mirror)
+            # La TAILLE, que reprend l'editeur PCB : la boite englobante de la
+            # norme (<BoundingBox>), a defaut l'attribut fontSize. Posees en
+            # attributs apres coup plutot qu'en champs de TextElement : ce
+            # fichier doit rester utilisable avec un ipc2581_data.py qui ne
+            # les connait pas.
+            boite = text_elem.find(self._tag("BoundingBox"))
+            if boite is not None:
+                bb = [self._safe_float(boite.attrib.get(k)) for k in
+                      ("lowerLeftX", "lowerLeftY", "upperRightX", "upperRightY")]
+                if bb[2] > bb[0] and bb[3] > bb[1]:
+                    text_obj.bbox = tuple(bb)
+                    text_obj.height = bb[3] - bb[1]
+            if not getattr(text_obj, "height", 0):
+                taille = self._safe_float(text_elem.attrib.get("fontSize"))
+                if taille > 0:
+                    text_obj.height = taille
             target_list.append(text_obj)
         except Exception as e:
             logger.debug("Texte ignoré : %s", e)
