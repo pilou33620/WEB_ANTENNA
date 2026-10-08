@@ -436,6 +436,14 @@ verifie("et la resonance annoncee retombe sur la frequence visee",
         Math.abs(tIfa.calcul.festim-cx.f)<cx.f*0.005,
         (tIfa.calcul.festim/1e9).toFixed(4)+" GHz pour "+
         (cx.f/1e9).toFixed(4)+" GHz");
+/* Un bras ou un ecart non fourni prend la valeur corrigee des defauts : le
+   trace et la resonance annoncee restent ceux du motif complet. */
+const pIfaSans=Object.assign({},pIfa); delete pIfaSans.La; delete pIfaSans.d;
+const tIfaSans=CON_MOTIF_IFA.tracer(cx,pIfaSans);
+verifie("bras et ecart absents : le trace reprend la correction mesuree",
+        Math.abs(mesure(tIfaSans)-mesure(tIfa))<1e-6&&
+        Math.abs(tIfaSans.calcul.festim-tIfa.calcul.festim)<1e-3,
+        mesure(tIfaSans).toFixed(4)+" mm, "+(tIfaSans.calcul.festim/1e9).toFixed(4)+" GHz");
 verifie("l'alimentation est entre le court-circuit et le bout du bras",
         pIfa.d>0&&pIfa.d<pIfa.La);
 verifie("le port de l'IFA est au fond du decroche",
