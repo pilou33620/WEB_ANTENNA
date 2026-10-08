@@ -33,6 +33,12 @@
 #      C'est la SEULE route reservee a la boucle locale : elle rend un secret
 #      facturable, et ce serveur ecoute le reseau local par defaut.
 #
+# Et une cinquieme, quand WEB_SUITE l'a lance :
+#
+#   5. RELAYER L'ENVOI SUR GITHUB. « Enregistrer + GitHub » ecrit le projet,
+#      puis demande au lanceur WEB_SUITE de commiter et pousser PROJETS --
+#      le meme geste que dans WEB_CAO. Voir `_github_garde`.
+#
 # Tout le reste -- l'affichage, la designation du cuivre, l'assistant, la 3D,
 # les courbes -- est dans le navigateur et n'a besoin de personne.
 #
@@ -46,6 +52,9 @@
 """Serveur local de l'outil « Antenne openEMS »."""
 
 import argparse
+import hmac
+import http.client
+import http.cookies
 import http.server
 import ipaddress
 import json
@@ -132,6 +141,35 @@ ORIGINES = re.compile(
 # par un point (ni « .. », ni fichier cache), et ni « \ » ni « : » ne passent :
 # sous Windows, « /C:%5cWindows%5cwin.ini » sortait du depot.
 STATIQUE = re.compile(r"^/(?:index\.html)?$|^/(?:css|js)(?:/[\w-][\w.-]*)+$")
+
+
+# WEB_SUITE : le lanceur qui a demarre cet outil donne son adresse sur ce poste
+# et, en mode reseau, son jeton (lanceur/outils.py, par l'environnement : une
+# option inconnue ferait echouer une version plus ancienne). Les routes
+# /api/github* relaient alors a ce lanceur l'envoi des projets sur GitHub
+# (commit + pull + push de PROJETS), pour que la page enregistre ET envoie
+# d'un seul geste -- depuis une tablette, le lanceur est dans un autre onglet.
+# Sans lanceur, ces routes repondent 404. C'est le meme relai que celui de
+# WEB_CAO (web_CAO.py), au nom d'outil pres.
+LANCEUR = os.environ.get("WEBSUITE_LANCEUR", "")
+JETON_LANCEUR = os.environ.get("WEBSUITE_JETON", "")
+BISCUIT_LANCEUR = "websuite_jeton"     # le cookie que pose le lanceur (meme hote)
+DELAI_LANCEUR = 660                    # le push du lanceur peut prendre 600 s
+ID_OUTIL = "web_antenna"               # l'outil, tel que le lanceur le connait
+
+
+def adresse_lanceur():
+    """(hote, port) du lanceur, s'il est sur ce poste ; None sinon.
+
+    Le relai ne part que vers la boucle locale : une adresse venue d'ailleurs
+    ferait de cette route un tremplin vers n'importe quel serveur."""
+    try:
+        u = urllib.parse.urlsplit(LANCEUR)
+        if u.scheme != "http" or not u.port or u.hostname not in ("127.0.0.1", "localhost"):
+            return None
+        return "127.0.0.1", u.port
+    except ValueError:
+        return None
 
 
 def hote_permis(entete):
@@ -797,6 +835,80 @@ class Poste(http.server.SimpleHTTPRequestHandler):
                 "fichier": self.CLE_IA}
 
     # ==================================================================
+    # Enregistrer + GitHub : relai au lanceur WEB_SUITE
+    # ------------------------------------------------------------------
+    # Le lanceur exige son jeton de tout autre appareil que ce poste : sans
+    # cela, n'importe qui sur le reseau pousserait sur GitHub avec les
+    # identifiants du poste. Le relai exige donc le meme jeton, que la
+    # tablette porte deja : le cookie pose par le lanceur vaut pour tout
+    # l'hote, et le navigateur l'envoie aussi a ce port-ci.
+    #
+    # LES PROJETS, EUX, RESTENT OUVERTS AU RESEAU (voir `_ce_poste`) : la
+    # tablette enregistre sans jeton, comme avant. Seul l'envoi sur GitHub,
+    # qui parle au nom du poste, le demande.
+    # ==================================================================
+    def _github_garde(self):
+        if not adresse_lanceur():
+            raise Refus(404, "Envoi sur GitHub indisponible : cet outil n'a pas"
+                             " ete lance par WEB_SUITE.")
+        if self._boucle_locale():
+            return True
+        try:
+            biscuit = http.cookies.SimpleCookie(self.headers.get("Cookie") or "")
+        except http.cookies.CookieError:
+            biscuit = {}
+        recu = biscuit[BISCUIT_LANCEUR].value if BISCUIT_LANCEUR in biscuit else ""
+        if not (JETON_LANCEUR and recu and hmac.compare_digest(recu, JETON_LANCEUR)):
+            raise Refus(403, "Envoi sur GitHub refuse : ouvrez d'abord, sur cet"
+                             " appareil, l'adresse Reseau du lanceur WEB_SUITE"
+                             " (elle se termine par ?jeton=...).")
+        return True
+
+    def _github_relai(self, route, charge):
+        hote, port = adresse_lanceur()
+        corps = json.dumps(charge).encode("utf-8")
+        try:
+            c = http.client.HTTPConnection(hote, port, timeout=DELAI_LANCEUR)
+            c.request("POST", route, body=corps,
+                      headers={"Content-Type": "application/json", "X-WebSuite": "1",
+                               "Host": "127.0.0.1:%d" % port})
+            r = c.getresponse()
+            texte = r.read().decode("utf-8", "replace")
+            c.close()
+        except (OSError, http.client.HTTPException) as exc:
+            raise Refus(502, "Lanceur WEB_SUITE injoignable : %s" % exc)
+        try:
+            rep = json.loads(texte)
+        except ValueError:
+            rep = None
+        if not isinstance(rep, dict):
+            raise Refus(502, "Reponse illisible du lanceur WEB_SUITE")
+        if r.status != 200:
+            raise Refus(502, "Le lanceur WEB_SUITE refuse : %s"
+                             % (rep.get("erreur") or r.status))
+        return {"ok": bool(rep.get("ok")), "identite": bool(rep.get("identite")),
+                "message": str(rep.get("message") or "")}
+
+    def _github_etat(self):
+        self._github_garde()
+        return {"disponible": True}
+
+    def _github_envoyer(self):
+        doc = self._document(4096)
+        self._github_garde()
+        message = doc.get("message") if isinstance(doc, dict) else ""
+        return self._github_relai("/api/envoyer",
+                                  {"id": ID_OUTIL, "message": str(message or "")[:500]})
+
+    def _github_identite(self):
+        doc = self._document(4096)
+        self._github_garde()
+        if not isinstance(doc, dict):
+            raise Refus(400, "Corps JSON attendu")
+        return self._github_relai("/api/identite", {"nom": str(doc.get("nom") or ""),
+                                                    "email": str(doc.get("email") or "")})
+
+    # ==================================================================
     # Aiguillage
     # ==================================================================
     API = ("/api/ipc2581", "/api/openems", "/api/openems/script",
@@ -810,6 +922,7 @@ class Poste(http.server.SimpleHTTPRequestHandler):
            "/api/projet/enregistrer", "/api/projet/fermer",
            "/api/projet/dossier", "/api/projet/archiver",
            "/api/projet/calculs", "/api/projet/importer",
+           "/api/github", "/api/github/envoyer", "/api/github/identite",
            "/api/ia/cle")
 
     def do_GET(self):
@@ -842,6 +955,9 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             return
         if route == "/api/ia/cle":
             self._api(self._ia_cle)
+            return
+        if route == "/api/github":
+            self._api(self._github_etat)
             return
         if route.startswith("/api/"):
             self._json({"detail": "Route inconnue : %s" % route}, 404)
@@ -919,6 +1035,12 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             return
         if route == "/api/projet/importer":
             self._api(self._pr_importer)
+            return
+        if route == "/api/github/envoyer":
+            self._api(self._github_envoyer)
+            return
+        if route == "/api/github/identite":
+            self._api(self._github_identite)
             return
         self._json({"detail": "Route inconnue : %s" % route}, 404)
 

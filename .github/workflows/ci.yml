@@ -29,3 +29,6 @@ jobs:
 
       - name: Serveur — fichiers servis, Host, chemins Windows
         run: python python/test/banc-serveur.py
+
+      - name: Enregistrer + GitHub (relai au lanceur WEB_SUITE) — banc d'essai
+        run: python python/test/banc-github-relai.py

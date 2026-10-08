@@ -655,6 +655,57 @@ svg.apm .apm-cote.on text{fill:var(--yellow);font-weight:600}
 }
 .vide .ou.reprendre>span{margin-bottom:0;flex:0 0 100%}
 .vide .ou.reprendre>small{flex:0 0 100%;margin-top:4px}
+/* L'heure de la derniere sauvegarde, sous chaque projet a reprendre et en
+   clair pour le plus recent. */
+.vide .ou.reprendre .tb{flex-direction:column;gap:0}
+.vide .ou.reprendre .tb .prj-quand{
+  display:block;margin:2px 0 0;font-size:10px;line-height:1.2;
+  font-family:var(--mono);color:var(--txt-dim);
+}
+.vide .ou.reprendre>small.prj-sauve{font-family:var(--mono);font-size:11px}
+.vide .ou.reprendre>small.prj-sauve b{color:var(--txt);font-weight:600}
+
+/* « Enregistrer + GitHub » de la barre d'outils : cache tant que le geste
+   n'est pas possible. `button.tb` impose inline-flex, qui l'emporterait sur
+   l'attribut `hidden`. */
+button.tb[hidden]{display:none}
+
+/* L'avis de sauvegarde (js/28-projet.js, prjAvis) : en haut de l'ecran, bien
+   visible, parce que la barre d'etat est coupee sur une tablette. Vert :
+   enregistre (et envoye) ; orange : enregistre mais pas tout ; rouge :
+   echec, reste jusqu'a ce qu'on le touche. Le meme que celui de WEB_CAO. */
+#prjAvis{
+  position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:50%;
+  z-index:99990;display:flex;align-items:flex-start;gap:12px;
+  width:max-content;max-width:min(560px,calc(100% - 32px));
+  box-sizing:border-box;padding:12px 16px;border-radius:12px;
+  border:1px solid var(--border2);border-left-width:5px;
+  background:var(--panel);color:var(--txt);
+  font:14px/1.35 var(--ui);
+  box-shadow:0 12px 30px rgba(0,0,0,.55);
+  cursor:pointer;opacity:0;pointer-events:none;
+  transform:translate(-50%,-12px);transition:opacity .2s,transform .2s;
+}
+#prjAvis.on{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+#prjAvis .pa-ico{
+  flex:none;display:grid;place-items:center;width:26px;height:26px;
+  border-radius:50%;font-weight:700;color:#0d0f12;background:var(--txt-dim);
+}
+#prjAvis .pa-txt{display:grid;gap:2px;min-width:0}
+#prjAvis b{font-weight:600}
+#prjAvis small{
+  color:var(--txt-dim);font-size:12.5px;overflow-wrap:anywhere;
+  white-space:pre-line;
+}
+#prjAvis.ok{border-left-color:var(--green)}
+#prjAvis.ok .pa-ico{background:var(--green)}
+#prjAvis.partiel{border-left-color:#f0a030}
+#prjAvis.partiel .pa-ico{background:#f0a030}
+#prjAvis.info,#prjAvis.encours{border-left-color:var(--blue)}
+#prjAvis.info .pa-ico,#prjAvis.encours .pa-ico{background:var(--blue)}
+#prjAvis.erreur{border-left-color:var(--red)}
+#prjAvis.erreur .pa-ico{background:var(--red);color:#fff}
+@media (prefers-reduced-motion:reduce){#prjAvis{transition:none}}
 
 /* ---------- Barre de chargement & progression globale de simulation ---------- */
 .sim-header-prog{

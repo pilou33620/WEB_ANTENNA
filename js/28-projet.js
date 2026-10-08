@@ -639,19 +639,192 @@ async function prjFermer(){
   return e;
 }
 
+/* Enregistrer, tel que le font le bouton du panneau et Ctrl+S : le geste,
+   la ligne d'état, et l'avis bien visible du résultat. */
+async function prjEnregistrerGeste(nom){
+  let r=null;
+  try{
+    r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(nom));
+  }catch(e){ prjRendre(); return null; }
+  const calcul=prjDireCalcul(r.calcul);
+  hint("Projet « "+r.projet.nom+" » enregistré dans "+r.projet.dossier+
+       "."+calcul);
+  if(r.calcul&&r.calcul.erreur)
+    prjAvis("partiel","Projet « "+r.projet.nom+" » enregistré, "+
+            "mais pas son dossier de calcul",calcul.trim());
+  else
+    prjAvis("ok","Projet « "+r.projet.nom+" » enregistré",
+            r.projet.dossier+" · "+prjDate(Date.now())+calcul);
+  prjRendre();
+  return r;
+}
+
+/* ==========================================================================
+   Enregistrer + GitHub (WEB_SUITE)
+   --------------------------------------------------------------------------
+   Le même geste que dans WEB_CAO (commun/projet-disque.js). Lancé par
+   WEB_SUITE, web_antenna.py relaie au lanceur l'envoi de PROJETS sur GitHub
+   (commit + pull + push, routes /api/github*) : la page enregistre et envoie
+   d'un seul geste. Depuis une tablette reliée à un téléphone (Termux) ou à un
+   Raspberry Pi, le lanceur est dans un autre onglet, et l'on ne pensait pas
+   à y aller.
+   Les dossiers de calcul ne partent pas : PROJETS les ignore (ils pèsent des
+   centaines de méga-octets et se recalculent).
+   ========================================================================== */
+let PRJ_GH;                    // undefined = pas encore sondé
+async function prjGithubSonder(){
+  if(PRJ_GH!==undefined)return PRJ_GH;
+  try{
+    const r=await prjAppel("/api/github");
+    PRJ_GH=!!(r&&r.disponible);
+  }catch(e){ PRJ_GH=false; }
+  return PRJ_GH;
+}
+function prjGithubPossible(){ return PRJ_GH===true&&PRJ.dispo; }
+
+/* Envoie PROJETS sur GitHub. Poste neuf (git sans nom ni e-mail) : on les
+   demande une fois, le lanceur les range dans la config du dépôt PROJETS. */
+async function prjGithubEnvoyer(message){
+  const envoi=function(){
+    return prjPost("/api/github/envoyer",{message:message||""});
+  };
+  const r=await envoi();
+  if(!r.identite)return r;
+  const annule={ok:false,
+    message:"Envoi annulé : enregistré sur le serveur seulement."};
+  const nom=window.prompt("Premier envoi depuis ce serveur.\n"+
+                          "Votre nom pour les commits git :");
+  if(!nom)return annule;
+  const email=window.prompt("Votre adresse e-mail (celle de votre compte GitHub) :");
+  if(!email)return annule;
+  const i=await prjPost("/api/github/identite",{nom:nom, email:email});
+  return i.ok?envoi():i;
+}
+
+/* Le geste complet : le message d'abord (Annuler = enregistrer sans
+   envoyer), puis l'enregistrement, puis l'envoi s'il a réussi. */
+async function prjEnregistrerGithub(nom){
+  const cible=(nom||PRJ.nom||"").trim();
+  if(!cible){
+    if(typeof wsShow==="function")wsShow("projet");
+    prjRendre();
+    const champ=document.getElementById("prjNom");
+    if(champ)champ.focus();
+    hint("Donnez un nom au projet, puis « Enregistrer + GitHub ».");
+    return;
+  }
+  const defaut="Antenne "+cible+" "+new Date().toLocaleString("fr-FR");
+  const message=window.prompt("Message du commit pour GitHub\n"+
+                              "(Annuler = enregistrer sans envoyer) :",defaut);
+  let r;
+  try{
+    r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(cible));
+  }catch(e){ prjRendre(); return; }
+  const dit="Projet « "+r.projet.nom+" » enregistré."+prjDireCalcul(r.calcul);
+  const heure=prjDate(Date.now());
+  if(message===null){
+    hint(dit+" Pas envoyé sur GitHub.");
+    prjAvis("partiel","Enregistré sur le serveur, pas envoyé sur GitHub",
+      heure+" · vous avez annulé le message de commit : rien n'est parti "+
+      "sur GitHub.");
+    prjRendre();
+    return;
+  }
+  hint(dit+" Envoi sur GitHub…");
+  prjAvis("encours","Enregistré · envoi sur GitHub…",heure);
+  try{
+    const g=await prjGithubEnvoyer(message||defaut);
+    if(g.ok){
+      prjNoterEnvoi(r.projet.nom);
+      hint("Projet « "+r.projet.nom+" » enregistré et envoyé sur GitHub.");
+      prjAvis("ok","Enregistré et envoyé sur GitHub",
+              prjDate(Date.now())+" · « "+(message||defaut)+" »");
+    }else{
+      /* Un refus se lit en entier (il dit quoi faire) : la barre d'état le
+         couperait, surtout sur une tablette. */
+      const t=g.message||"Envoi sur GitHub refusé.";
+      hint(t);
+      prjAvis("erreur","Enregistré sur le serveur, mais pas envoyé sur GitHub",t);
+    }
+  }catch(e){
+    const t="Envoi sur GitHub impossible : "+(e.message||e);
+    hint(t);
+    prjAvis("erreur","Enregistré sur le serveur, mais pas envoyé sur GitHub",t);
+  }
+  prjRendre();
+}
+
+/* Dernier envoi réussi sur GitHub, par projet. Gardé dans ce navigateur : un
+   envoi fait depuis un autre appareil n'y figure pas. */
+const PRJ_ENVOI_CLE="antenne.projet.envoiGithub";
+function prjCleEnvoi(nom){ return (PRJ.racine||"")+"|"+(nom||""); }
+function prjNoterEnvoi(nom){
+  try{
+    const m=JSON.parse(localStorage.getItem(PRJ_ENVOI_CLE)||"{}");
+    m[prjCleEnvoi(nom)]=Date.now();
+    localStorage.setItem(PRJ_ENVOI_CLE,JSON.stringify(m));
+  }catch(e){}
+}
+function prjDernierEnvoi(nom){
+  try{
+    const m=JSON.parse(localStorage.getItem(PRJ_ENVOI_CLE)||"{}");
+    return m[prjCleEnvoi(nom)]||0;
+  }catch(e){ return 0; }
+}
+
+/* ==========================================================================
+   Avis de sauvegarde
+   --------------------------------------------------------------------------
+   La barre d'état est coupée sur une tablette : une sauvegarde réussie ou
+   ratée y passait inaperçue. L'avis s'affiche en haut de l'écran, comme
+   dans WEB_CAO. `etat` : "ok" (vert), "partiel" (orange : enregistré mais
+   pas tout), "info", "encours", "erreur" (rouge, reste jusqu'à ce qu'on le
+   touche).
+   ========================================================================== */
+function prjAvis(etat,titre,detail){
+  if(typeof document==="undefined"||!document.body)return;
+  let a=document.getElementById("prjAvis");
+  if(!a){
+    a=document.createElement("div");
+    a.id="prjAvis";
+    a.setAttribute("role","status");
+    a.setAttribute("aria-live","polite");
+    a.onclick=function(){ a.classList.remove("on"); };
+    document.body.appendChild(a);
+  }
+  const ico={ok:"✓",partiel:"!",info:"i",encours:"…",erreur:"✕"}[etat]||"i";
+  a.className="on "+(etat||"info");
+  a.innerHTML='<span class="pa-ico">'+ico+'</span>'+
+              '<span class="pa-txt"><b></b><small></small></span>';
+  a.querySelector("b").textContent=titre||"";
+  a.querySelector("small").textContent=detail||"";
+  clearTimeout(prjAvis.minuterie);
+  if(etat!=="erreur"&&etat!=="encours")
+    prjAvis.minuterie=setTimeout(function(){ a.classList.remove("on"); },
+                                 etat==="partiel"?9000:5000);
+}
+
 /* ==========================================================================
    Le panneau
    ========================================================================== */
+/* « aujourd'hui à 14:32 », « hier à 09:10 », « 7 oct. à 14:32 » : la même
+   forme que l'heure de sauvegarde de WEB_CAO (projdQuand). */
 function prjDate(ms){
   if(!ms)return "—";
   const d=new Date(ms);
   if(isNaN(d.getTime()))return "—";
   const auj=new Date();
-  const meme=d.toDateString()===auj.toDateString();
   const h=String(d.getHours()).padStart(2,"0")+":"+
           String(d.getMinutes()).padStart(2,"0");
-  return meme ? ("aujourd'hui à "+h)
-              : (d.toLocaleDateString("fr-FR")+" à "+h);
+  const jour=function(x){
+    return new Date(x.getFullYear(),x.getMonth(),x.getDate()).getTime();
+  };
+  const ecart=Math.round((jour(auj)-jour(d))/864e5);
+  if(ecart===0)return "aujourd'hui à "+h;
+  if(ecart===1)return "hier à "+h;
+  const o={day:"numeric",month:"short"};
+  if(d.getFullYear()!==auj.getFullYear())o.year="numeric";
+  return d.toLocaleDateString("fr-FR",o)+" à "+h;
 }
 
 function prjEteint(){
@@ -685,8 +858,10 @@ function prjBlocRacine(){
 
 function prjBlocProjet(){
   const source=prjSource();
+  const envoi=PRJ.nom?prjDernierEnvoi(PRJ.nom):0;
   const etat=PRJ.nom
     ? ('<b>'+aEsc(PRJ.nom)+'</b> — enregistré '+prjDate(PRJ.enregistre)+
+       (envoi?' · envoyé sur GitHub '+prjDate(envoi)+' depuis cet appareil':'')+
        (PRJ.modifie?' <em class="alerte">· modifications non enregistrées</em>'
                    :''))
     : '<em>aucun projet ouvert — ce qui est à l\'écran n\'est nulle part '+
@@ -715,6 +890,11 @@ function prjBlocProjet(){
         'placeholder="nom du projet"></span>'+
       '<span><button class="tb on" data-prj="enregistrer">💾 Enregistrer'+
         '</button></span>'+
+      (prjGithubPossible()
+        ? '<span><button class="tb" data-prj="github" title="Enregistre le '+
+          'projet, puis l\'envoie sur GitHub (commit + push par le lanceur '+
+          'WEB_SUITE)">☁ Enregistrer + GitHub</button></span>'
+        : '')+
     '</div>'+
     (V.modele
       ? '<p class="note">Sera écrit : '+quoi.join(" ; ")+'.</p>'
@@ -742,6 +922,7 @@ function prjBlocListe(){
         'title="Reprendre ce projet">'+aEsc(p.nom)+'</button>'+
       '<div class="prj-sous">'+aEsc(p.titre||"")+'</div>'+
       '<div class="prj-sous">'+prjDate((p.modifie||0)*1000)+
+        (prjDernierEnvoi(p.nom)?' · GitHub '+prjDate(prjDernierEnvoi(p.nom)):"")+
         (marques.length?' · '+marques.join(" · "):"")+
         (p.poids?' · '+moPoids(p.poids):"")+'</div>'+
       '</div>';
@@ -782,6 +963,8 @@ function prjRendreDouce(){
 }
 
 function prjBoutonEtat(){
+  const g=document.getElementById("bSaveGit");
+  if(g)g.hidden=!(prjGithubPossible()&&PRJ.nom);
   const b=document.getElementById("bProjet");
   if(!b)return;
   b.classList.toggle("on",!!PRJ.nom);
@@ -801,7 +984,9 @@ async function prjGeste(quoi,promesse){
   }catch(e){
     const t=String(e.message||e);
     hint("Échec : "+t.split("\n")[0]);
-    window.alert(quoi+" : impossible.\n\n"+t);
+    /* L'avis reste jusqu'à ce qu'on le touche, et se lit en entier : la
+       barre d'état coupe la raison, surtout sur une tablette. */
+    prjAvis("erreur",quoi+" : impossible",t);
     throw e;
   }
 }
@@ -827,13 +1012,11 @@ function prjLier(corps){
   });
   bt("enregistrer",async function(){
     const champ=document.getElementById("prjNom");
-    const nom=(champ&&champ.value||"").trim();
-    try{
-      const r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(nom));
-      hint("Projet « "+r.projet.nom+" » enregistré dans "+r.projet.dossier+
-           "."+prjDireCalcul(r.calcul));
-    }catch(e){}
-    prjRendre();
+    await prjEnregistrerGeste((champ&&champ.value||"").trim());
+  });
+  bt("github",async function(){
+    const champ=document.getElementById("prjNom");
+    await prjEnregistrerGithub((champ&&champ.value||"").trim());
   });
   for(const b of corps.querySelectorAll("[data-prj-ouvrir]")){
     b.onclick=function(){ prjOuvrirDemande(b.dataset.prjOuvrir); };
@@ -876,11 +1059,22 @@ function prjAccueilRendre(){
   }
   zone.hidden=false;
   const cinq=PRJ.projets.slice(0,5).map(function(p){
+    const envoi=prjDernierEnvoi(p.nom);
     return '<button class="tb" data-prj-ouvrir="'+aEsc(p.nom)+'" '+
-      'title="'+aEsc((p.titre||"")+" — "+prjDate((p.modifie||0)*1000))+'">'+
-      aEsc(p.nom)+'</button>';
+      'title="'+aEsc((p.titre||"")+" — enregistré "+prjDate((p.modifie||0)*1000)+
+        (envoi?" — envoyé sur GitHub "+prjDate(envoi)+" depuis cet appareil":""))+'">'+
+      aEsc(p.nom)+'<small class="prj-quand">'+prjDate((p.modifie||0)*1000)+
+      '</small></button>';
   }).join("");
+  /* La dernière sauvegarde, dite en clair : sur une tablette, c'est la seule
+     façon de savoir si le travail d'hier est bien arrivé sur le serveur. */
+  const dernier=PRJ.projets[0];
+  const envoiDernier=dernier?prjDernierEnvoi(dernier.nom):0;
   zone.innerHTML='<span>ou reprendre</span>'+cinq+
+    '<small class="prj-sauve">Dernière sauvegarde : <b>'+aEsc(dernier.nom)+
+      '</b>, '+prjDate((dernier.modifie||0)*1000)+
+      (envoiDernier?' · envoyé sur GitHub '+prjDate(envoiDernier)+
+        ' depuis cet appareil':'')+'</small>'+
     '<small>Vos projets sont dans '+aEsc(PRJ.racine)+'. '+
     (PRJ.projets.length>5?("Les "+PRJ.projets.length+" sont dans le panneau "+
       "« Projet ». "):"")+
@@ -983,12 +1177,11 @@ window.addEventListener("DOMContentLoaded",function(){
       hint("Donnez un nom au projet, puis « Enregistrer ».");
       return;
     }
-    prjGeste("Enregistrer le projet",prjEnregistrerTout(PRJ.nom))
-      .then(function(r){
-        hint("Projet « "+r.projet.nom+" » enregistré."+prjDireCalcul(r.calcul));
-        prjRendre();
-      }).catch(function(){ prjRendre(); });
+    prjEnregistrerGeste(PRJ.nom);
   });
+
+  const g=document.getElementById("bSaveGit");
+  if(g)g.onclick=function(){ prjEnregistrerGithub(PRJ.nom); };
 
   /* Le serveur est sondé APRÈS que 01-api.js a trouvé sa racine : sans quoi
      `API_BASE` est encore nul et la requête part sur la mauvaise origine.
@@ -996,5 +1189,7 @@ window.addEventListener("DOMContentLoaded",function(){
   (async function(){
     try{ await apiConnecter(); }catch(e){}
     await prjSonder();
+    await prjGithubSonder();
+    prjRendre();
   })();
 });

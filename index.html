@@ -27,6 +27,9 @@
     <button class="tb" id="bPlans" title="Afficher les plans de cuivre">Plans <kbd>P</kbd></button>
     <div class="sep"></div>
     <button class="tb" id="bProjet" title="Choisir où ranger le travail, et reprendre un projet existant">📁 Projet</button>
+    <!-- Visible seulement quand WEB_SUITE a lancé l'outil et qu'un projet est
+         ouvert : js/28-projet.js, prjBoutonEtat. -->
+    <button class="tb" id="bSaveGit" hidden title="Enregistre le projet, puis l'envoie sur GitHub (commit + push par le lanceur WEB_SUITE)">☁ Enregistrer + GitHub</button>
     <div class="sep"></div>
     <!-- Les trois gestes de l'outil, dans l'ordre où on les fait. -->
     <button class="tb" id="bConcevoir" title="Dessiner une antenne et sa carte au lieu d'en importer une : empilage, matériaux, gabarits">✏️ Concevoir</button>

@@ -301,6 +301,19 @@ transportable tel quel, d'une machine à l'autre et d'un disque à l'autre.
 * **Reprendre** : la liste du panneau, ou les boutons de l'écran d'accueil.
   C'est la troisième façon de commencer, à côté d'ouvrir un fichier et de
   dessiner — et après la première séance, c'est la plus fréquente.
+* **Enregistrer + GitHub** (☁, dans la barre d'outils et le panneau) : visible
+  quand [WEB·SUITE](https://github.com/pilou33620/WEB_SUITE) a lancé l'outil.
+  Le projet est enregistré, puis le lanceur envoie `PROJETS` sur GitHub
+  (commit + pull + push) avec le message demandé — *Annuler* enregistre sans
+  envoyer. Le même geste que dans WEB_CAO : depuis une tablette, le lanceur est
+  dans un autre onglet. Un autre appareil que le poste doit d'abord avoir
+  ouvert l'adresse Réseau du lanceur (`?jeton=…`). Les dossiers de calcul ne
+  partent pas.
+
+Le résultat de chaque sauvegarde s'affiche **en haut de l'écran** : enregistré
+(vert), enregistré mais pas envoyé (orange), refusé (rouge, avec la raison,
+jusqu'à ce qu'on le touche). L'écran d'accueil donne l'heure de la dernière
+sauvegarde de chaque projet, et du dernier envoi sur GitHub depuis cet appareil.
 
 La carte n'est **réécrite que si elle a changé**. Une carte de fabrication fait
 des dizaines de méga-octets ; changer une fréquence ne doit pas les renvoyer.
