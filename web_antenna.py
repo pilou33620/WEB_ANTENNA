@@ -71,6 +71,8 @@ import time
 import urllib.parse
 import webbrowser
 
+import appairage
+
 PORT_DEFAUT = 8000
 # DES PORTS DE REPLI, ET NON UN TIRAGE AU SORT TOUT DE SUITE. Windows
 # reserve des plages entieres (Hyper-V, WSL, Docker) et le 8000 y tombe
@@ -172,27 +174,11 @@ def adresse_lanceur():
         return None
 
 
-def hote_permis(entete):
-    """L'en-tete Host designe-t-il ce poste ? (parade au DNS rebinding)
-
-    Une page piegee qui fait resoudre son nom vers 127.0.0.1 devient « de
-    meme origine » et lit nos reponses ; elle envoie alors SON nom dans Host.
-    Une adresse IP litterale, elle, ne se rebranche pas : on accepte toutes
-    les IP (la tablette tape celle du poste), localhost et le nom du poste.
-    """
-    h = (entete or "").strip().lower().rstrip(".")
-    if h.startswith("["):
-        h = h[1:].split("]")[0]
-    elif h.count(":") == 1:
-        h = h.split(":")[0]
-    nom = socket.gethostname().lower()
-    if h in ("", "localhost", nom, nom + ".local"):
-        return True
-    try:
-        ipaddress.ip_address(h.split("%")[0])
-        return True
-    except ValueError:
-        return False
+# Host controle (DNS rebinding) et code d'appairage exige des autres appareils
+# du reseau : appairage.py, commun aux web tools (meme jeton et meme cookie que
+# le lanceur WEB_SUITE). Remplace dans main() selon --local.
+hote_permis = appairage.hote_permis
+GARDE = appairage.Garde("WEB_ANTENNA", actif=False)
 
 
 class Refus(Exception):
@@ -238,12 +224,7 @@ class Poste(http.server.SimpleHTTPRequestHandler):
 
     # -- garde-fous ------------------------------------------------------
     def parse_request(self):
-        if not super().parse_request():
-            return False
-        if not hote_permis(self.headers.get("Host")):
-            self.send_error(403, "Host non autorise (protection DNS rebinding)")
-            return False
-        return True
+        return super().parse_request() and GARDE.filtrer(self)
 
     def _statique(self):
         """Fichier de la page ? Sinon 404, sans dire s'il existe."""
@@ -843,9 +824,9 @@ class Poste(http.server.SimpleHTTPRequestHandler):
     # tablette porte deja : le cookie pose par le lanceur vaut pour tout
     # l'hote, et le navigateur l'envoie aussi a ce port-ci.
     #
-    # LES PROJETS, EUX, RESTENT OUVERTS AU RESEAU (voir `_ce_poste`) : la
-    # tablette enregistre sans jeton, comme avant. Seul l'envoi sur GitHub,
-    # qui parle au nom du poste, le demande.
+    # Toute la page exige deja le meme cookie des autres appareils (code
+    # d'appairage, appairage.py) ; ce controle-ci reste pour le cas ou l'outil
+    # est lance seul, sans garde actif, par un lanceur en mode reseau.
     # ==================================================================
     def _github_garde(self):
         if not adresse_lanceur():
@@ -1542,6 +1523,8 @@ def main(argv=None):
 
     lie, port = serveur.server_address[0], serveur.server_address[1]
     local_seul = lie in ("127.0.0.1", "::1")
+    global GARDE
+    GARDE = appairage.Garde("WEB_ANTENNA", actif=not local_seul)
     url = url_locale(lie, port)
 
     # LE DEBIT DU POSTE, RECOLLE AVANT LA PREMIERE PAGE. Sans lui, la premiere
@@ -1569,6 +1552,8 @@ def main(argv=None):
     print("  Adresse   %s" % url)
     if not local_seul:
         print("            http://%s:%d/   (reseau local)" % (ip_reseau(), port))
+        print("            l'autre appareil demande une fois le code d'appairage")
+        GARDE.annoncer()
     if port != args.port:
         print("            (le port %d etait refuse : celui-ci a ete pris a"
               " sa place)" % args.port)
