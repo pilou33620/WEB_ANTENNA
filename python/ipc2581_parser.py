@@ -1,3 +1,15 @@
+# [2026-10-10] Version 1.78: la place d'un texte lue dans son <Features>
+# Description:
+#              - Le XSD IPC-2581 (rev. C) pose la place d'un <Text> dans le
+#                <Location> du <Features> qui le porte, pas dans le <Text>.
+#                Elle n'etait lue que dans le <Text> : les textes des exports
+#                conformes (dont celui de l'editeur PCB) tombaient en (0 ; 0).
+#                Un <Location> du <Text> lui-meme passe toujours devant.
+#              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
+#
+# Liste des fonctions modifiees :
+# - [~] _process_features, _process_text
+#
 # [2026-10-10] Version 1.77: la rugosite du cuivre est lue dans les <Spec>
 # Description:
 #              - <Conductor type="SURFACE_ROUGHNESS_UPFACING"> (et
@@ -1358,8 +1370,16 @@ class IPC2581Parser:
             self._process_polyline(poly, layer_ref, net_name)
         for arc in features_elem.findall(self._tag("Arc")):
             self._process_arc(arc, layer_ref, net_name)
+        # La norme (XSD rev. C) pose la place d'un <Text> dans le <Location>
+        # de son <Features>, a cote de lui ; les premiers exports lus ici la
+        # mettaient dans le <Text>. Celle du <Text> passe devant.
+        loc_f = features_elem.find(self._tag("Location"))
+        loc_defaut = (Point(self._safe_float(loc_f.attrib.get("x")),
+                            self._safe_float(loc_f.attrib.get("y")))
+                      if loc_f is not None else None)
         for text_node in features_elem.findall(self._tag("Text")):
-            self._process_text(text_node, layer_ref, net_name, self.design.texts)
+            self._process_text(text_node, layer_ref, net_name, self.design.texts,
+                               loc_defaut)
 
         special_node = features_elem.find(self._tag("UserSpecial"))
         if special_node is not None:
@@ -1915,7 +1935,7 @@ class IPC2581Parser:
     # ------------------------------------------------------------------
 
     def _process_text(self, text_elem: ET.Element, layer: str, default_net: str,
-                      target_list: List[TextElement]):
+                      target_list: List[TextElement], loc_defaut=None):
         try:
             net = text_elem.attrib.get("net", default_net)
             # « textString » est l'attribut de la norme ; « text » celui
@@ -1925,7 +1945,10 @@ class IPC2581Parser:
             if not text_val:
                 return
 
-            loc = self._get_location(text_elem)
+            if text_elem.find(self._tag("Location")) is None and loc_defaut is not None:
+                loc = loc_defaut
+            else:
+                loc = self._get_location(text_elem)
             xform = text_elem.find(self._tag("Xform"))
             rot = 0.0
             mirror = False
