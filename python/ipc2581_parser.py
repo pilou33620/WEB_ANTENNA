@@ -1,3 +1,14 @@
+# [2026-10-10] Version 1.77: la rugosite du cuivre est lue dans les <Spec>
+# Description:
+#              - <Conductor type="SURFACE_ROUGHNESS_UPFACING"> (et
+#                DOWNFACING, TREATED) donne la rugosite du feuillard. Elle est
+#                convertie en micrometres (unite lue sur la balise, micrometre
+#                par defaut), la plus forte des faces est gardee, et elle est
+#                posee en attribut `rugosite_um` de la StackupLayer -- la
+#                classe ne change pas. La visionneuse la passe aux pertes du
+#                cuivre de la simulation.
+#              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
+#
 # [2026-10-10] Version 1.76: le contre-percage (back-drill) est lu
 # Description:
 #              - IPC-2581 (revision B et suivantes) decrit un contre-percage
@@ -1042,6 +1053,16 @@ class IPC2581Parser:
                             break
                     if not valeur:
                         continue
+                    if "ROUGHNESS" in genre:
+                        # <Conductor type="SURFACE_ROUGHNESS_UPFACING"> et
+                        # ses soeurs DOWNFACING / TREATED : la rugosite du
+                        # feuillard, une par face. On garde la PLUS FORTE --
+                        # la face qui regarde le plan n'est pas dite, et c'est
+                        # le sens qui n'enjolive pas les pertes.
+                        rug = self._rugosite_um(enfant, valeur)
+                        if rug > vals.get("rugosite_um", 0.0):
+                            vals["rugosite_um"] = rug
+                        continue
                     if "DIELECTRIC" in genre or "PERMITTIV" in genre:
                         vals.setdefault("dk", valeur)
                     elif ("LOSS" in genre or "TANGENT" in genre
@@ -1084,6 +1105,30 @@ class IPC2581Parser:
             couche.dk = couche.dk or vals.get("dk", "")
             couche.df = couche.df or vals.get("df", "")
             couche.material = couche.material or vals.get("material", "")
+            # La rugosite en ATTRIBUT POSE, comme `height` des textes : la
+            # classe StackupLayer ne change pas (interchangeable avec
+            # WEB_ANTENNA).
+            if vals.get("rugosite_um") and not getattr(couche, "rugosite_um", 0.0):
+                couche.rugosite_um = vals["rugosite_um"]
+
+    # Les unites de longueur d'une <Spec>, en micrometres. Sans unite, la
+    # rugosite est lue en MICROMETRES : c'est ainsi que les fiches de cuivre
+    # et les outils qui l'exportent la donnent.
+    _UNITES_UM = {"MICRON": 1.0, "MICRONS": 1.0, "UM": 1.0, "MICROMETER": 1.0,
+                  "MM": 1000.0, "MILLIMETER": 1000.0, "INCH": 25400.0,
+                  "IN": 25400.0, "MIL": 25.4, "MILS": 25.4}
+
+    def _rugosite_um(self, elem: ET.Element, valeur: str) -> float:
+        """La valeur d'une rugosite de <Spec>, en micrometres (0 si illisible)."""
+        unite = ""
+        for noeud in elem.iter():
+            unite = unite or (noeud.attrib.get("unit") or noeud.attrib.get("units") or "")
+        try:
+            v = float(str(valeur).replace(",", "."))
+        except ValueError:
+            return 0.0
+        k = self._UNITES_UM.get(unite.strip().upper(), 1.0 if not unite else 0.0)
+        return v * k if v > 0 and k > 0 else 0.0
 
     def _parse_stackup(self, cad_data: ET.Element):
         stackup_node = cad_data.find(self._tag("Stackup"))

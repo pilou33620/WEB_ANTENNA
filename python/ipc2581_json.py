@@ -37,7 +37,8 @@ Cle par cle, le dictionnaire produit :
     epaisseur   epaisseur hors-tout de l'empilage
     contour     profil de la carte : {"o": [x,y,...], "t": [[x,y,...], ...]}
                 (o = outline, t = trous / decoupes)
-    empilage    couches physiques, dans l'ordre de sequence
+    empilage    couches physiques, dans l'ordre de sequence ; « rug » la rugosite
+                du cuivre en micrometres, quand le fichier la porte
     couches     noms de couches ; ailleurs, "c" est un index dans ce tableau
     nets        noms de nets   ; ailleurs, "n" est un index dans ce tableau
     pistes      {c, n, w (largeur), p (points a plat), f (remplissage)}
@@ -305,7 +306,7 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
     empilage = []
     for couche in design.stackup:
         couches.rang(couche.name)
-        empilage.append({
+        e = {
             "nom": couche.name,
             "seq": couche.sequence,
             "ep": _r(couche.thickness),
@@ -313,7 +314,13 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
             "dk": couche.dk,
             "df": couche.df,
             "type": couche.layer_type,
-        })
+        }
+        # La rugosite du cuivre, en MICROMETRES, quand le fichier la porte
+        # (parseur 1.77+) : absente, la cle n'est pas ecrite.
+        rug = getattr(couche, "rugosite_um", 0.0) or 0.0
+        if rug > 0:
+            e["rug"] = round(float(rug), 4)
+        empilage.append(e)
 
     pistes, arcs, plans = [], [], []
     for net in design.nets.values():
