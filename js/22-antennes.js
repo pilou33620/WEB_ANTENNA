@@ -610,6 +610,22 @@ function conIfaClassique(c){
   };
 }
 
+/* LA CORRECTION MESURÉE (A-FAIRE.md § 1, 03/10/2026). Une fois
+   l'alimentation sortie du court-circuit, l'IFA aux proportions classiques
+   résonnait à 2,21 GHz pour 2,45 visés, sous −10 dB. L'écart court-circuit →
+   alimentation déplace la résonance autant que le bras : à 1,8 fois λ₀/40 et
+   le bras à 1,018 fois le calcul, la bande à −10 dB couvre 2,405–2,575 GHz.
+   ponytail: UN SEUL cas mesuré (2,45 GHz, FR-4) ; l'adaptation reste
+   modeste (Z ≈ 33 + 19j), un croisement plus fin la gagnerait. */
+const CON_IFA_K_BRAS=1.018, CON_IFA_K_ECART=1.8;
+/* Les proportions classiques, bras et écart corrigés de la mesure : ce que
+   proposent les défauts, et ce que le tracé prend pour un champ non fourni. */
+function conIfaCorrige(c){
+  const cl=conIfaClassique(c);
+  return Object.assign({}, cl, {La:+(cl.La*CON_IFA_K_BRAS).toFixed(3),
+                                d:+(cl.d*CON_IFA_K_ECART).toFixed(3)});
+}
+
 const CON_MOTIF_IFA={
   id:"ifa", nom:"F inversé (IFA)", role:"gnd",
   aide:"quart d'onde replié aux proportions classiques : compact, large bande, plan TOP et couture de masse",
@@ -644,24 +660,17 @@ const CON_MOTIF_IFA={
      aide:"rangée de vias de couture le long du bord de masse, espacés d'au plus λ₀/20"}
   ],
   defauts:function(c){
-    /* Les proportions classiques, telles quelles : `conGabaritDefauts` ne
-       retient que les clés qui ont un champ, les trois autres (λ₀, développé
-       visé, pas de couture) ne servent qu'au tracé et à la fiche. */
-    const cl=conIfaClassique(c);
-    /* LA CORRECTION MESURÉE (A-FAIRE.md § 1, 03/10/2026). Une fois
-       l'alimentation sortie du court-circuit, l'IFA aux proportions
-       classiques résonnait à 2,21 GHz pour 2,45 visés, sous −10 dB. L'écart
-       court-circuit → alimentation déplace la résonance autant que le bras :
-       à 1,8 fois λ₀/40 et le bras à 1,018 fois le calcul, la bande à −10 dB
-       couvre 2,405–2,575 GHz.
-       ponytail: UN SEUL cas mesuré (2,45 GHz, FR-4) ; l'adaptation reste
-       modeste (Z ≈ 33 + 19j), un croisement plus fin la gagnerait. */
-    return Object.assign({}, cl, {La:+(cl.La*1.018).toFixed(3),
-                                  d:+(cl.d*1.8).toFixed(3),
-                                  masseTop:1, viasCouture:1});
+    /* Les proportions classiques, bras et écart corrigés de la mesure :
+       `conGabaritDefauts` ne retient que les clés qui ont un champ, les trois
+       autres (λ₀, développé visé, pas de couture) ne servent qu'au tracé et
+       à la fiche. */
+    return Object.assign(conIfaCorrige(c), {masseTop:1, viasCouture:1});
   },
   tracer:function(c,p){
-    const cl=conIfaClassique(c);
+    /* Un champ non fourni prend la valeur des défauts, correction mesurée
+       comprise : sans elle, le bras serait tracé court alors que la
+       résonance annoncée plus bas retire la correction. */
+    const cl=conIfaCorrige(c);
     const wb=p.wb||cl.wb;
     const wf=p.wf||cl.wf;
     const marge=p.marge||cl.marge;
@@ -703,9 +712,10 @@ const CON_MOTIF_IFA={
        ici prenait le développé pour des mètres et rendait une résonance mille
        fois trop haute — 2 320 GHz au lieu de 2,32. */
     /* La résonance annoncée se lit sur le développé RAMENÉ de la correction
-       mesurée du bras (× 1,018, voir `defauts`) : avec l'écart d porté à
-       1,8 fois λ₀/40, c'est ce développé-là qui résonne à la cible. */
-    const festim=CON_C0/(4*(dev-La*(1-1/1.018))*Math.sqrt(CON_IFA_EEFF));
+       mesurée du bras (× CON_IFA_K_BRAS, voir `conIfaCorrige`) : avec l'écart
+       d porté à CON_IFA_K_ECART fois λ₀/40, c'est ce développé-là qui résonne
+       à la cible. */
+    const festim=CON_C0/(4*(dev-La*(1-1/CON_IFA_K_BRAS))*Math.sqrt(CON_IFA_EEFF));
 
     const formes=[
       /* Plan de masse inférieur (continu sous toute la zone de masse) */
