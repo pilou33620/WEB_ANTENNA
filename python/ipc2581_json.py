@@ -49,24 +49,31 @@ Cle par cle, le dictionnaire produit :
                  a_sup (l'anneau vient d'une pastille devinee, pas du fichier),
                  sa / sb (portee : rangs des couches de depart et d'arrivee,
                  ABSENTS quand le fichier ne la declare pas), ss (d'ou elle
-                 vient : "calque" ou "padstack")}
+                 vient : "calque" ou "padstack"),
+                 cp (contre-percage, voir `_contre_percage`)}
     pads        pastilles libres : {x, y, r, m, ps, pin, n}
     composants  {ref, pkg, c, x, y, r, m, mnt, val, tol, pads, pins}
     padstacks   definitions : {trou, pad, pads: [{c, d, f (forme), a (antipad)}]}
     formes      primitives standard : cercle, rectangle, ovale, polygone...
     formesuser  formes du dictionnaire utilisateur (empreintes complexes)
     calques     {nom: {f (layerFunction), s (side)}} de chaque calque declare
-    stats       comptages, pour l'entete de la visionneuse
+    stats       comptages, pour l'entete de la visionneuse (dont
+                contre_percages et contre_percages_orphelins)
 """
 
 import io
 import os
+import re
 import zipfile
 
 from ipc2581_data import IPCDesign
 from ipc2581_parser import IPC2581Parser, IPC2581ParseError
 
 FORMAT = "cao-ipc2581-1"
+
+# Les layerFunction de cuivre : la meme famille que le parseur
+# (ipc2581_parser._RE_FONCTION_CUIVRE) et la page (js/02-modele.js).
+_RE_CUIVRE = re.compile(r"COND|SIGNAL|PLANE|POWER|GROUND|MIXED")
 
 # Assez pour que le micron soit exact en millimetres comme en pouces, sans
 # trainer les 17 chiffres d'un float derriere chaque sommet de polygone.
@@ -226,6 +233,66 @@ def _natures_nets(composants, noms_nets):
             "paires": res["paires_diff"], "bruyants": sorted(res["nets_bruyants"])}
 
 
+# Unites du fichier vers le millimetre : le moignon et la profondeur d'un
+# contre-percage partent en mm, comme le serveur les attend.
+_MM = {"MILLIMETER": 1.0, "MM": 1.0, "MICRON": 1e-3, "INCH": 25.4}
+
+
+def _contre_percage(trou, design, couches, cuivres):
+    """Le contre-percage d'un perçage, au format de la visionneuse, ou None.
+
+        cote  "dessous" | "dessus" : la face d'ou le foret repasse
+        de    rang de la couche de depart (la face) dans `couches`
+        g     rang de la couche a ne pas couper
+        res   moignon residuel admis, en mm (MAX_STUB_LENGTH)
+        d     diametre du foret, en unites du fichier (s'il a son trou)
+        prof  profondeur depuis la face, en mm, comptee dans l'empilage :
+              jusqu'a la couche gardee, moins le moignon residuel
+        spec  la <Spec> d'ou il vient ; src : "spec" ou "calque"
+
+    UNE FACE QUI N'EST PAS UNE FACE, une couche gardee hors de l'empilage ou
+    du mauvais cote : le champ part quand meme, sans `cote` ni `g` -- la fiche
+    dira ce que le fichier declare, et rien ne partira au serveur.
+    """
+    cp = getattr(trou, "contre_percage", None)
+    if not cp:
+        return None
+    out = {"src": cp.get("source", "spec")}
+    if cp.get("spec"):
+        out["spec"] = cp["spec"]
+    if cp.get("moignon_mm") is not None:
+        out["res"] = _r(cp["moignon_mm"])
+    if cp.get("diametre"):
+        out["d"] = _r(cp["diametre"])
+    depart, garde = cp.get("depart", ""), cp.get("garde", "")
+    if depart and couches.rang_connu(depart) >= 0:
+        out["de"] = couches.rang_connu(depart)
+    if not cuivres or depart not in (cuivres[0], cuivres[-1]):
+        return out
+    dessous = depart == cuivres[-1] and len(cuivres) > 1
+    if garde in cuivres:
+        ig = cuivres.index(garde)
+        # la couche gardee n'est pas la face percee
+        if (dessous and ig < len(cuivres) - 1) or (not dessous and ig > 0):
+            out["cote"] = "dessous" if dessous else "dessus"
+            out["g"] = couches.rang_connu(garde)
+            # LA PROFONDEUR SE COMPTE DANS L'EMPILAGE : de la face percee
+            # jusqu'au cuivre garde (exclu), moins le moignon residuel. Une
+            # epaisseur manquante et on ne la donne pas.
+            k = _MM.get((design.units or "").upper(), 1.0)
+            pile = sorted(design.stackup, key=lambda c: c.sequence)
+            noms = [c.name for c in pile]
+            i0 = noms.index(cuivres[0])
+            i1 = noms.index(cuivres[-1])
+            ic = noms.index(garde)
+            tranche = pile[ic + 1:i1 + 1] if dessous else pile[i0:ic]
+            if tranche and all((c.thickness or 0) > 0 for c in tranche):
+                prof = sum(c.thickness for c in tranche) * k - (cp.get("moignon_mm") or 0)
+                if prof > 0:
+                    out["prof"] = _r(round(prof, 4))
+    return out
+
+
 def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
     """IPCDesign -> dictionnaire JSON pour la visionneuse."""
     couches = _Index()
@@ -292,6 +359,11 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
             item["b"] = [_r(v) for v in boite]
         textes.append(item)
 
+    # Les cuivres de l'empilage, du dessus au dessous : la face d'un
+    # contre-percage se juge contre eux.
+    cuivres = [c.name for c in sorted(design.stackup, key=lambda c: c.sequence)
+               if _RE_CUIVRE.search((c.layer_type or "").upper())]
+    nb_cp = 0
     percages = []
     for trou in design.drills:
         item = {"x": _r(trou.location.x), "y": _r(trou.location.y),
@@ -324,6 +396,10 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
             # padstack.
             if trou.annular_ring_supposee:
                 item["a_sup"] = True
+        cp = _contre_percage(trou, design, couches, cuivres)
+        if cp:
+            item["cp"] = cp
+            nb_cp += 1
         percages.append(item)
 
     pads = [_pad_en_dict(p, nets) for p in design.standalone_pads]
@@ -460,6 +536,9 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
             "padstacks": len(padstacks),
             "longueur_cuivre": _r(longueur),
             "calques_ignores": len(design.ignored_layers),
+            "contre_percages": nb_cp,
+            "contre_percages_orphelins": len(
+                getattr(design, "contre_percages_orphelins", None) or ()),
         },
     }
 

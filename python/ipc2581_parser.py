@@ -1,3 +1,30 @@
+# [2026-10-10] Version 1.76: le contre-percage (back-drill) est lu
+# Description:
+#              - IPC-2581 (revision B et suivantes) decrit un contre-percage
+#                par une <Spec> faite d'elements <Backdrill type="...">, pointee
+#                par un <SpecRef> du trou : START_LAYER (la face d'ou le foret
+#                repasse, en layerOrGroupRef), MUST_NOT_CUT_LAYER (la couche a
+#                ne pas couper) et MAX_STUB_LENGTH (le moignon residuel admis,
+#                value + unit). C'est ce qu'ecrit KiCad (pcb_io_ipc2581.cpp,
+#                ensureBackdrillSpecs) ; rien ne le lisait.
+#              - Deux formes : la spec sur le trou METALLISE du via (le via est
+#                contre-perce), ou sur un trou NON metallise d'un calque de
+#                percage a part, dont le <Span> dit la face et les couches
+#                retirees (le trou est alors le FORET, pas un via). Un calque
+#                dont la layerFunction contient BACKDRILL est lu de la meme
+#                facon. Le foret n'entre pas dans design.drills : un trou nu
+#                pose sur le via le ferait prendre pour non relie. Il est
+#                rattache au via du meme emplacement.
+#              - Le resultat est pose en attribut `contre_percage` du Drill
+#                (meme raison que `height` des textes : la classe ne change
+#                pas) ; les forets sans via, en design.contre_percages_orphelins.
+#              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
+#
+# Liste des fonctions ajoutees/modifiees :
+# - [+] _parse_contre_percages, _cp_de_spec, _cuivres_empilage,
+#       _rattacher_contre_percages
+# - [~] parse, _parse_ecad (SpecRef des calques), _process_drill_layer
+#
 # [2026-10-07] Version 1.75: textes -- l'attribut de la norme et leur taille
 # Description:
 #              - <Text> se lit par « textString » (la norme), « text » restant
@@ -229,6 +256,12 @@ class IPC2581Parser:
         # distingue un via traversant d'un borgne ou d'un enterré. Voir
         # `_lire_span`.
         self.drill_spans: Dict[str, tuple] = {}
+        # LE CONTRE-PERCAGE (voir `_parse_contre_percages`) : les <Spec> de
+        # back-drill par nom, les <SpecRef> de chaque calque, et les forets
+        # lus sur un calque a part, en attente du via qu'ils repassent.
+        self.backdrill_specs: Dict[str, dict] = {}
+        self.calque_specs: Dict[str, list] = {}
+        self._forets_cp: List[dict] = []
 
     def _verifier_xml_sur(self):
         """Rejette les entites DTD XML (<!ENTITY) pour prevenir les attaques Billion Laughs / DoS."""
@@ -283,9 +316,11 @@ class IPC2581Parser:
             self._parse_padstack_defs()
 
             self._parse_specs()
+            self._parse_contre_percages()
 
             logger.info("Étape 6/6 : Parsing des données ECAD (composants, empilement, etc.)...")
             self._parse_ecad()
+            self._rattacher_contre_percages()
 
             logger.info("Extraction des valeurs et tolérances depuis le BOM...")
             self._parse_bom()
@@ -1128,6 +1163,9 @@ class IPC2581Parser:
                 span = self._lire_span(layer)
                 if span:
                     self.drill_spans[lname] = span
+                refs = [r.attrib.get("id", "") for r in layer.findall(self._tag("SpecRef"))]
+                if refs:
+                    self.calque_specs[lname] = refs
 
                 props = {}
                 for prop in layer.findall(self._tag("Property")):
@@ -1358,10 +1396,19 @@ class IPC2581Parser:
         span_calque = self._lire_span(layer_elem)
         if span_calque and layer_ref:
             self.drill_spans.setdefault(layer_ref, span_calque)
+        # UN CALQUE DE CONTRE-PERCAGE : sa fonction le dit (BACKDRILL), ou une
+        # spec de back-drill pointee par le calque lui-meme.
+        fonction = ((getattr(self.design, "layer_info", {}) or {})
+                    .get(layer_ref, {}).get("fonction", ""))
+        specs_calque = (self.calque_specs.get(layer_ref, [])
+                        + [r.attrib.get("id", "") for r in
+                           layer_elem.findall(self._tag("SpecRef"))])
         for item_set in layer_elem.findall(self._tag("Set")):
             padstack_ref = item_set.attrib.get("geometry", "")
             net_name = item_set.attrib.get("net", "")
             pad_usage = item_set.attrib.get("padUsage", "").upper()
+            specs_set = [r.attrib.get("id", "") for r in
+                         item_set.findall(self._tag("SpecRef"))]
 
             holes = item_set.findall(self._tag("Hole"))
             features = item_set.find(self._tag("Features"))
@@ -1381,8 +1428,26 @@ class IPC2581Parser:
                     y = self._safe_float(hole.attrib.get("y"))
 
                 loc = Point(x, y)
+                # LE CONTRE-PERCAGE DU TROU, s'il en a un : la premiere spec
+                # de back-drill parmi celles du trou, de son <Set>, de son
+                # calque. Sur un trou nu, ou sur un calque BACKDRILL, le trou
+                # est le FORET : il ne devient pas un via, il attend le sien.
+                ids = ([r.attrib.get("id", "") for r in
+                        hole.findall(self._tag("SpecRef"))]
+                       + specs_set + specs_calque)
+                nom_spec = next((i for i in ids if i in self.backdrill_specs), "")
+                foret = "BACKDRILL" in fonction or (
+                    nom_spec and "NON" in plating.upper())
+                if foret:
+                    self._forets_cp.append({
+                        "x": x, "y": y, "diametre": diameter,
+                        "spec": nom_spec, "calque": layer_ref,
+                        "span": self.drill_spans.get(layer_ref)})
+                    continue
                 drill = Drill(location=loc, diameter=diameter, plating=plating,
                               padstack_ref=padstack_ref, net_name=net_name)
+                if nom_spec:
+                    drill.contre_percage = self._cp_de_spec(nom_spec)
                 # LA PORTÉE, TANT QU'ON A LE CALQUE SOUS LA MAIN. Plus loin,
                 # `design.drills` n'est qu'une liste de trous : rien n'y dit
                 # plus de quel calque ils viennent.
@@ -1428,6 +1493,150 @@ class IPC2581Parser:
                     drill.padstack_obj = self.design.padstacks[drill.padstack_ref]
 
                 self.design.drills.append(drill)
+
+    # ------------------------------------------------------------------
+    # Contre-perçage (back-drill)
+    # ------------------------------------------------------------------
+
+    # Unites de <Property unit="..."> (propertyUnitType d'IPC-2581) vers le mm.
+    _UNITES_MM = {"MM": 1.0, "MILLIMETER": 1.0, "MICRON": 1e-3,
+                  "INCH": 25.4, "MIL": 0.0254, "MILS": 0.0254}
+
+    def _parse_contre_percages(self):
+        """Indexe les spécifications de contre-perçage : nom -> {depart,
+        garde, moignon_mm}.
+
+        CE QU'IPC-2581 ÉCRIT. Une <Spec> (sous <Content>, <Ecad> ou
+        <CadHeader>, comme les spécifications de matériau) porte un élément
+        <Backdrill> par grandeur, son `type` disant laquelle :
+
+            <Spec name="BD_1A">
+             <Backdrill type="START_LAYER">
+              <Property layerOrGroupRef="BOTTOM"/></Backdrill>
+             <Backdrill type="MUST_NOT_CUT_LAYER">
+              <Property layerOrGroupRef="IN1"/></Backdrill>
+             <Backdrill type="MAX_STUB_LENGTH">
+              <Property value="0.1" unit="MM"/></Backdrill>
+            </Spec>
+
+        et le trou la désigne par un <SpecRef id="BD_1A"/>. C'est la forme de
+        l'export IPC-2581 de KiCad. Ni la profondeur ni le diamètre du foret
+        n'y sont : la profondeur se compte dans l'empilage, le diamètre n'est
+        connu que si le foret a son propre trou (voir `_rattacher_...`).
+        """
+        racines = []
+        content = self.root.find(self._tag("Content"))
+        if content is not None:
+            racines.append(content)
+        ecad = self.root.find(self._tag("Ecad"))
+        if ecad is not None:
+            racines.append(ecad)
+            header = ecad.find(self._tag("CadHeader"))
+            if header is not None:
+                racines.append(header)
+        defaut = self._UNITES_MM.get((self.design.units or "").upper(), 1.0)
+        for racine in racines:
+            for spec in racine.findall(self._tag("Spec")):
+                nom = spec.attrib.get("name") or spec.attrib.get("id")
+                elems = spec.findall(self._tag("Backdrill"))
+                if not nom or not elems:
+                    continue
+                cp = self.backdrill_specs.setdefault(nom, {})
+                for bd in elems:
+                    genre = (bd.attrib.get("type") or "").upper()
+                    prop = bd.find(self._tag("Property"))
+                    attrs = dict(bd.attrib)
+                    if prop is not None:
+                        attrs.update(prop.attrib)
+                    ref = (attrs.get("layerOrGroupRef") or attrs.get("layerRef")
+                           or "").strip()
+                    if genre == "START_LAYER" and ref:
+                        cp["depart"] = ref
+                    elif genre == "MUST_NOT_CUT_LAYER" and ref:
+                        cp["garde"] = ref
+                    elif genre == "MAX_STUB_LENGTH":
+                        v = attrs.get("value")
+                        if v is not None and self._safe_float(v, -1.0) >= 0:
+                            k = self._UNITES_MM.get(
+                                (attrs.get("unit") or "").upper(), defaut)
+                            cp["moignon_mm"] = round(self._safe_float(v) * k, 6)
+        if self.backdrill_specs:
+            logger.info("%d spécification(s) de contre-perçage lue(s).",
+                        len(self.backdrill_specs))
+
+    def _cp_de_spec(self, nom: str) -> dict:
+        """Le contre-perçage d'un via d'après une spec : une copie, que le
+        rattachement d'un foret peut compléter sans toucher aux autres vias."""
+        cp = dict(self.backdrill_specs.get(nom, {}))
+        cp["spec"] = nom
+        cp["source"] = "spec"
+        return cp
+
+    def _cuivres_empilage(self) -> List[str]:
+        """Les couches de cuivre de l'empilage, de la face du dessus à celle
+        du dessous : c'est elles qui disent de quel côté le foret repasse."""
+        infos = getattr(self.design, "layer_info", {}) or {}
+        out = []
+        for sl in sorted(self.design.stackup, key=lambda c: c.sequence):
+            fonction = (sl.layer_type or infos.get(sl.name, {}).get("fonction", ""))
+            if _RE_FONCTION_CUIVRE.search((fonction or "").upper()):
+                out.append(sl.name)
+        return out
+
+    def _rattacher_contre_percages(self):
+        """Chaque foret lu sur un calque de contre-perçage rejoint le via
+        MÉTALLISÉ du même emplacement.
+
+        Le <Span> du calque du foret va de la face percée à la dernière
+        couche retirée : la face est celle des deux bouts qui est une face de
+        cuivre, et la couche à ne pas couper, faute de MUST_NOT_CUT_LAYER, la
+        suivante vers l'intérieur. Un foret sans via est gardé à part et
+        compté : on ne fabrique pas un via pour lui.
+        """
+        cu = self._cuivres_empilage()
+        orphelins = []
+        if not self._forets_cp:
+            self.design.contre_percages_orphelins = orphelins
+            return
+        tol = 1e-3
+        for f in self._forets_cp:
+            cible = None
+            for d in self.design.drills:
+                if ("NON" not in (d.plating or "").upper()
+                        and abs(d.location.x - f["x"]) <= tol
+                        and abs(d.location.y - f["y"]) <= tol):
+                    cible = d
+                    break
+            if cible is None:
+                orphelins.append(f)
+                continue
+            cp = dict(getattr(cible, "contre_percage", None) or {})
+            if f["spec"]:
+                for k, v in self._cp_de_spec(f["spec"]).items():
+                    cp.setdefault(k, v)
+            cp["source"] = "calque"
+            cp["calque"] = f["calque"]
+            if f["diametre"] > 0:
+                cp["diametre"] = f["diametre"]
+            span = f["span"]
+            if span and cu:
+                a, b = span
+                if a in (cu[0], cu[-1]) and b in cu:
+                    face, fin = a, b
+                elif b in (cu[0], cu[-1]) and a in cu:
+                    face, fin = b, a
+                else:
+                    face = fin = None
+                if face is not None:
+                    cp.setdefault("depart", face)
+                    i = cu.index(fin) + (1 if face == cu[0] else -1)
+                    if "garde" not in cp and 0 <= i < len(cu):
+                        cp["garde"] = cu[i]
+            cible.contre_percage = cp
+        self.design.contre_percages_orphelins = orphelins
+        if orphelins:
+            logger.warning("%d foret(s) de contre-perçage sans via au même "
+                           "emplacement.", len(orphelins))
 
     def _process_pad_instance(self, pad_elem: ET.Element, current_layer: str = "ALL",
                               default_net: str = "") -> PadInstance:
