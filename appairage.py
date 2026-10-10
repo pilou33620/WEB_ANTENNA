@@ -2,9 +2,8 @@
 
     python appairage.py      vérification (banc d'essai, sans réseau)
 
-COPIE IDENTIQUE dans chaque web tool (web_suite, web_ferme, WEB_3D, WEB_ANTENNA…) :
-une correction se fait partout. web_launcher, qui tient en un seul fichier, en
-garde sa propre version.
+COPIE IDENTIQUE dans chaque web tool (web_suite, WEB_CAO, WEB_ANTENNA, WEB_3D,
+web_ferme) : une correction se fait partout.
 
 Un serveur qui écoute sur le réseau local exige des autres appareils un jeton.
 Le taper (22 caractères) était pénible : le serveur affiche donc dans son
@@ -327,7 +326,7 @@ PAGE_HTML = """<!doctype html>
   <div class="nom">__NOM__</div>
   <h1>Code d'appairage</h1>
   <p>Saisissez le code à 6 chiffres affiché dans le terminal du serveur (ou dans les logs
-     de ce tool, dans web_launcher ou WEB·SUITE). Cet appareil s'en souviendra ensuite,
+     de ce tool, dans WEB·SUITE). Cet appareil s'en souviendra ensuite,
      pour tous les web tools de ce serveur.</p>
   <form id="f" autocomplete="off">
     <input id="code" inputmode="numeric" pattern="[0-9 ]*" maxlength="7"

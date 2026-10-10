@@ -44,7 +44,7 @@ toujours 8000** : voir « Le port » ci-dessous.
 | `--sans-banc` | Ne mesure pas la vitesse du poste (les fils du dernier banc restent en vigueur) |
 | `--projets DIR` | Racine des projets pour ce lancement seulement, sans toucher au réglage retenu dans `~/.antenne-openems.json` ([WEB·SUITE](https://github.com/pilou33620/WEB_SUITE) y passe `PROJETS/ANTENNA`, synchronisé avec GitHub) |
 
-Depuis un autre appareil du réseau (tablette), la page demande une fois un **code d'appairage** à 6 chiffres, affiché dans le terminal du serveur (ou dans les logs de WEB_ANTENNA, dans WEB·SUITE ou web_launcher). L'appareil s'en souvient ensuite, pour tous les web tools de ce poste (`appairage.py`, commun aux web tools) ; le poste lui-même n'en a jamais besoin.
+Depuis un autre appareil du réseau (tablette), la page demande une fois un **code d'appairage** à 6 chiffres, affiché dans le terminal du serveur (ou dans les logs de WEB_ANTENNA, dans WEB·SUITE). L'appareil s'en souvient ensuite, pour tous les web tools de ce poste (`appairage.py`, commun aux web tools) ; le poste lui-même n'en a jamais besoin.
 
 Sans carte sous la main :
 
