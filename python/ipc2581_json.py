@@ -2,8 +2,11 @@
 # -*- coding: utf-8 -*-
 # ==========================================
 # VERSIONING
-# Version: 1.0.0
-# Date: 2026-08-26
+# Version: 1.1.0
+# Date: 2026-10-11
+# 1.1.0 : « regles » (classes de nets, paires differentielles, contraintes,
+#   groupes d'appariement, matrice d'isolement -- parseur 1.79) et la rugosite
+#   de Huray (« rug_huray ») dans l'empilage.
 # Explication: pont entre le parseur IPC-2581 (ipc2581_parser.py, qui rend un
 #   IPCDesign fait d'objets Python) et la visionneuse du navigateur (qui ne
 #   sait lire que du JSON). Ce module ne parse rien et ne dessine rien : il
@@ -38,9 +41,27 @@ Cle par cle, le dictionnaire produit :
     contour     profil de la carte : {"o": [x,y,...], "t": [[x,y,...], ...]}
                 (o = outline, t = trous / decoupes)
     empilage    couches physiques, dans l'ordre de sequence ; « rug » la rugosite
-                du cuivre en micrometres, quand le fichier la porte
+                du cuivre en micrometres (Rq, Hammerstad), ou « rug_huray »
+                {a (rayon des nodules, micrometres), sr} pour le modele de
+                Huray, quand le fichier la porte
     couches     noms de couches ; ailleurs, "c" est un index dans ce tableau
     nets        noms de nets   ; ailleurs, "n" est un index dans ce tableau
+    classes_nets  {net: netClass} -- l'enumeration de la norme (GROUND, POWER,
+                SIGNAL, CLK) portee par <LogicalNet>
+    regles      les regles de l'outil de CAO qui a ecrit le fichier (parseur
+                1.79, forme de l'export de l'editeur PCB), par NOM de net :
+                  classes          {net: nom de classe}
+                  regles_classes   {classe: {w, clr, via, drill, wL {couche: w},
+                                   z, zTol, lMin, lMax, viasMax, couches,
+                                   topo, ordre, stubMax, viaStubMax,
+                                   etoileTol, cp}} -- millimetres, ohms, %
+                  paires           [{nom, p, n, regle, w, wMin, wMax, gap,
+                                   gapMin, gapMax, maxDecouple, zdiff, zTol}]
+                  contraintes      {net: {z, zTol, lMin, lMax, viasMax, ...}}
+                  groupes          [{nom, mode "mm"|"ps", tol, ref, nets}]
+                  matrice          {"A|B": isolement en mm}
+                Vide quand le fichier n'en porte pas ; la visionneuse s'en
+                sert comme classement initial, devant la detection.
     pistes      {c, n, w (largeur), p (points a plat), f (remplissage)}
     arcs        {c, n, w, s (debut), e (fin), m (centre), h (horaire)}
     plans       {c, n, f, g: [{o, t}]} -- zones de cuivre remplies
@@ -234,6 +255,29 @@ def _natures_nets(composants, noms_nets):
             "paires": res["paires_diff"], "bruyants": sorted(res["nets_bruyants"])}
 
 
+def _regles(design):
+    """Les regles de l'outil de CAO lues par le parseur (1.79+ :
+    design.regles_nets), telles quelles, moins le nom de la <Spec> qui a
+    servi a les rassembler. Une paire sans nom prend celui de son net P ;
+    une paire a laquelle il manque un net ne part pas. Un parseur anterieur
+    donne des tables vides."""
+    R = getattr(design, "regles_nets", None) or {}
+    paires = []
+    for p in R.get("paires") or []:
+        if not p.get("p") or not p.get("n"):
+            continue
+        q = {k: v for k, v in p.items() if k != "spec"}
+        q["nom"] = q.get("nom") or q["p"]
+        paires.append(q)
+    groupes = [{k: v for k, v in g.items() if k != "spec"} for g in (R.get("groupes") or [])]
+    return {"classes": dict(R.get("classes") or {}),
+            "regles_classes": dict(R.get("regles_classes") or {}),
+            "paires": paires,
+            "contraintes": dict(R.get("contraintes") or {}),
+            "groupes": groupes,
+            "matrice": dict(R.get("matrice") or {})}
+
+
 # Unites du fichier vers le millimetre : le moignon et la profondeur d'un
 # contre-percage partent en mm, comme le serveur les attend.
 _MM = {"MILLIMETER": 1.0, "MM": 1.0, "MICRON": 1e-3, "INCH": 25.4}
@@ -320,6 +364,11 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
         rug = getattr(couche, "rugosite_um", 0.0) or 0.0
         if rug > 0:
             e["rug"] = round(float(rug), 4)
+        # Huray (parseur 1.79+) : rayon des nodules en micrometres et rapport
+        # de surface ; a part de « rug », qui reste un Rq
+        huray = getattr(couche, "rugosite_huray", None)
+        if huray and huray.get("a") and huray.get("sr"):
+            e["rug_huray"] = {"a": round(float(huray["a"]), 4), "sr": round(float(huray["sr"]), 4)}
         empilage.append(e)
 
     pistes, arcs, plans = [], [], []
@@ -511,6 +560,7 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
         "couches": couches.noms,
         "nets": nets.noms,
         "classes_nets": classes_nets,
+        "regles": _regles(design),
         "natures_nets": _natures_nets(composants, nets.noms),
         "pistes": pistes,
         "arcs": arcs,
