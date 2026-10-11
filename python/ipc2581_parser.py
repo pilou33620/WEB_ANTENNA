@@ -1,3 +1,39 @@
+# [2026-10-11] Version 1.79: classes de nets, paires differentielles et
+#              contraintes lues ; rugosite de Huray
+# Description:
+#              - <LogicalNet netPair="..."> (XSD rev. C) donne le net d'en face
+#                d'une paire differentielle ; les <NonstandardAttribute>
+#                NET_CLASS, DIFF_PAIR et DIFF_PAIR_POLARITY du net donnent le
+#                nom de sa classe dans l'outil de CAO, celui de sa paire et sa
+#                polarite ; ses <SpecRef> pointent ses regles.
+#              - Les <Spec> de regles, sous <CadHeader> : un <General
+#                type="ELECTRICAL"> dont les <Property> nommees disent la
+#                regle (TRACE_WIDTH, CLEARANCE, VIA_DIAMETER, VIA_DRILL,
+#                MIN_LENGTH, MAX_LENGTH, MAX_VIAS, ALLOWED_LAYER, TOPOLOGY,
+#                PIN_ORDER, MAX_STUB_LENGTH, MAX_VIA_STUB_LENGTH,
+#                STAR_TOLERANCE, BACKDRILL_RULE ; GAP, MAX_UNCOUPLED_LENGTH ;
+#                MATCH_MODE, MATCH_TOLERANCE, REFERENCE_NET, MEMBER), et des
+#                <Impedance value tolPlus tolMinus tolPercent> pour la cible.
+#                NET_CLASS designe une classe, DIFF_PAIR une paire,
+#                MATCH_GROUP un groupe d'appariement, CLEARANCE avec un texte
+#                « A|B » une case de la matrice d'isolement entre classes ;
+#                le reste est une contrainte du net qui pointe la spec.
+#                C'est la forme qu'ecrit l'export de l'editeur PCB
+#                (editeur-pcb/js/35-ipc2581-export.js). Tout est pose en
+#                design.regles_nets (attribut, les classes ne changent pas) :
+#                {classes, regles_classes, paires, contraintes, groupes,
+#                matrice}, longueurs en millimetres.
+#              - La rugosite de Huray : <Conductor type="SURFACE_ROUGHNESS_*">
+#                dont les <Property> se nomment HURAY_NODULE_RADIUS (rayon des
+#                nodules, converti en micrometres) et HURAY_SURFACE_RATIO.
+#                Elle part en attribut `rugosite_huray` {a, sr} de la
+#                StackupLayer, et n'est plus prise pour un Rq.
+#              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
+#
+# Liste des fonctions modifiees :
+# - [~] __init__, _parse_specs, _appliquer_specs, _parse_logical_nets
+# - [+] _lire_spec_regle, _longueur_mm, _ranger_regle
+#
 # [2026-10-10] Version 1.78: la place d'un texte lue dans son <Features>
 # Description:
 #              - Le XSD IPC-2581 (rev. C) pose la place d'un <Text> dans le
@@ -285,6 +321,13 @@ class IPC2581Parser:
         self.backdrill_specs: Dict[str, dict] = {}
         self.calque_specs: Dict[str, list] = {}
         self._forets_cp: List[dict] = []
+        # LES REGLES (voir `_lire_spec_regle`) : chaque <Spec> de regle lue
+        # par son nom -- un <LogicalNet> la pointe par <SpecRef> --, et ce qui
+        # en sort, pose sur le design (attribut : la classe IPCDesign ne
+        # change pas, elle est partagee avec WEB_ANTENNA).
+        self.spec_regles: Dict[str, dict] = {}
+        self.design.regles_nets = {"classes": {}, "regles_classes": {}, "paires": [],
+                                   "contraintes": {}, "groupes": [], "matrice": {}}
 
     def _verifier_xml_sur(self):
         """Rejette les entites DTD XML (<!ENTITY) pour prevenir les attaques Billion Laughs / DoS."""
@@ -1052,11 +1095,41 @@ class IPC2581Parser:
                 if not name:
                     continue
                 vals = self.specs.setdefault(name, {})
+                # une <Spec> de regle (classe, paire, contrainte...) : lue a
+                # part, elle ne decrit pas une matiere
+                regle = self._lire_spec_regle(spec)
+                if regle:
+                    self.spec_regles[name] = regle
+                    self._ranger_regle(name)
 
                 # -- forme « type + Property » ---------------------------
                 for enfant in spec:
                     genre = (enfant.attrib.get("type") or
                              self._local_tag(enfant)).upper()
+                    if "ROUGHNESS" in genre:
+                        # <Conductor type="SURFACE_ROUGHNESS_UPFACING"> et
+                        # ses soeurs DOWNFACING / TREATED : la rugosite du
+                        # feuillard, une par face. On garde la PLUS FORTE --
+                        # la face qui regarde le plan n'est pas dite, et c'est
+                        # le sens qui n'enjolive pas les pertes.
+                        # Les <Property> NOMMEES HURAY_* (export de l'editeur
+                        # PCB) sont les parametres du modele de Huray, pas un
+                        # Rq : rayon des nodules (longueur) et rapport de
+                        # surface (sans unite).
+                        huray = dict(vals.get("huray") or {})
+                        for p in enfant.iter(self._tag("Property")):
+                            nom_p = (p.attrib.get("name") or "").upper()
+                            if "HURAY" not in nom_p:
+                                continue
+                            v = self._rugosite_um(p, p.attrib.get("value", "")) \
+                                if "RADIUS" in nom_p else self._safe_float(p.attrib.get("value"))
+                            if v > 0:
+                                huray["a" if "RADIUS" in nom_p else "sr"] = v
+                        if huray.get("a") and huray.get("sr"):
+                            vals["huray"] = {"a": huray["a"], "sr": huray["sr"]}
+                            continue
+                        if huray:
+                            continue
                     valeur = ""
                     for noeud in enfant.iter():
                         valeur = (noeud.attrib.get("value") or
@@ -1066,11 +1139,6 @@ class IPC2581Parser:
                     if not valeur:
                         continue
                     if "ROUGHNESS" in genre:
-                        # <Conductor type="SURFACE_ROUGHNESS_UPFACING"> et
-                        # ses soeurs DOWNFACING / TREATED : la rugosite du
-                        # feuillard, une par face. On garde la PLUS FORTE --
-                        # la face qui regarde le plan n'est pas dite, et c'est
-                        # le sens qui n'enjolive pas les pertes.
                         rug = self._rugosite_um(enfant, valeur)
                         if rug > vals.get("rugosite_um", 0.0):
                             vals["rugosite_um"] = rug
@@ -1122,6 +1190,9 @@ class IPC2581Parser:
             # WEB_ANTENNA).
             if vals.get("rugosite_um") and not getattr(couche, "rugosite_um", 0.0):
                 couche.rugosite_um = vals["rugosite_um"]
+            # Huray (1.79) : {a (micrometres), sr}, attribut pose lui aussi
+            if vals.get("huray") and not getattr(couche, "rugosite_huray", None):
+                couche.rugosite_huray = dict(vals["huray"])
 
     # Les unites de longueur d'une <Spec>, en micrometres. Sans unite, la
     # rugosite est lue en MICROMETRES : c'est ainsi que les fiches de cuivre
@@ -1141,6 +1212,201 @@ class IPC2581Parser:
             return 0.0
         k = self._UNITES_UM.get(unite.strip().upper(), 1.0 if not unite else 0.0)
         return v * k if v > 0 and k > 0 else 0.0
+
+    # ------------------------------------------------------------------
+    # Les regles : classes de nets, paires, contraintes (<Spec> de regle)
+    # ------------------------------------------------------------------
+
+    # Une <Property> de regle, par son nom, vers la cle du gestionnaire de
+    # contraintes de l'editeur PCB (commun/contraintes.js) : (cle, nature).
+    # « mm » : une longueur convertie en millimetres ; « n » : un nombre ;
+    # « txt » : un texte.
+    _PROPS_REGLE = {
+        "TRACE_WIDTH": ("w", "mm"), "CLEARANCE": ("clr", "mm"),
+        "VIA_DIAMETER": ("via", "mm"), "VIA_DRILL": ("drill", "mm"),
+        "MIN_LENGTH": ("lMin", "mm"), "MAX_LENGTH": ("lMax", "mm"),
+        "MAX_VIAS": ("viasMax", "n"), "MAX_STUB_LENGTH": ("stubMax", "mm"),
+        "MAX_VIA_STUB_LENGTH": ("viaStubMax", "mm"), "STAR_TOLERANCE": ("etoileTol", "mm"),
+        "BACKDRILL_RULE": ("cp", "txt"), "PIN_ORDER": ("ordre", "txt"),
+        "GAP": ("gap", "mm"), "MAX_UNCOUPLED_LENGTH": ("maxDecouple", "mm"),
+        "RULE": ("regle", "txt"), "NET_P": ("p", "txt"), "NET_N": ("n", "txt"),
+        "REFERENCE_NET": ("ref", "txt"),
+    }
+    _TOPOS_REGLE = {"POINT_TO_POINT": "p2p", "DAISY_CHAIN": "chaine",
+                    "STAR": "etoile", "FLY_BY": "flyby"}
+    _MM_REGLE = {"MM": 1.0, "MILLIMETER": 1.0, "MICRON": 1e-3, "UM": 1e-3,
+                 "INCH": 25.4, "IN": 25.4, "MIL": 0.0254, "MILS": 0.0254}
+
+    def _longueur_mm(self, elem: ET.Element, attr: str = "value") -> Optional[float]:
+        """Un attribut de longueur d'une <Property> ou d'une <LineWidth>, en
+        millimetres ; l'unite est celle de la balise, millimetre par defaut.
+        None si rien de lisible."""
+        v = elem.attrib.get(attr)
+        if v is None or v == "":
+            return None
+        try:
+            x = float(str(v).replace(",", "."))
+        except ValueError:
+            return None
+        k = self._MM_REGLE.get((elem.attrib.get("unit") or "MM").strip().upper())
+        return x * k if k else None
+
+    def _lire_spec_regle(self, spec: ET.Element) -> Optional[dict]:
+        """Une <Spec> de regle, telle que l'ecrit l'export de l'editeur PCB :
+
+            <Spec name="CLASSE_Rapide">
+             <General type="ELECTRICAL">
+              <Property name="NET_CLASS" text="Rapide"/>
+              <Property name="TRACE_WIDTH" value="0.25" unit="MM"/>
+              <Property name="TRACE_WIDTH" value="0.37" unit="MM" layerOrGroupRef="Top"/>
+              ...
+             </General>
+             <Impedance value="50" tolPlus="10" tolMinus="10" tolPercent="true">
+              <SingleEnded structure="MICROSTRIP_MASK_COVERED">...</SingleEnded>
+             </Impedance>
+            </Spec>
+
+        Rend {genre, regle} -- genre : « classe » (NET_CLASS), « paire »
+        (DIFF_PAIR), « groupe » (MATCH_GROUP), « matrice » (CLEARANCE en
+        texte « A|B ») ou « net » (le reste) --, ou None si la spec ne porte
+        aucune <Property> nommee de regle ni d'<Impedance> : une spec de
+        matiere n'est pas une regle.
+        """
+        r: dict = {}
+        genre = "net"
+        connu = False
+        for gen in spec.findall(self._tag("General")):
+            for p in gen.findall(self._tag("Property")):
+                nom = (p.attrib.get("name") or "").strip().upper()
+                texte = (p.attrib.get("text") or "").strip()
+                couche = (p.attrib.get("layerOrGroupRef") or "").strip()
+                if nom == "NET_CLASS" and texte:
+                    genre, r["classe"], connu = "classe", texte, True
+                elif nom == "DIFF_PAIR" and texte:
+                    genre, r["nom"], connu = "paire", texte, True
+                elif nom == "MATCH_GROUP" and texte:
+                    genre, r["nom"], connu = "groupe", texte, True
+                elif nom == "NET" and texte:
+                    r["net"], connu = texte, True
+                elif nom == "CLEARANCE" and "|" in texte:
+                    v = self._longueur_mm(p)
+                    if v:
+                        genre, connu = "matrice", True
+                        r.setdefault("cases", {})[texte] = round(v, 6)
+                elif nom == "ALLOWED_LAYER" and couche:
+                    r.setdefault("couches", []).append(couche)
+                    connu = True
+                elif nom == "TOPOLOGY" and texte.upper() in self._TOPOS_REGLE:
+                    r["topo"], connu = self._TOPOS_REGLE[texte.upper()], True
+                elif nom == "MATCH_MODE" and texte:
+                    r["mode"], connu = ("ps" if texte.upper() == "DELAY" else "mm"), True
+                elif nom == "MATCH_TOLERANCE":
+                    # en millimetres (unit="MM"), ou en picosecondes (text="ps")
+                    if texte.lower() == "ps":
+                        r["tol"] = self._safe_float(p.attrib.get("value"))
+                    else:
+                        v = self._longueur_mm(p)
+                        if v is not None:
+                            r["tol"] = round(v, 6)
+                    connu = True
+                elif nom == "MEMBER" and texte:
+                    r.setdefault("nets", []).append(texte)
+                    connu = True
+                elif nom in self._PROPS_REGLE:
+                    cle, nature = self._PROPS_REGLE[nom]
+                    if nature == "txt":
+                        if texte:
+                            r[cle] = texte.split() if cle == "ordre" else texte
+                            connu = True
+                        continue
+                    v = self._longueur_mm(p) if nature == "mm" else self._safe_float(p.attrib.get("value"), None)
+                    if v is None:
+                        continue
+                    v = round(v, 6)
+                    connu = True
+                    if cle in ("w", "gap") and couche:
+                        # la largeur (ou l'ecart) propre a une couche
+                        r.setdefault(cle + "L", {})[couche] = v
+                    else:
+                        r[cle] = v
+                        # les bornes d'une paire : value -tolMinus / +tolPlus
+                        if cle in ("w", "gap") and genre == "paire":
+                            lo = self._longueur_mm(p, "tolMinus")
+                            hi = self._longueur_mm(p, "tolPlus")
+                            if lo is not None:
+                                r[cle + "Min"] = round(v - lo, 6)
+                            if hi is not None:
+                                r[cle + "Max"] = round(v + hi, 6)
+        # l'impedance cible : la premiere <Impedance> (la cible est la meme
+        # sur toutes les couches ; seule la structure de ligne change)
+        imp = spec.find(self._tag("Impedance"))
+        if imp is not None:
+            z = self._safe_float(imp.attrib.get("value"))
+            if z > 0:
+                r["z"] = round(z, 6)
+                tol = self._safe_float(imp.attrib.get("tolPlus"), 0.0)
+                if tol > 0:
+                    if (imp.attrib.get("tolPercent") or "").lower() == "true":
+                        r["zTol"] = round(tol, 6)
+                    else:
+                        r["zTol"] = round(100.0 * tol / z, 6)
+                connu = True
+        if not connu:
+            return None
+        if genre == "paire" and "z" in r:
+            # la cible d'une paire est differentielle : on la nomme ainsi
+            r["zdiff"] = r.pop("z")
+        return {"genre": genre, "regle": r}
+
+    def _ranger_regle(self, nom_spec: str, net_name: Optional[str] = None):
+        """Range dans design.regles_nets ce qu'une <Spec> de regle porte : la
+        regle d'une classe, une paire, un groupe, la matrice, ou les
+        contraintes propres a un net. Appelee une premiere fois sans net a la
+        lecture de la spec -- une classe sans net, un groupe dont les membres
+        n'ont pas de <LogicalNet> sont ainsi gardes --, puis pour chaque net
+        qui la pointe par <SpecRef> : il rejoint sa classe, sa paire ou son
+        groupe, et recoit ses contraintes."""
+        R = self.design.regles_nets
+        e = self.spec_regles.get(nom_spec)
+        if not e:
+            return
+        genre, r = e["genre"], e["regle"]
+        if genre == "classe":
+            classe = r["classe"]
+            if classe not in R["regles_classes"]:
+                R["regles_classes"][classe] = {k: v for k, v in r.items() if k != "classe"}
+            if net_name:
+                R["classes"].setdefault(net_name, classe)
+        elif genre == "paire":
+            paire = next((p for p in R["paires"] if p.get("spec") == nom_spec), None)
+            if paire is None:
+                paire = dict(r)
+                paire["spec"] = nom_spec
+                paire.setdefault("p", "")
+                paire.setdefault("n", "")
+                R["paires"].append(paire)
+            if net_name and net_name not in (paire["p"], paire["n"]):
+                if not paire["p"]:
+                    paire["p"] = net_name
+                elif not paire["n"]:
+                    paire["n"] = net_name
+        elif genre == "groupe":
+            g = next((x for x in R["groupes"] if x.get("spec") == nom_spec), None)
+            if g is None:
+                mode = r.get("mode", "mm")
+                g = {"spec": nom_spec, "nom": r.get("nom", ""), "mode": mode,
+                     "tol": r.get("tol", 0.5 if mode == "mm" else 10.0),
+                     "ref": r.get("ref", ""), "nets": list(r.get("nets") or [])}
+                R["groupes"].append(g)
+            if net_name and net_name not in g["nets"]:
+                g["nets"].append(net_name)
+        elif genre == "matrice":
+            R["matrice"].update(r.get("cases") or {})
+        else:
+            net = net_name or r.get("net")
+            c = {k: v for k, v in r.items() if k != "net"}
+            if net and c:
+                R["contraintes"].setdefault(net, {}).update(c)
 
     def _parse_stackup(self, cad_data: ET.Element):
         stackup_node = cad_data.find(self._tag("Stackup"))
@@ -1796,8 +2062,14 @@ class IPC2581Parser:
         souvent -- "la broche 3, elle va ou ?".
         De plus, l'attribut netClass ("GROUND", "POWER", "SIGNAL", etc.) permet
         d'auto-détecter la nature des équipotentielles pour les simulations.
+
+        Depuis la 1.79, les regles de l'outil de CAO sont lues aussi (voir
+        `_lire_spec_regle`) : netPair, les <NonstandardAttribute> NET_CLASS /
+        DIFF_PAIR / DIFF_PAIR_POLARITY et les <SpecRef> du net, vers
+        design.regles_nets.
         """
         index = {c.ref_des: c for c in self.design.components}
+        R = self.design.regles_nets
         compte = 0
         elems = list(step_elem.findall(self._tag("LogicalNet")))
         # Certains outils placent LogicalNet au niveau de CadData
@@ -1814,6 +2086,37 @@ class IPC2581Parser:
             net_class = (net_elem.attrib.get("netClass") or net_elem.attrib.get("net_class") or "").strip()
             if net_class:
                 self.design.get_or_create_net(net_name).net_class = net_class
+            # -- les regles de l'outil de CAO (1.79) ------------------------
+            attrs = {}
+            for a in net_elem.findall(self._tag("NonstandardAttribute")):
+                nom_a = (a.attrib.get("name") or "").strip().upper()
+                if nom_a:
+                    attrs[nom_a] = (a.attrib.get("value") or "").strip()
+            if attrs.get("NET_CLASS"):
+                R["classes"][net_name] = attrs["NET_CLASS"]
+            for ref in net_elem.findall(self._tag("SpecRef")):
+                self._ranger_regle(ref.attrib.get("id", ""), net_name)
+            # la paire : netPair est l'attribut normalise ; le nom et la
+            # polarite viennent des attributs hors norme ou de la spec
+            mate = (net_elem.attrib.get("netPair") or "").strip()
+            if mate and mate != net_name:
+                paire = next((p for p in R["paires"]
+                              if net_name in (p.get("p"), p.get("n")) or mate in (p.get("p"), p.get("n"))),
+                             None)
+                if paire is None:
+                    paire = {"nom": attrs.get("DIFF_PAIR") or "", "p": "", "n": ""}
+                    R["paires"].append(paire)
+                pol = (attrs.get("DIFF_PAIR_POLARITY") or "").upper()
+                if pol in ("P", "N"):
+                    paire[pol.lower()] = net_name
+                    paire["n" if pol == "P" else "p"] = mate
+                else:
+                    if not paire.get("p"):
+                        paire["p"] = net_name
+                    if not paire.get("n") and mate != paire.get("p"):
+                        paire["n"] = mate
+                if not paire.get("nom") and attrs.get("DIFF_PAIR"):
+                    paire["nom"] = attrs["DIFF_PAIR"]
             for ref in net_elem.findall(self._tag("PinRef")):
                 comp = index.get(ref.attrib.get("componentRef", ""))
                 pin = ref.attrib.get("pin")
