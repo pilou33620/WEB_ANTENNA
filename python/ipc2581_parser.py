@@ -1,3 +1,16 @@
+# [2026-10-12] Version 1.81: le cuivre declare lisse (0 micrometre)
+# Description:
+#              - Une <Spec> qui ecrit une rugosite de 0 (le « Lisse declare »
+#                de l'editeur PCB, un plan lisse sous une piste rugueuse)
+#                n'est plus confondue avec une absence : la couche recoit
+#                `rugosite_declaree` (attribut pose, la classe StackupLayer
+#                ne change pas) avec `rugosite_um` a 0. Une face rugueuse
+#                d'une autre <Conductor> de la meme spec reste devant.
+#              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
+#
+# Liste des fonctions modifiees :
+# - [~] _parse_specs, _appliquer_specs
+#
 # [2026-10-12] Version 1.80: la classe d'un net sans broche
 # Description:
 #              - Un net sans broche n'a pas de <LogicalNet> (le XSD y exige
@@ -1154,6 +1167,11 @@ class IPC2581Parser:
                         rug = self._rugosite_um(enfant, valeur)
                         if rug > vals.get("rugosite_um", 0.0):
                             vals["rugosite_um"] = rug
+                        elif "rugosite_um" not in vals and \
+                                self._safe_float(str(valeur).replace(",", "."), -1.0) == 0.0:
+                            # 0 ecrit : un cuivre DECLARE lisse (1.81), pas
+                            # une rugosite absente
+                            vals["rugosite_um"] = 0.0
                         continue
                     if "DIELECTRIC" in genre or "PERMITTIV" in genre:
                         vals.setdefault("dk", valeur)
@@ -1202,6 +1220,12 @@ class IPC2581Parser:
             # WEB_ANTENNA).
             if vals.get("rugosite_um") and not getattr(couche, "rugosite_um", 0.0):
                 couche.rugosite_um = vals["rugosite_um"]
+                couche.rugosite_declaree = False
+            # 0 ecrit : lisse DECLARE (1.81), si rien d'autre ne l'a dite
+            elif vals.get("rugosite_um") == 0.0 and not getattr(couche, "rugosite_um", 0.0) \
+                    and not getattr(couche, "rugosite_huray", None):
+                couche.rugosite_um = 0.0
+                couche.rugosite_declaree = True
             # Huray (1.79) : {a (micrometres), sr}, attribut pose lui aussi
             if vals.get("huray") and not getattr(couche, "rugosite_huray", None):
                 couche.rugosite_huray = dict(vals["huray"])

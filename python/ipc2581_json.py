@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 # ==========================================
 # VERSIONING
-# Version: 1.1.0
-# Date: 2026-10-11
+# Version: 1.2.0
+# Date: 2026-10-12
+# 1.2.0 : « rug »: 0 pour un cuivre DECLARE lisse (parseur 1.81), distinct
+#   d'une rugosite absente (cle non ecrite).
 # 1.1.0 : « regles » (classes de nets, paires differentielles, contraintes,
 #   groupes d'appariement, matrice d'isolement -- parseur 1.79) et la rugosite
 #   de Huray (« rug_huray ») dans l'empilage.
@@ -43,7 +45,8 @@ Cle par cle, le dictionnaire produit :
     empilage    couches physiques, dans l'ordre de sequence ; « rug » la rugosite
                 du cuivre en micrometres (Rq, Hammerstad), ou « rug_huray »
                 {a (rayon des nodules, micrometres), sr} pour le modele de
-                Huray, quand le fichier la porte
+                Huray, quand le fichier la porte ; « rug »: 0, un cuivre que
+                le fichier declare lisse (absent : il ne dit rien)
     couches     noms de couches ; ailleurs, "c" est un index dans ce tableau
     nets        noms de nets   ; ailleurs, "n" est un index dans ce tableau
     classes_nets  {net: netClass} -- l'enumeration de la norme (GROUND, POWER,
@@ -364,6 +367,9 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
         rug = getattr(couche, "rugosite_um", 0.0) or 0.0
         if rug > 0:
             e["rug"] = round(float(rug), 4)
+        elif getattr(couche, "rugosite_declaree", False):
+            # declaree lisse (parseur 1.81) : 0 ecrit, pas une absence
+            e["rug"] = 0
         # Huray (parseur 1.79+) : rayon des nodules en micrometres et rapport
         # de surface ; a part de « rug », qui reste un Rq
         huray = getattr(couche, "rugosite_huray", None)
