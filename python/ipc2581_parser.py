@@ -1,3 +1,15 @@
+# [2026-10-12] Version 1.80: la classe d'un net sans broche
+# Description:
+#              - Un net sans broche n'a pas de <LogicalNet> (le XSD y exige
+#                un <PinRef>) : l'export de l'editeur PCB le nomme en
+#                <Property name="MEMBER"> de la <Spec> de sa classe. Il
+#                rejoint cette classe dans design.regles_nets["classes"] ;
+#                le NET_CLASS d'un <LogicalNet> reste devant.
+#              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
+#
+# Liste des fonctions modifiees :
+# - [~] _ranger_regle
+#
 # [2026-10-11] Version 1.79: classes de nets, paires differentielles et
 #              contraintes lues ; rugosite de Huray
 # Description:
@@ -1374,9 +1386,14 @@ class IPC2581Parser:
         if genre == "classe":
             classe = r["classe"]
             if classe not in R["regles_classes"]:
-                R["regles_classes"][classe] = {k: v for k, v in r.items() if k != "classe"}
+                R["regles_classes"][classe] = {k: v for k, v in r.items()
+                                               if k not in ("classe", "nets")}
             if net_name:
                 R["classes"].setdefault(net_name, classe)
+            else:
+                # les nets sans broche, que la classe nomme (1.80)
+                for m in r.get("nets") or []:
+                    R["classes"].setdefault(m, classe)
         elif genre == "paire":
             paire = next((p for p in R["paires"] if p.get("spec") == nom_spec), None)
             if paire is None:
