@@ -1649,17 +1649,31 @@ verifie("avec les courbes, le meilleur point est celui qui s'adapte A la cible",
         IA_L.length===1&&IA_L[0].texte.indexOf("à 2.45 GHz est -22 dB en « 27.5 »")>=0&&
         IA_L[0].titre.indexOf("dans la plage")>=0,
         IA_L.map(a=>a.texte).join(" | "));
-/* LE CONTEXTE ENVOYE AU MODELE porte le balayage EN TABLEAU : une ligne par
-   point, et la colonne du S11 a la cible. */
+/* LE CONTEXTE ENVOYE AU MODELE annonce le balayage ; son TABLEAU, une ligne
+   par point avec la colonne du S11 a la cible, le modele le demande par
+   l'outil de lecture « balayage » — il ne pese pas sur chaque question. */
 const IA_MDL=ANT.modele; ANT.modele=null;   // le faux modele d'un essai plus haut
-const IA_CTX=window.iaContexte().split(String.fromCharCode(10));
+const IA_CTX=window.iaContexte();
+const IA_TAB=window.iaOutils().balayage.fn({});
 ANT.modele=IA_MDL;
-const IA_T=IA_CTX.indexOf(IA_CTX.find(l=>l.indexOf("=== BALAYAGE TERMINE : 3 POINTS")===0));
-verifie("le contexte porte le balayage en tableau, S11 a la cible compris",
-        IA_T>=0&&IA_CTX[IA_T+1].split(";").length===7&&
-        IA_CTX[IA_T+1].indexOf("S11 a 2.45 GHz")>=0&&
-        IA_CTX[IA_T+3].split(";")[0]==="27.5"&&IA_CTX[IA_T+3].split(";")[3]==="-22",
-        IA_CTX.slice(IA_T,IA_T+5).join(" / "));
+verifie("le contexte annonce le balayage et renvoie a l'outil, sans le tableau",
+        IA_CTX.indexOf("=== BALAYAGE TERMINE : 3 POINTS")>=0&&
+        IA_CTX.indexOf("outil « balayage »")>=0&&IA_CTX.indexOf("S11 a 2.45 GHz")<0,
+        IA_CTX);
+verifie("l'outil « balayage » rend le tableau, S11 a la cible compris",
+        IA_TAB.length===4&&IA_TAB[0].split(";").length===7&&
+        IA_TAB[0].indexOf("S11 a 2.45 GHz")>=0&&
+        IA_TAB[2].split(";")[0]==="27.5"&&IA_TAB[2].split(";")[3]==="-22",
+        IA_TAB.join(" / "));
+/* LA BOUCLE : un bloc ```outil est execute, un outil inconnu est dit, et le
+   reste de la reponse ne declenche rien. */
+const IA_BL=window.iaExecuterOutils("Je regarde.\n```outil\n{\"outil\":\"balayage\"}\n```\n```outil\n{\"outil\":\"meteo\"}\n```",
+                                    window.iaOutils());
+verifie("les blocs outil sont executes, un outil inconnu est signale",
+        IA_BL.length===2&&IA_BL[0].texte===IA_TAB.join(String.fromCharCode(10))&&
+        IA_BL[1].texte.indexOf("inconnu")>=0&&
+        window.iaExecuterOutils("Reponse sans bloc.",window.iaOutils())===null,
+        JSON.stringify(IA_BL));
 
 /* LE CROISEMENT L × y0 DU 02/10 (`croisement-L-y0.json`), sans ses courbes :
    le S11 minimal designe 28,2 × 7 (-33,9 dB a 2,40 GHz), et la lecture doit

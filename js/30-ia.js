@@ -46,6 +46,7 @@
   let _modele = "gemma-4-31b-it";
   let _historique = [];           // les messages de la session en cours
   let _enAttente = false;
+  let _etape = "";               // ce que l'assistant consulte pendant l'attente
   let _inclureContexte = true;    // transmettre l'état des réglages
   let _domConstruit = false;
   let _questionEnAttente = "";    // question préparée depuis le menu contextuel
@@ -155,6 +156,12 @@
     const u = uniteDoc();
     const con = (typeof CON !== "undefined" && CON.actif);
 
+    L.push("=== PROJET ===");
+    L.push((typeof PRJ !== "undefined" && PRJ.nom)
+      ? ("Projet ouvert : « " + PRJ.nom + " ».")
+      : "Aucun projet ouvert : le travail n'est pas encore enregistre.");
+    L.push("");
+
     L.push("=== D'OU VIENT CETTE CARTE ===");
     if(con){
       L.push("Mode conception : la carte est DESSINEE dans l'outil.");
@@ -190,6 +197,11 @@
     }else if(typeof V !== "undefined" && V.modele){
       L.push("Fichier IPC-2581 importe : " + (V.fichier || "sans nom") +
              ", unite du document : " + u + ".");
+      if(V.bbox) L.push("Encombrement : " + nbp(V.bbox.x2 - V.bbox.x1, 3) + " x " +
+                        nbp(V.bbox.y2 - V.bbox.y1, 3) + " " + u +
+                        (V.modele.epaisseur ? (", epaisseur " + nbp(V.modele.epaisseur, 3) + " " + u) : "") + ".");
+      L.push("Composants : " + (V.modele.composants || []).length + ", nets : " +
+             (V.parNet || []).filter(n => n.nom).length + " (detail : outils « composants », « nets »).");
     }else{
       L.push("Rien n'est ouvert : ni fichier, ni dessin. Aucun reglage n'a de "+
              "sens tant que ce n'est pas le cas.");
@@ -377,36 +389,14 @@
              " par " + nbp(ANT.balayage.pas, 4) + ".");
     }
 
-    /* -- un balayage termine : ses points EN TABLEAU ----------------------- */
-    /* Un modele qui doit comparer neuf points d'un croisement les lit mieux
-       en colonnes qu'en prose : une ligne par point, les memes colonnes que
-       le tableau de la page, plus le S11 A la frequence visee. */
-    const rb = (typeof ANT !== "undefined") ? ANT.resultat : null;
-    if(rb && rb.balayage && Array.isArray(rb.points) && rb.points.length){
-      const fc = (ANT.bande && ANT.bande.fcible > 0) ? ANT.bande.fcible : 0;
-      const lignes = Array.isArray(rb.lignes) ? rb.lignes : [];
+    /* -- un balayage termine : son tableau se demande ------------------------ */
+    const rb = balayageTermine();
+    if(rb){
       L.push("");
-      L.push("=== BALAYAGE TERMINE : " + rb.points.length + " POINTS (tableau, " +
-             "separateur ;) ===");
-      L.push([(rb.nom || "cote") + (rb.unite ? " (" + rb.unite + ")" : "")]
-             .concat(rb.croise ? [(rb.nom2 || "cote 2") +
-                                  (rb.unite2 ? " (" + rb.unite2 + ")" : "")] : [])
-             .concat(["f0 (GHz)", "S11 min (dB)"],
-                     fc ? ["S11 a " + fHz(fc) + " (dB)"] : [],
-                     ["Re Z (ohm)", "Im Z (ohm)", "rendement (%)"]).join(";"));
-      rb.points.forEach(function(p, k){
-        const q = p.resultat || {}, l = lignes[k] || {};
-        const c = v => (v == null || !isFinite(v)) ? "" : nbp(v, 3);
-        const n = q.nf2ff || {};
-        L.push([c(p.valeur)].concat(rb.croise ? [c(p.valeur2)] : [],
-               [c(q.f0 != null ? q.f0 / 1e9 : l.f0 / 1e9),
-                c(q.s11_min_db != null ? q.s11_min_db : l.s11_min_db)],
-               fc ? [c(s11ALaCible(q, fc))] : [],
-               [c(q.z0_re != null ? q.z0_re : l.z0_re),
-                c(q.z0_im != null ? q.z0_im : l.z0_im),
-                c(n.rendement != null ? 100 * n.rendement :
-                  (l.rendement != null ? 100 * l.rendement : NaN))]).join(";"));
-      });
+      L.push("=== BALAYAGE TERMINE : " + rb.points.length + " POINTS ===");
+      L.push("Cote « " + (rb.nom || "cote") + " »" + (rb.croise ? (" croisee avec « " +
+             (rb.nom2 || "cote 2") + " »") : "") + " ; le tableau des points (f0, S11, "+
+             "impedance, rendement) : outil « balayage ».");
     }
 
     /* -- le dernier resultat ---------------------------------------------- */
@@ -449,6 +439,186 @@
     }
 
     return L.join("\n");
+  }
+
+  /* ==========================================================================
+     LES OUTILS DE LECTURE
+     --------------------------------------------------------------------------
+     Le contexte ci-dessus est un RESUME : il garde ce que les cartes d'action
+     exigent (couches, ports, cotes balayables), et rien de ce qui peut peser
+     lourd. Le detail de la carte importee et le tableau d'un balayage, le
+     modele les demande lui-meme par un bloc ```outil, et la page ne lui rend
+     que ce qu'il a demande. Ces reponses servent a la question en cours et ne
+     restent PAS dans l'historique. Meme mecanique que WEB_CAO
+     (commun/ia-assistant.js), et pour la meme raison : un bloc de texte
+     passe par tous les modeles, Gemma, Gemini ou un serveur local.
+     ========================================================================== */
+  const OUTIL_MAX = 12000;   // caracteres rendus par un appel
+  const OUTIL_TOURS = 4;     // allers-retours au plus pour une question
+
+  // ponytail: filtre = sous-chaine sans casse, pas de regex ; suffit pour « USB », « U1 », « 0402 »
+  function contient(filtre){
+    if(!filtre) return true;
+    const f = String(filtre).toLowerCase();
+    return Array.prototype.slice.call(arguments, 1).some(function(c){
+      return String(c == null ? "" : c).toLowerCase().indexOf(f) >= 0;
+    });
+  }
+  function borner(lignes, max, quoi){
+    return lignes.length <= max ? lignes
+      : lignes.slice(0, max).concat("... (" + (lignes.length - max) + " " + quoi +
+                                    " de plus : precise le filtre)");
+  }
+
+  function balayageTermine(){
+    const rb = (typeof ANT !== "undefined") ? ANT.resultat : null;
+    return (rb && rb.balayage && Array.isArray(rb.points) && rb.points.length) ? rb : null;
+  }
+
+  /* Un modele qui doit comparer neuf points d'un croisement les lit mieux en
+     colonnes qu'en prose : une ligne par point, les memes colonnes que le
+     tableau de la page, plus le S11 A la frequence visee. */
+  function tableauBalayage(rb){
+    const fc = (ANT.bande && ANT.bande.fcible > 0) ? ANT.bande.fcible : 0;
+    const lignes = Array.isArray(rb.lignes) ? rb.lignes : [];
+    const L = [[(rb.nom || "cote") + (rb.unite ? " (" + rb.unite + ")" : "")]
+               .concat(rb.croise ? [(rb.nom2 || "cote 2") +
+                                    (rb.unite2 ? " (" + rb.unite2 + ")" : "")] : [])
+               .concat(["f0 (GHz)", "S11 min (dB)"],
+                       fc ? ["S11 a " + fHz(fc) + " (dB)"] : [],
+                       ["Re Z (ohm)", "Im Z (ohm)", "rendement (%)"]).join(";")];
+    rb.points.forEach(function(p, k){
+      const q = p.resultat || {}, l = lignes[k] || {};
+      const c = v => (v == null || !isFinite(v)) ? "" : nbp(v, 3);
+      const n = q.nf2ff || {};
+      L.push([c(p.valeur)].concat(rb.croise ? [c(p.valeur2)] : [],
+             [c(q.f0 != null ? q.f0 / 1e9 : l.f0 / 1e9),
+              c(q.s11_min_db != null ? q.s11_min_db : l.s11_min_db)],
+             fc ? [c(s11ALaCible(q, fc))] : [],
+             [c(q.z0_re != null ? q.z0_re : l.z0_re),
+              c(q.z0_im != null ? q.z0_im : l.z0_im),
+              c(n.rendement != null ? 100 * n.rendement :
+                (l.rendement != null ? 100 * l.rendement : NaN))]).join(";"));
+    });
+    return L;
+  }
+
+  /* La carte importee : memes outils que la visionneuse de WEB_CAO, meme `V`,
+     meme modele (python/ipc2581_json.py). */
+  const nomNet = i => (V.parNet[i] || {}).nom || "sans net";
+  const nomCouche = i => (V.couches[i] || {}).nom || "?";
+
+  const OUTILS_CARTE = {
+    composants: {
+      args: '"filtre":"U"',
+      desc: "liste des composants de la carte importee (repere, valeur, boitier, reference, couche) ; filtre facultatif",
+      fn: function(a){
+        const L = (V.modele.composants || []).filter(c => contient(a.filtre, c.ref, c.val, c.pkg, c.part)).map(c =>
+          "- " + c.ref + (c.val ? (" = " + c.val) : "") + (c.pkg ? (" (" + c.pkg + ")") : "") +
+          (c.part ? (", " + c.part) : "") + ", " + nomCouche(c.c));
+        return L.length ? borner(L, 150, "composants") : ["Aucun composant ne correspond."];
+      }
+    },
+    composant: {
+      args: '"ref":"U1"',
+      desc: "un composant : valeur, boitier, position, et le net de chaque broche",
+      fn: function(a){
+        const c = (V.modele.composants || []).find(x => String(x.ref).toLowerCase() === String(a.ref || "").toLowerCase());
+        if(!c) return ["Composant « " + a.ref + " » introuvable : demande la liste avec l'outil « composants »."];
+        const b = c.pins || [];
+        return [c.ref + (c.val ? (" = " + c.val) : "") + (c.pkg ? (" (" + c.pkg + ")") : "") +
+                (c.part ? (", " + c.part) : "") + ", couche " + nomCouche(c.c) + ", x " + c.x +
+                " y " + c.y + ", rotation " + c.r + " deg.", "Broches (" + b.length + ") :"]
+          .concat(borner(b.map(p => "- " + p.num + " -> " + (p.n != null ? nomNet(p.n) : "non connectee")), 200, "broches"));
+      }
+    },
+    nets: {
+      args: '"filtre":"ANT"',
+      desc: "liste des nets de la carte importee (classe, longueur de piste, couches) ; filtre facultatif",
+      fn: function(a){
+        const u = V.unite || "mm";
+        const L = V.parNet.filter(n => n.nom && contient(a.filtre, n.nom)).map(n =>
+          "- " + n.nom + " [" + n.classe + "] : " +
+          (n.longueur > 0 ? (nbp(n.longueur, 3) + " " + u + " de pistes") : "sans piste") +
+          ", " + n.couches.size + " couche(s)" + (ANT.nets.has(n.i) ? " — DESIGNE pour le solveur" : ""));
+        return L.length ? borner(L, 150, "nets") : ["Aucun net ne correspond."];
+      }
+    },
+    net: {
+      args: '"nom":"ANT"',
+      desc: "un net : classe, longueur, couches, nombre de pistes, plans, pastilles et percages, broches reliees",
+      fn: function(a){
+        const nom = String(a.nom || "").toLowerCase();
+        const n = V.parNet.find(x => String(x.nom).toLowerCase() === nom);
+        if(!n) return ["Net « " + a.nom + " » introuvable : demande la liste avec l'outil « nets »."];
+        const broches = [];
+        (V.modele.composants || []).forEach(function(c){
+          (c.pins || []).forEach(function(p){ if(p.n === n.i) broches.push(c.ref + "." + p.num); });
+        });
+        return ["Net " + n.nom + ", classe " + n.classe + (ANT.nets.has(n.i) ? ", designe pour le solveur" : "") + ".",
+                "Longueur de piste : " + nbp(n.longueur, 3) + " " + (V.unite || "mm") + ", sur " +
+                Array.from(n.couches).map(nomCouche).join(", ") + ".",
+                "Objets : " + n.pistes.length + " pistes, " + n.arcs.length + " arcs, " + n.plans.length +
+                " plans, " + n.pads.length + " pastilles, " + n.trous.length + " percages.",
+                "Broches (" + broches.length + ") : " + broches.slice(0, 200).join(", ") + (broches.length > 200 ? " ..." : "")];
+      }
+    }
+  };
+
+  const OUTIL_BALAYAGE = {
+    balayage: {
+      desc: "le tableau du balayage termine, une ligne par point (separateur ;) : cote(s), f0, S11 min, S11 a la cible, impedance, rendement",
+      fn: function(){
+        const rb = balayageTermine();
+        return rb ? tableauBalayage(rb) : ["Aucun balayage termine."];
+      }
+    }
+  };
+
+  function outilsLecture(){
+    if(!_inclureContexte) return {};
+    const o = {};
+    if(typeof V !== "undefined" && V.modele && !(typeof CON !== "undefined" && CON.actif))
+      Object.assign(o, OUTILS_CARTE);
+    if(balayageTermine()) Object.assign(o, OUTIL_BALAYAGE);
+    return o;
+  }
+
+  function consigneOutils(outils){
+    const noms = Object.keys(outils);
+    if(!noms.length) return "";
+    return ["",
+"OUTILS DE LECTURE. Le contexte joint a la question est un RESUME. Quand la",
+"reponse demande un detail (un composant, un net de la carte, le tableau d'un",
+"balayage), DEMANDE-LE avant de repondre : ecris seulement un ou plusieurs",
+"blocs, sans autre texte :",
+"```outil",
+'{"outil":"nets","filtre":"ANT"}',
+"```",
+"La page te renvoie les donnees, puis tu reponds. Ne demande que ce dont la",
+"question a besoin ; n'invente jamais une donnee que tu peux demander. Au plus " + OUTIL_TOURS,
+"allers-retours. Outils disponibles :"]
+      .concat(noms.map(n => "- " + n + (outils[n].args ? (" {" + outils[n].args + "}") : "") +
+                            " : " + outils[n].desc)).join("\n");
+  }
+
+  /* Les blocs ```outil d'une reponse, executes. Rend null s'il n'y en a pas. */
+  function executerOutils(texte, outils){
+    const blocs = [...texte.matchAll(/```outil\s*\n([\s\S]*?)```/g)];
+    if(!blocs.length) return null;
+    return blocs.slice(0, 8).map(function(b){
+      let a;
+      try{ a = JSON.parse(b[1]); }
+      catch(e){ return {titre:"?", texte:"Bloc illisible : JSON attendu, par exemple {\"outil\":\"nets\"}."}; }
+      const o = outils[a.outil];
+      const arg = a.nom || a.ref || a.filtre;
+      const titre = a.outil + (arg ? (" " + arg) : "");
+      if(!o) return {titre:titre, texte:"Outil « " + a.outil + " » inconnu. Outils : " + Object.keys(outils).join(", ") + "."};
+      let t;
+      try{ t = [].concat(o.fn(a)).join("\n"); }catch(e){ t = "Echec de l'outil : " + e.message; }
+      if(t.length > OUTIL_MAX) t = t.slice(0, OUTIL_MAX) + "\n... (tronque a " + OUTIL_MAX + " caracteres : demande plus cible)";
+      return {titre:titre, texte:t};
+    });
   }
 
   function resultatCourant(){
@@ -1874,6 +2044,15 @@
 "jusqu'a une simulation FDTD openEMS, et qui en rend le S11, l'impedance",
 "d'entree et le diagramme de rayonnement.",
 "",
+"CONTEXTE : cet outil, WEB_ANTENNA, fait partie de WEB·SUITE, trois outils web",
+"locaux lances depuis un meme lanceur : WEB_CAO (schema, PCB, bibliotheque,",
+"visionneuse IPC-2581, simulations SI / PI / RF), WEB_ANTENNA (cet outil) et",
+"WEB_3D (visionneuse 3D STEP, mesure, assemblage). La carte importee ici est",
+"en general un export IPC-2581 de WEB_CAO : une modification du cuivre se fait",
+"dans l'editeur PCB de WEB_CAO, puis la carte se reexporte. Lance depuis",
+"WEB·SUITE, un projet est enregistre dans PROJETS/ANTENNA/<projet>, synchronise",
+"sur GitHub.",
+"",
 "EXIGENCE ABSOLUE : tu reponds EXCLUSIVEMENT EN FRANCAIS. Aucun mot, aucun",
 "meta-commentaire, aucun plan en anglais (bannis tout 'Role:', 'Task:',",
 "'Context:', 'Constraint:'). Commence immediatement par ta reponse technique,",
@@ -2250,7 +2429,8 @@ grammaire(),
       loading.innerHTML =
         '<div class="ia-dots"><span class="ia-dot"></span>' +
         '<span class="ia-dot"></span><span class="ia-dot"></span></div>' +
-        '<span>' + echapperHtml(nomModele()) + ' analyse vos réglages...</span>';
+        '<span>' + (_etape ? ('🔎 Consulte : ' + echapperHtml(_etape) + '…')
+                           : (echapperHtml(nomModele()) + ' analyse vos réglages...')) + '</span>';
       cont.appendChild(loading);
     }
 
@@ -3049,6 +3229,7 @@ grammaire(),
     input.value = ""; input.style.height = "";
     _historique.push({role:"user", parts:[{text:q}]});
     _enAttente = true;
+    _etape = "";
     rendreMessages();
 
     const errBanner = document.getElementById("iaErrorBanner");
@@ -3100,33 +3281,42 @@ grammaire(),
     }
 
     const local = (_fournisseur === "local");
+    const outils = outilsLecture();
+    const systeme = promptSysteme() + consigneOutils(outils);
     const params = {cle:_cleApi, url:_local.url,
                     modele:local ? _local.modele : endpointModel,
-                    systeme:promptSysteme(), contents:contents,
+                    systeme:systeme, contents:contents,
                     genConfig:genConfig};
     const appelerApi = async (p) => {
       const r = requeteIa(_fournisseur, p);
       return await fetch(r.url, r.init);
     };
 
-    try{
-      let rep = await appelerApi(params);
+    /* Un appel au modèle, avec ses secours ; le repli sans consigne système,
+       une fois pris, vaut pour les tours suivants de la même question. */
+    let sansSysteme = false;
+    const demander = async (conv) => {
+      const avecConsigne = () => {
+        const alt = JSON.parse(JSON.stringify(conv));
+        if(alt.length && alt[0].role === "user")
+          alt[0].parts[0].text = systeme + "\n\n" + alt[0].parts[0].text;
+        return Object.assign({}, params, {systeme:"", contents:alt});
+      };
+      const p = sansSysteme ? avecConsigne() : Object.assign({}, params, {contents:conv});
+      let rep = await appelerApi(p);
 
       /* Retry automatique en cas d'erreur 500 / 503 (transitoire côté Google) */
       if(rep.status >= 500){
         await new Promise(r => setTimeout(r, 1500));
-        rep = await appelerApi(params);
+        rep = await appelerApi(p);
       }
 
       /* Repli si le modèle refuse `systemInstruction` (HTTP 400). Propre à
          Google : un serveur compatible OpenAI prend la consigne comme un
          message « system », et n'a rien à refuser. */
-      if(!local && rep.status === 400){
-        const alt = JSON.parse(JSON.stringify(contents));
-        if(alt.length && alt[0].role === "user")
-          alt[0].parts[0].text = promptSysteme() + "\n\n" + alt[0].parts[0].text;
-        rep = await appelerApi(Object.assign({}, params,
-                                             {systeme:"", contents:alt}));
+      if(!local && !sansSysteme && rep.status === 400){
+        sansSysteme = true;
+        rep = await appelerApi(avecConsigne());
       }
 
       if(!rep.ok){
@@ -3137,12 +3327,37 @@ grammaire(),
                                    ? err.error : err.error.message);
         throw new Error(em || ("Erreur HTTP " + rep.status));
       }
+      return texteReponse(_fournisseur, await rep.json());
+    };
 
-      let texte = texteReponse(_fournisseur, await rep.json());
+    try{
+      /* LA BOUCLE DES OUTILS DE LECTURE : tant que le modèle demande des
+         données par des blocs ```outil, la page les lui rend et il reprend.
+         Ces tours ne vivent que dans `conv` ; l'historique ne garde que la
+         question et la réponse finale, avec la liste de ce qui a été lu. */
+      const conv = contents.slice();
+      const consultes = [];
+      let texte = await demander(conv);
+      for(let tour = 1; tour <= OUTIL_TOURS; tour++){
+        const resultats = executerOutils(texte, outils);
+        if(!resultats) break;
+        resultats.forEach(r => consultes.push(r.titre));
+        _etape = resultats.map(r => r.titre).join(" · ");
+        rendreMessages();
+        conv.push({role:"model", parts:[{text:texte}]});
+        conv.push({role:"user", parts:[{text:"RESULTATS DES OUTILS :\n\n" +
+          resultats.map(r => "### " + r.titre + "\n" + r.texte).join("\n\n") +
+          (tour === OUTIL_TOURS ? "\n\nDERNIER TOUR : reponds maintenant avec ces donnees, sans nouveau bloc outil." : "")}]});
+        texte = await demander(conv);
+      }
+      texte = texte.replace(/```outil\s*\n[\s\S]*?```/g, "").trim();
       if(!texte) texte = "*(aucune réponse textuelle reçue du modèle)*";
+      texte = nettoyerReponse(texte);
+      if(consultes.length)
+        texte = "*🔎 Consulté : " + Array.from(new Set(consultes)).join(" · ") + "*\n\n" + texte;
 
       _historique.push({role:"model", modele:nomModele(),
-                        parts:[{text:nettoyerReponse(texte)}]});
+                        parts:[{text:texte}]});
     }catch(e){
       /* Le message de l'utilisateur est retiré : l'API attend une alternance
          stricte question / réponse, et une question restée sans réponse ferait
@@ -3179,6 +3394,7 @@ grammaire(),
       }
     }
     _enAttente = false;
+    _etape = "";
     rendreMessages();
   }
 
@@ -3263,6 +3479,8 @@ grammaire(),
   /* Le contexte envoyé au modèle, tel quel : le banc y relit le tableau d'un
      balayage terminé. */
   window.iaContexte = extraireContexteOpenems;
+  window.iaOutils = outilsLecture;
+  window.iaExecuterOutils = executerOutils;
   /* LA REQUÊTE ET SA LECTURE, sans réseau : le banc vérifie que la clé Google
      reste dans l'en-tête et qu'aucune ne part vers un serveur local. */
   window.iaRequete = requeteIa;
