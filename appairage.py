@@ -42,6 +42,7 @@ BISCUIT = "websuite_jeton"          # le nom posé par WEB·SUITE depuis toujour
 PAGE = "/appairage"                 # la page du code (sa propre adresse : Safari ressortait « / » de son cache)
 ROUTE = "/api/appairer"             # la seule route ouverte sans jeton, en POST
 ENTETE = "X-Appairage"              # en-tête maison : un autre site ne peut pas l'ajouter sans pré-vol CORS
+MARQUE = "[connexion]"              # WEB·SUITE recopie ces lignes du journal d'un outil dans son terminal
 
 
 def fichier_jeton():
@@ -172,6 +173,35 @@ class Appairage:
             return False, "Code incorrect (%d essai(s) restant(s))." % (self.ESSAIS - self.echecs)
 
 
+class Visites:
+    """Les appareils qui utilisent un serveur, affichés dans son terminal : une ligne
+    quand une IP arrive, ou revient après INACTIF secondes sans requête."""
+    INACTIF = 600
+
+    def __init__(self, nom, afficher=None):
+        self.nom = nom
+        self.afficher = afficher or (lambda texte: print(texte, flush=True))
+        self.verrou = threading.Lock()
+        self.vues = {}                      # ip -> dernière requête (time.monotonic)
+
+    def noter(self, ip):
+        try:
+            a = ipaddress.ip_address(str(ip).split("%")[0])
+            ip = str(getattr(a, "ipv4_mapped", None) or a)
+        except ValueError:
+            pass
+        maintenant = time.monotonic()
+        with self.verrou:
+            arrivee = maintenant - self.vues.get(ip, float("-inf")) > self.INACTIF
+            self.vues = {i: t for i, t in self.vues.items() if maintenant - t <= self.INACTIF}
+            self.vues[ip] = maintenant
+            if not arrivee:
+                return
+            actifs = sorted(self.vues)
+        self.afficher("  %s %s  %-11s %s  ->  %d appareil(s) actif(s) : %s"
+                      % (MARQUE, time.strftime("%H:%M:%S"), self.nom, ip, len(actifs), ", ".join(actifs)))
+
+
 class Garde:
     """Le contrôle d'accès d'un serveur, à appeler par filtrer() en tête de chaque requête.
 
@@ -182,6 +212,7 @@ class Garde:
         self.actif = actif
         self.jeton = jeton(ancien) if actif else None
         self.code = Appairage(afficher, nom) if actif else None
+        self.visites = Visites(nom, afficher)
 
     def annoncer(self):
         """Au démarrage, en mode réseau : affiche le code dans le terminal."""
@@ -239,10 +270,12 @@ class Garde:
             self._repondre(handler, 403, "Host non autorisé (protection DNS rebinding)")
             return False
         if not self.actif:
+            self.visites.noter(handler.client_address[0])
             return True
         u = urllib.parse.urlsplit(handler.path)
         lecture = handler.command in ("GET", "HEAD")
         if self.autorise(handler):
+            self.visites.noter(handler.client_address[0])
             if lecture and self._jeton_url(handler):
                 # Le jeton passe dans un cookie et quitte l'adresse : il ne reste
                 # ni dans l'historique, ni dans un lien recopié.
@@ -445,7 +478,9 @@ if __name__ == "__main__":
         biscuit = r.getheader("Set-Cookie").split(";")[0]
         assert biscuit == BISCUIT + "=" + j
         assert appairer(code).status == 403                       # usage unique
+        assert not any(MARQUE in a for a in affiches)            # non appairé : pas un utilisateur
         assert req("/", entetes={"Cookie": biscuit}).corps == b"ok"
+        assert MARQUE in affiches[-1] and "127.0.0.1" in affiches[-1]
         assert req("/app.js", entetes={"Cookie": biscuit}).corps == b"ok"
         assert req("/api/x", "POST", {"Cookie": biscuit}).corps == b"ok"
         assert req(PAGE, entetes={"Cookie": biscuit}).getheader("Location") == "/"
@@ -470,6 +505,17 @@ if __name__ == "__main__":
         assert req("/").corps == b"ok"
         inactif = Garde("LOCAL", actif=False)
         assert inactif.jeton is None
+        lignes = []
+        v = Visites("TEST", afficher=lignes.append)
+        v.noter("192.168.1.20")
+        v.noter("192.168.1.20")                                   # déjà vu : rien
+        v.noter("::ffff:192.168.1.21")
+        assert len(lignes) == 2 and "2 appareil(s) actif(s) : 192.168.1.20, 192.168.1.21" in lignes[1]
+        v.vues["192.168.1.20"] -= Visites.INACTIF + 1              # parti depuis 10 min
+        v.noter("192.168.1.21")
+        assert len(lignes) == 2
+        v.noter("192.168.1.20")                                   # revenu : affiché de nouveau
+        assert len(lignes) == 3 and "2 appareil(s)" in lignes[2]
         srv.shutdown()
         srv.server_close()
     print("OK")
