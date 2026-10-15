@@ -1,3 +1,17 @@
+# [2026-10-15] Version 1.82: corps et hauteur des boitiers (dossier mecanique)
+# Description:
+#              - <Package height> et le polygone de <Package><Outline> sont
+#                lus : la visionneuse en tire l'encombrement et la hauteur de
+#                chaque composant pour le dossier mecanique (boitier de la
+#                carte). Poses en attributs `hauteur` (None si absente) et
+#                `corps` (liste de Point, vide si absent) du Package, dans les
+#                coordonnees du boitier comme ses broches : la classe ne
+#                change pas.
+#              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
+#
+# Liste des fonctions modifiees :
+# - [~] _process_package
+#
 # [2026-10-12] Version 1.81: le cuivre declare lisse (0 micrometre)
 # Description:
 #              - Une <Spec> qui ecrit une rugosite de 0 (le « Lisse declare »
@@ -2077,6 +2091,15 @@ class IPC2581Parser:
             return
 
         package = Package(name=name)
+        # Hauteur et corps du boitier, en ATTRIBUTS POSES (comme `height` des
+        # textes) : la classe Package ne change pas.
+        hauteur = self._safe_float(pkg_elem.attrib.get("height"), 0.0)
+        package.hauteur = hauteur if hauteur > 0 else None
+        package.corps = []
+        contour = pkg_elem.find(self._tag("Outline"))
+        poly = contour.find(self._tag("Polygon")) if contour is not None else None
+        if poly is not None:
+            package.corps = self._parse_polygon(poly)
 
         for pin_elem in pkg_elem.findall(self._tag("Pin")):
             number = pin_elem.attrib.get("number", "?")

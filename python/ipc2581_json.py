@@ -2,8 +2,11 @@
 # -*- coding: utf-8 -*-
 # ==========================================
 # VERSIONING
-# Version: 1.2.0
-# Date: 2026-10-12
+# Version: 1.3.0
+# Date: 2026-10-15
+# 1.3.0 : « hauteur » et « corps » d'un composant, tires de son <Package>
+#         (parseur 1.82) pour le dossier mecanique ; absents si le fichier
+#         ne les porte pas. Coordonnees du boitier, comme « pins ».
 # 1.2.0 : « rug »: 0 pour un cuivre DECLARE lisse (parseur 1.81), distinct
 #   d'une rugosite absente (cle non ecrite).
 # 1.1.0 : « regles » (classes de nets, paires differentielles, contraintes,
@@ -77,7 +80,8 @@ Cle par cle, le dictionnaire produit :
                  vient : "calque" ou "padstack"),
                  cp (contre-percage, voir `_contre_percage`)}
     pads        pastilles libres : {x, y, r, m, ps, pin, n}
-    composants  {ref, pkg, c, x, y, r, m, mnt, val, tol, pads, pins}
+    composants  {ref, pkg, c, x, y, r, m, mnt, val, tol, pads, pins,
+                 hauteur?, corps? [x0, y0, x1, y1...] (coordonnees du boitier)}
     padstacks   definitions : {trou, pad, pads: [{c, d, f (forme), a (antipad)}]}
     formes      primitives standard : cercle, rectangle, ovale, polygone...
     formesuser  formes du dictionnaire utilisateur (empreintes complexes)
@@ -498,6 +502,11 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
                         b["n"] = rang
                 broches.append(b)
             item["pins"] = broches
+            if getattr(paquet, "hauteur", None):
+                item["hauteur"] = _r(paquet.hauteur)
+            corps = getattr(paquet, "corps", None)
+            if corps:
+                item["corps"] = [_r(v) for p in corps for v in (p.x, p.y)]
         composants.append(item)
 
     padstacks = {}
