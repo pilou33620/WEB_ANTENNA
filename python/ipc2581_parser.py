@@ -7,10 +7,13 @@
 #                `corps` (liste de Point, vide si absent) du Package, dans les
 #                coordonnees du boitier comme ses broches : la classe ne
 #                change pas.
+#              - _safe_float rend le defaut pour un non-fini (« inf »,
+#                « 1e400 », « nan ») : l'arrondi de ipc2581_json levait sur
+#                un infini, et la lecture du fichier entier tombait.
 #              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
 #
 # Liste des fonctions modifiees :
-# - [~] _process_package
+# - [~] _process_package, _safe_float
 #
 # [2026-10-12] Version 1.81: le cuivre declare lisse (0 micrometre)
 # Description:
@@ -459,11 +462,14 @@ class IPC2581Parser:
 
     @staticmethod
     def _safe_float(value, default: float = 0.0) -> float:
-        """Convertit en float sans lever d'exception (attribut XML manquant/invalide)."""
+        """Convertit en float sans lever d'exception (attribut XML manquant/invalide).
+        Un non-fini (« inf », « 1e400 », « nan ») est invalide : il ferait lever
+        l'arrondi de ipc2581_json et tomber la lecture du fichier entier."""
         try:
-            return float(value)
+            v = float(value)
         except (TypeError, ValueError):
             return default
+        return v if math.isfinite(v) else default
 
     @staticmethod
     def _safe_int(value, default: int = 0) -> int:
