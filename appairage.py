@@ -100,6 +100,8 @@ def hote_permis(entete):
     localhost et le nom du poste."""
     h = (entete or "").strip().lower().rstrip(".")
     if h.startswith("["):
+        if "]" not in h:
+            return False                    # « [ » seul : rien à reconnaître
         h = h[1:].split("]")[0]
     elif h.count(":") == 1:
         h = h.split(":")[0]
@@ -117,7 +119,7 @@ class Appairage:
     """Le code court. Deviner : un code ne vit que DUREE secondes, sert une fois,
     et ESSAIS erreurs le brûlent, avec PAUSE secondes avant le suivant. Chaque
     nouveau code s'affiche dans le terminal : une série d'essais se voit."""
-    DUREE, ESSAIS, PAUSE = 600, 5, 60
+    DUREE, ESSAIS, PAUSE, PAUSE_MAX = 600, 5, 60, 3600
 
     def __init__(self, afficher=None, nom=""):
         self.afficher = afficher or (lambda texte: print(texte, flush=True))
@@ -127,6 +129,7 @@ class Appairage:
         self.expire = 0.0
         self.echecs = 0
         self.bloque = 0.0
+        self.grilles = 0                           # codes brûlés d'affilée
 
     @staticmethod
     def lisible(code):
@@ -163,13 +166,19 @@ class Appairage:
                 return False, "Code expiré : un nouveau code est affiché sur le serveur."
             if len(saisi) == 6 and hmac.compare_digest(saisi, self.code):
                 self.code = None                   # usage unique
+                self.grilles = 0
                 return True, "Appareil autorisé."
             self.echecs += 1
             if self.echecs >= self.ESSAIS:
+                # pause doublée à chaque code brûlé d'affilée (plafond 1 h) :
+                # à pause fixe, 7 200 essais par jour suffisaient à deviner un
+                # code de 6 chiffres en quelques semaines
+                pause = min(self.PAUSE * 2 ** self.grilles, self.PAUSE_MAX)
+                self.grilles += 1
                 self.code = None
-                self.bloque = maintenant + self.PAUSE
+                self.bloque = maintenant + pause
                 return False, ("Trop d'essais : code annulé. Dans %d s, rechargez la page : "
-                               "un nouveau code s'affichera sur le serveur." % self.PAUSE)
+                               "un nouveau code s'affichera sur le serveur." % pause)
             return False, "Code incorrect (%d essai(s) restant(s))." % (self.ESSAIS - self.echecs)
 
 
