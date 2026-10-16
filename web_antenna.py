@@ -1346,10 +1346,16 @@ def verifier_et_appliquer_maj(dossier_racine=None):
     # --ff-only : on n'applique que la suite exacte de ce qu'on a. Un historique
     # distant reecrit (force-push) ou divergent est refuse, jamais fusionne en
     # silence dans le code qu'on va executer.
-    pull = subprocess.run(
-        ["git", "pull", "--ff-only"],
-        cwd=racine, capture_output=True, text=True, timeout=30, env=env_git
-    )
+    # Un pull trop long (reseau lent, carte SD) levait TimeoutExpired : le
+    # serveur ne demarrait pas et la reserve n'etait jamais reappliquee.
+    try:
+        pull = subprocess.run(
+            ["git", "pull", "--ff-only"],
+            cwd=racine, capture_output=True, text=True, timeout=120, env=env_git
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        pull = subprocess.CompletedProcess(["git", "pull"], 1, "",
+                                           "git pull interrompu (%s)" % exc)
 
     if stashed:
         print("  Restauration des modifications locales...")
