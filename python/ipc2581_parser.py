@@ -347,6 +347,7 @@ class IPC2581Parser:
         self.specs: Dict[str, Dict[str, str]] = {}
         self.design = IPCDesign()
         self.inline_ps_counter = 0
+        self._inline_pads = {}          # (forme, couche, usage) -> padstack inline
 
         # Structures pour le comptage et le dédoublonnage des vias
         self.detected_via_counts: Dict[str, int] = {}
@@ -1295,7 +1296,9 @@ class IPC2581Parser:
 
     def _longueur_mm(self, elem: ET.Element, attr: str = "value") -> Optional[float]:
         """Un attribut de longueur d'une <Property> ou d'une <LineWidth>, en
-        millimetres ; l'unite est celle de la balise, millimetre par defaut.
+        millimetres ; l'unite est celle de la balise, sinon celle du fichier
+        (comme le contre-percage) -- en millimetres, une regle de 0.005 sans
+        unite dans un fichier en pouces se lisait 0,005 mm au lieu de 0,127.
         None si rien de lisible."""
         v = elem.attrib.get(attr)
         if v is None or v == "":
@@ -1304,7 +1307,8 @@ class IPC2581Parser:
             x = float(str(v).replace(",", "."))
         except ValueError:
             return None
-        k = self._MM_REGLE.get((elem.attrib.get("unit") or "MM").strip().upper())
+        k = self._MM_REGLE.get((elem.attrib.get("unit") or self.design.units
+                                or "MM").strip().upper())
         return x * k if k else None
 
     def _lire_spec_regle(self, spec: ET.Element) -> Optional[dict]:
@@ -1873,7 +1877,10 @@ class IPC2581Parser:
                         # fichier.
                         pdef = PadStackDefinition(name=via_key)
                         pdef.hole_diameter = diameter
-                        pdef.pad_diameter = diameter + 0.3
+                        # 0,3 MM, converti dans l'unite du fichier : en pouces,
+                        # « + 0.3 » faisait un pad de 7,9 mm
+                        pdef.pad_diameter = diameter + 0.3 / self._UNITES_MM.get(
+                            (self.design.units or "").upper(), 1.0)
                         pdef.pad_supposee = True
                         self.design.padstacks[via_key] = pdef
                         self.via_def_names.add(via_key)
@@ -1890,9 +1897,9 @@ class IPC2581Parser:
     # Contre-perçage (back-drill)
     # ------------------------------------------------------------------
 
-    # Unites de <Property unit="..."> (propertyUnitType d'IPC-2581) vers le mm.
-    _UNITES_MM = {"MM": 1.0, "MILLIMETER": 1.0, "MICRON": 1e-3,
-                  "INCH": 25.4, "MIL": 0.0254, "MILS": 0.0254}
+    # Unites de <Property unit="..."> (propertyUnitType d'IPC-2581) vers le mm :
+    # la meme table que les regles (elle avait en plus UM et IN).
+    _UNITES_MM = _MM_REGLE
 
     def _parse_contre_percages(self):
         """Indexe les spécifications de contre-perçage : nom -> {depart,
@@ -1991,11 +1998,22 @@ class IPC2581Parser:
             self.design.contre_percages_orphelins = orphelins
             return
         tol = 1e-3
+        # les trous metallises ranges par case de `tol` : chaque foret ne
+        # regarde que les 9 cases voisines, au lieu de toute la liste
+        # (2 000 forets x 50 000 trous = 1e8 comparaisons)
+        cases = {}
+        for rang, d in enumerate(self.design.drills):
+            if "NON" not in (d.plating or "").upper():
+                cle = (round(d.location.x / tol), round(d.location.y / tol))
+                cases.setdefault(cle, []).append(rang)
         for f in self._forets_cp:
+            cx, cy = round(f["x"] / tol), round(f["y"] / tol)
+            rangs = sorted(r for i in (-1, 0, 1) for j in (-1, 0, 1)
+                           for r in cases.get((cx + i, cy + j), ()))
             cible = None
-            for d in self.design.drills:
-                if ("NON" not in (d.plating or "").upper()
-                        and abs(d.location.x - f["x"]) <= tol
+            for r in rangs:          # le premier dans l'ordre du fichier, comme avant
+                d = self.design.drills[r]
+                if (abs(d.location.x - f["x"]) <= tol
                         and abs(d.location.y - f["y"]) <= tol):
                     cible = d
                     break
@@ -2062,15 +2080,22 @@ class IPC2581Parser:
         if pref is not None:
             shape_ref = pref.attrib.get("id", "")
             if shape_ref:
-                self.inline_ps_counter += 1
-                ps_name = f"inline_pad_{self.inline_ps_counter}"
+                # UN PADSTACK PAR (forme, couche, usage), pas par pastille :
+                # 20 000 pastilles identiques faisaient 20 000 definitions,
+                # plus de la moitie du JSON envoye a la visionneuse.
+                cle = (shape_ref, current_layer,
+                       pad_elem.attrib.get("padUsage", "").upper())
+                ps_name = self._inline_pads.get(cle)
+                if ps_name is None:
+                    self.inline_ps_counter += 1
+                    ps_name = f"inline_pad_{self.inline_ps_counter}"
+                    self._inline_pads[cle] = ps_name
+                    pad_diam = self._shape_max_dimension(shape_ref)
+                    pdef = PadStackDefinition(name=ps_name)
+                    pdef.pads.append(PadDef(layer_ref=current_layer, pad_diameter=pad_diam,
+                                            shape_ref=shape_ref))
+                    self.design.padstacks[ps_name] = pdef
                 padstack_ref = ps_name
-
-                pad_diam = self._shape_max_dimension(shape_ref)
-
-                pdef = PadStackDefinition(name=ps_name)
-                pdef.pads.append(PadDef(layer_ref=current_layer, pad_diameter=pad_diam, shape_ref=shape_ref))
-                self.design.padstacks[ps_name] = pdef
 
         # Comptage et dédoublonnage pour les vias placés sous forme de "Pad"
         pad_usage = pad_elem.attrib.get("padUsage", "").upper()
@@ -2391,11 +2416,15 @@ class IPC2581Parser:
                     angle_start = math.atan2(start_y - center_y, start_x - center_x)
                     angle_end = math.atan2(end_y - center_y, end_x - center_x)
 
+                    # cercle complet (fin = debut) : un tour entier. Avec des
+                    # angles egaux, le balayage valait 0 et le cercle devenait
+                    # un point -- anti-pastilles et contours ronds disparaissaient.
+                    tour = math.hypot(end_x - start_x, end_y - start_y) < 1e-9
                     if cw:
-                        if angle_end > angle_start:
+                        if angle_end > angle_start or tour:
                             angle_end -= 2 * math.pi
                     else:
-                        if angle_end < angle_start:
+                        if angle_end < angle_start or tour:
                             angle_end += 2 * math.pi
 
                     radius = math.hypot(start_x - center_x, start_y - center_y)

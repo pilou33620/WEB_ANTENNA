@@ -290,6 +290,15 @@ def _regles(design):
 _MM = {"MILLIMETER": 1.0, "MM": 1.0, "MICRON": 1e-3, "INCH": 25.4}
 
 
+def _metallisation(plating):
+    """platingStatus de l'IPC-2581 (PLATED, NONPLATED, VIA) : un trou VIA est
+    metallise. Le JSON garde « VIA » (il distingue les vias des trous de
+    pastille) ; seuls les comptes et les lecteurs doivent le prendre pour
+    metallise."""
+    p = (plating or "UNKNOWN").upper()
+    return "PLATED" if p in ("VIA", "PLATED") else (plating or "UNKNOWN")
+
+
 def _contre_percage(trou, design, couches, cuivres):
     """Le contre-percage d'un perçage, au format de la visionneuse, ou None.
 
@@ -557,7 +566,7 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
 
     longueur = sum(net.total_track_length() for net in design.nets.values())
     metallises = sum(1 for d in design.drills
-                     if (d.plating or "").upper().startswith("PLATED"))
+                     if _metallisation(d.plating) == "PLATED")
 
     classes_nets = {
         net.name: net.net_class
