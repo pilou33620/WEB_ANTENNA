@@ -31,6 +31,7 @@ import hmac
 import ipaddress
 import json
 import os
+import re
 import secrets
 import socket
 import threading
@@ -91,6 +92,25 @@ def jeton(ancien=None):
     return neuf
 
 
+def masquer(texte):
+    """Une ligne de journal sans le jeton (« GET /?jeton=... » avant la redirection 303)."""
+    return re.sub(r"jeton=[^&\s\"]+", "jeton=***", texte)
+
+
+def ip_tailscale():
+    """Adresse Tailscale (100.64/10) de ce poste, ou None. 100.100.100.100 est l'adresse
+    interne de Tailscale : sa route passe par tailscale0 (aucun paquet n'est envoyé)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("100.100.100.100", 1))
+        ip = s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+    return ip if ipaddress.ip_address(ip) in ipaddress.ip_network("100.64.0.0/10") else None
+
+
 def hote_permis(entete):
     """L'en-tête Host désigne-t-il ce poste ? (parade au DNS rebinding)
 
@@ -138,7 +158,8 @@ class Appairage:
     def _neuf(self, maintenant):
         self.code = "%06d" % secrets.randbelow(10 ** 6)
         self.expire = maintenant + self.DUREE
-        self.echecs = 0
+        # echecs n'est PAS remis à zéro ici : sinon 4 essais par code, en attendant
+        # chaque expiration, contournaient la pause (576 essais par jour)
         self.afficher("  Code d'appairage%s : %s   (à saisir sur la tablette, valable %d min)"
                       % (" " + self.nom if self.nom else "", self.lisible(self.code), self.DUREE // 60))
 
@@ -167,6 +188,7 @@ class Appairage:
             if len(saisi) == 6 and hmac.compare_digest(saisi, self.code):
                 self.code = None                   # usage unique
                 self.grilles = 0
+                self.echecs = 0
                 return True, "Appareil autorisé."
             self.echecs += 1
             if self.echecs >= self.ESSAIS:
@@ -175,6 +197,7 @@ class Appairage:
                 # code de 6 chiffres en quelques semaines
                 pause = min(self.PAUSE * 2 ** self.grilles, self.PAUSE_MAX)
                 self.grilles += 1
+                self.echecs = 0
                 self.code = None
                 self.bloque = maintenant + pause
                 return False, ("Trop d'essais : code annulé. Dans %d s, rechargez la page : "
@@ -229,6 +252,16 @@ class Garde:
             self.code.preparer()
 
     @staticmethod
+    def internet(handler):
+        """Le client a-t-il une adresse publique ? (IPv6 de la box ouverte, redirection de port)
+        Réseau local, lien local et Tailscale (100.64/10, fd7a::) ne sont pas publics."""
+        try:
+            ip = ipaddress.ip_address(handler.client_address[0].split("%")[0])
+        except (ValueError, IndexError, TypeError):
+            return True
+        return (getattr(ip, "ipv4_mapped", None) or ip).is_global
+
+    @staticmethod
     def ce_poste(handler):
         try:
             ip = ipaddress.ip_address(handler.client_address[0].split("%")[0])
@@ -277,6 +310,9 @@ class Garde:
         """True : la requête suit son cours. False : la réponse est déjà envoyée."""
         if not hote_permis(handler.headers.get("Host")):
             self._repondre(handler, 403, "Host non autorisé (protection DNS rebinding)")
+            return False
+        if self.internet(handler):
+            self._repondre(handler, 403, "Accès depuis Internet refusé : passez par le réseau local ou Tailscale")
             return False
         if not self.actif:
             self.visites.noter(handler.client_address[0])
@@ -510,6 +546,24 @@ if __name__ == "__main__":
         g.code.bloque = 0
         req(PAGE)
         assert appairer(g.code.code).status == 200
+        assert masquer('"GET /?a=1&jeton=%s HTTP/1.1" 303' % j) == '"GET /?a=1&jeton=*** HTTP/1.1" 303'
+        # l'expiration d'un code ne remet pas les erreurs à zéro
+        a = Appairage(afficher=lambda t: None)
+        a.preparer()
+        for _ in range(a.ESSAIS - 1):
+            a.essayer("x")
+        a.expire = 0
+        a.essayer("x")                                            # code expiré : un nouveau
+        assert "annulé" in a.essayer("x")[1]                      # 5e erreur : brûlé
+        # adresses publiques refusées, réseau local et Tailscale acceptés
+        class C:
+            def __init__(self, ip):
+                self.client_address = (ip, 0)
+        for ip in ("192.168.1.20", "10.0.0.2", "100.80.111.121", "fd7a:115c:a1e0::1", "fe80::1%eth0",
+                   "127.0.0.1", "::ffff:192.168.1.20"):
+            assert not Garde.internet(C(ip)), ip
+        for ip in ("8.8.8.8", "2a01:cb19:690:a100::1", "::ffff:8.8.8.8"):
+            assert Garde.internet(C(ip)), ip
         distant[0] = False                                        # ce poste : pas de code
         assert req("/").corps == b"ok"
         inactif = Garde("LOCAL", actif=False)

@@ -124,18 +124,6 @@ MAX_OPENEMS = getattr(openems_antenne, "MAX_CORPS", 24 * 1024 * 1024)
 # celui d'un IPC-2581 traduit, et non celui d'un document de simulation.
 MAX_PROJET = MAX_IPC
 
-# QUI A LE DROIT DE PARLER A CE SERVEUR. Il ecoute en clair sur le reseau
-# local pour qu'une tablette puisse ouvrir la page ; il refuse en revanche les
-# requetes modificatrices venues d'une origine qui n'est pas du reseau prive.
-# Sans cela, n'importe quelle page ouverte dans le meme navigateur pourrait
-# lancer des calculs ici.
-ORIGINES = re.compile(
-    r"^https?://("
-    r"localhost|127\.0\.0\.1|\[::1\]|"
-    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
-    r"192\.168\.\d{1,3}\.\d{1,3}|"
-    r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
-    r")(:\d+)?$")
 
 # CE QUE LA PAGE CHARGE, ET RIEN D'AUTRE. Le dossier servi est aussi celui
 # du depot : .git/, env/, openEMS/, la cle du mode IA, les cartes posees a la
@@ -216,7 +204,7 @@ class Poste(http.server.SimpleHTTPRequestHandler):
 
     # -- journal ---------------------------------------------------------
     def log_message(self, format, *args):              # noqa: A002
-        sys.stderr.write("  " + (format % args) + "\n")
+        sys.stderr.write("  " + appairage.masquer(format % args) + "\n")
 
     def guess_type(self, path):
         ext = os.path.splitext(path)[1].lower()
@@ -240,15 +228,25 @@ class Poste(http.server.SimpleHTTPRequestHandler):
     def _params(self):
         return urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
 
+    def _origine_permise(self, origine):
+        """Vrai si `origine` est ce serveur-ci (« http://<Host> »), comme WEB_CAO.
+
+        Le Host a deja ete verifie (hote_permis). Une liste de plages privees
+        refusait Tailscale (100.64/10) et acceptait une box ou un autre serveur du LAN.
+        """
+        hote = (self.headers.get("Host") or "").strip().lower()
+        return bool(origine and hote
+                    and origine.lower() in ("http://" + hote, "https://" + hote))
+
     def _cors(self):
         origine = self.headers.get("Origin")
-        if origine and ORIGINES.match(origine):
+        if self._origine_permise(origine):
             self.send_header("Access-Control-Allow-Origin", origine)
             self.send_header("Vary", "Origin")
 
     def _csrf(self):
         origine = self.headers.get("Origin")
-        if origine and not ORIGINES.match(origine):
+        if origine and not self._origine_permise(origine):
             self._json({"detail": "Origine inter-site refusee"}, 403)
             return False
         return True
@@ -1558,6 +1556,8 @@ def main(argv=None):
     print("  Adresse   %s" % url)
     if not local_seul:
         print("            http://%s:%d/   (reseau local)" % (ip_reseau(), port))
+        if appairage.ip_tailscale():
+            print("            http://%s:%d/   (Tailscale)" % (appairage.ip_tailscale(), port))
         print("            l'autre appareil demande une fois le code d'appairage")
         GARDE.annoncer()
     if port != args.port:
