@@ -208,14 +208,22 @@
       }
     }
 
-    function appliquer(carte, direct) {
+    /* appliquer et annuler peuvent être asynchrones (ouvrir lit des fichiers) : pendant l'attente,
+       la carte est « en cours », sans bouton, donc un double clic ne rejoue rien. */
+    async function appliquer(carte, direct) {
+      if (carte.etat !== "proposee") return;
+      carte.etat = "en_cours";
+      dessinerCarte(carte);
       try {
         // La proposition affichée suit : l'adaptateur vérifie qu'elle n'a pas changé depuis
-        carte.jeton = carte.def.appliquer(carte.args, carte.prop);
+        carte.jeton = await carte.def.appliquer(carte.args, carte.prop);
         if (carte.def.etat) carte.apres = texte(carte.def.etat());   // instantané : l'Annuler compare
         carte.etat = "appliquee";
         repondre(carte.id, "appliquee", { titre: texte(carte.prop.titre || carte.nom), avant: carte.prop.avant,
-                                          apres: carte.prop.apres, direct: !!direct });
+                                          apres: carte.prop.apres, direct: !!direct,
+                                          // une écriture irréversible n'a pas de jeton d'annulation : son retour
+                                          // (le chemin du fichier créé…) est pour Claude
+                                          retour: carte.def.irreversible ? carte.jeton : undefined });
       } catch (e) {
         carte.etat = "echouee";
         carte.message = String((e && e.message) || e);
@@ -233,14 +241,17 @@
       replierPlusTard();
     }
 
-    function annuler(carte) {
+    async function annuler(carte) {
+      if (carte.etat !== "appliquee") return;
       // Seulement si rien n'a bougé depuis : sinon on écraserait le travail fait entre-temps
       if (texte(carte.def.etat()) !== carte.apres) {
         carte.message = "L'état a changé depuis : annuler écraserait tes modifications. Défais à la main " +
                         "(ou Ctrl+Z si l'éditeur en a un).";
       } else {
-        try { carte.def.annuler(carte.args, carte.jeton); carte.etat = "annulee"; carte.message = "Annulée."; }
-        catch (e) { carte.message = "Annulation impossible : " + ((e && e.message) || e); }
+        carte.etat = "en_cours";
+        dessinerCarte(carte);
+        try { await carte.def.annuler(carte.args, carte.jeton); carte.etat = "annulee"; carte.message = "Annulée."; }
+        catch (e) { carte.etat = "appliquee"; carte.message = "Annulation impossible : " + ((e && e.message) || e); }
       }
       dessinerCarte(carte);
     }
@@ -332,12 +343,14 @@
       if (carte.prop.avant !== undefined || carte.prop.apres !== undefined)
         n.appendChild(el("div", "pilote-diff", texte(carte.prop.avant) + " → " + texte(carte.prop.apres)));
       if (carte.prop.details) n.appendChild(el("div", "pilote-details", texte(carte.prop.details)));
+      if (carte.def.irreversible) n.appendChild(el("div", "pilote-aide", carte.def.irreversible));
+      if (carte.etat === "en_cours") n.appendChild(el("div", "pilote-aide", "En cours…"));
       if (carte.etat === "proposee") {
         n.appendChild(bouton("Appliquer", () => appliquer(carte, false)));
         n.appendChild(bouton("Refuser", () => refuser(carte)));
       } else if (carte.etat === "appliquee") {
         if (carte.def.annuler) n.appendChild(bouton("Annuler", () => annuler(carte)));
-        else n.appendChild(el("div", "pilote-aide", "Pour défaire : Ctrl+Z dans l'éditeur."));
+        else if (carte.def.historique) n.appendChild(el("div", "pilote-aide", "Pour défaire : Ctrl+Z dans l'éditeur."));
       }
       if (carte.message) n.appendChild(el("div", "pilote-message", carte.message));
     }
@@ -377,8 +390,9 @@
       if (!NOM.test(nom)) throw new Error("Nom de commande invalide : " + nom);
       if (def.ecriture) {
         // Une écriture = une étape annulable (spec, décision 7)
-        if (!def.historique && typeof def.annuler !== "function")
-          throw new Error(nom + " : une écriture déclare « historique » ou « annuler »");
+        // ou, pour ce qui ne se défait pas (un fichier créé), « irreversible » : le message que la carte affiche
+        if (!def.historique && typeof def.annuler !== "function" && !(typeof def.irreversible === "string" && def.irreversible))
+          throw new Error(nom + " : une écriture déclare « historique », « annuler » ou « irreversible »");
         if (typeof def.annuler === "function" && typeof def.etat !== "function")
           throw new Error(nom + " : « annuler » exige « etat » (on n'annule que si rien n'a bougé)");
         if (typeof def.proposer !== "function" || typeof def.appliquer !== "function")
