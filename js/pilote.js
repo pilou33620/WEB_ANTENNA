@@ -263,9 +263,9 @@
 
     function garder(noeud) {
       entrees.push(noeud);
-      // Les plus vieilles entrées partent ; jamais une carte qui attend un clic
+      // Les plus vieilles entrées partent ; jamais une carte qui attend un clic ou qu'on peut encore annuler
       while (entrees.length > MAX_PANNEAU) {
-        const i = entrees.findIndex(n => !n.enAttente);
+        const i = entrees.findIndex(n => !n.aGarder);
         if (i < 0) break;
         const [vieux] = entrees.splice(i, 1);
         vieux.remove();
@@ -337,7 +337,8 @@
         garder(liste.appendChild(d.noeud));
       }
       const n = d.noeud;
-      n.enAttente = carte.etat === "proposee";
+      n.aGarder = carte.etat === "proposee" || carte.etat === "en_cours" ||
+                  (carte.etat === "appliquee" && !!carte.def.annuler);
       n.replaceChildren();
       n.className = "pilote-carte " + carte.etat;
       n.appendChild(el("div", "pilote-titre", texte(carte.prop.titre || carte.nom)));
