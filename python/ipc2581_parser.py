@@ -1667,7 +1667,9 @@ class IPC2581Parser:
         cher qu'un calque de trop.
         """
         nom = layer_ref.upper()
-        if "DRILL" in fonction or (not fonction and ("DRILL" in nom or "HOLE" in nom)):
+        # ROUT : le calque des fentes (<SlotCavity>), comme l'ecrivent KiCad et
+        # l'editeur ; seuls ses <Hole> et <SlotCavity> y seront lus
+        if "DRILL" in fonction or fonction == "ROUT" or (not fonction and ("DRILL" in nom or "HOLE" in nom)):
             return "percage"
         if self.tout_garder or not fonction or _RE_FONCTION_CUIVRE.search(fonction):
             return "cuivre"
@@ -1891,6 +1893,39 @@ class IPC2581Parser:
                 if drill.padstack_ref in self.design.padstacks:
                     drill.padstack_obj = self.design.padstacks[drill.padstack_ref]
 
+                self.design.drills.append(drill)
+
+            # LES FENTES (<SlotCavity>, calque ROUT) : Location au centre,
+            # Xform pour l'angle, Oval longueur x largeur (width >= height
+            # dans la norme ; si l'on a l'inverse, la longueur tourne de 90°).
+            # Une autre forme que l'Oval (un <Outline>) n'est pas lue : la fente
+            # est alors absente, comme avant que les SlotCavity soient lus.
+            for fente in item_set.findall(self._tag("SlotCavity")):
+                loc_node = fente.find(self._tag("Location"))
+                if loc_node is None:
+                    continue
+                forme = fente.find(self._tag("Oval"))
+                if forme is None:
+                    continue
+                larg = self._safe_float(forme.attrib.get("width"))
+                haut = self._safe_float(forme.attrib.get("height"))
+                xf = fente.find(self._tag("Xform"))
+                rot = self._safe_float(xf.attrib.get("rotation")) if xf is not None else 0.0
+                if haut > larg:
+                    larg, haut, rot = haut, larg, rot + 90.0
+                if not haut > 0:
+                    continue
+                drill = Drill(location=Point(self._safe_float(loc_node.attrib.get("x")),
+                                             self._safe_float(loc_node.attrib.get("y"))),
+                              diameter=haut,
+                              plating=fente.attrib.get("platingStatus", "UNKNOWN"),
+                              padstack_ref=padstack_ref, net_name=net_name)
+                drill.slot_length = larg
+                drill.slot_rotation = rot % 360.0
+                (drill.span_from, drill.span_to,
+                 drill.span_source) = self._span_du_percage(layer_ref, padstack_ref)
+                if drill.padstack_ref in self.design.padstacks:
+                    drill.padstack_obj = self.design.padstacks[drill.padstack_ref]
                 self.design.drills.append(drill)
 
     # ------------------------------------------------------------------

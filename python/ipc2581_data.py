@@ -168,6 +168,12 @@ class Drill:
     # Référence vers l'objet définition pour calculs (anneaux)
     padstack_obj: Optional[PadStackDefinition] = None
 
+    # UNE FENTE (<SlotCavity>) : `diameter` est sa largeur, `slot_length` sa
+    # longueur hors tout et `slot_rotation` l'angle de la longueur, en degrés
+    # dans le repère du fichier. 0 : un trou rond.
+    slot_length: float = 0.0
+    slot_rotation: float = 0.0
+
     @property
     def span_declaree(self) -> bool:
         """La portée vient-elle du fichier ?"""

@@ -444,6 +444,10 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
         item = {"x": _r(trou.location.x), "y": _r(trou.location.y),
                 "d": _r(trou.diameter), "p": trou.plating or "UNKNOWN",
                 "ps": trou.padstack_ref or ""}
+        # une fente : sa longueur hors tout et l'angle de la longueur
+        if getattr(trou, "slot_length", 0) > trou.diameter:
+            item["l"] = _r(trou.slot_length)
+            item["r"] = _r(trou.slot_rotation)
         rang = nets.rang(trou.net_name)
         if rang >= 0:
             item["n"] = rang
