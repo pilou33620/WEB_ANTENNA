@@ -3245,6 +3245,27 @@ console.log("10. Le canal de pilotage");
   D.annuler({carte}, jeton);
   verifie("annuler remet l'avant", ANT.bande.f1===2.4e9&&D.etat()===avant);
 
+  /* L'etat couvre tout ce qu'une carte peut ecrire (les racines de IA_CHAMPS) : sinon Annuler
+     ecraserait un reglage change a la main entre-temps. */
+  const e0=D.etat(), cuivre=ANT.modeleCuivre;
+  ANT.modeleCuivre=(cuivre==="pec"?"feuille":"pec");
+  verifie("l'etat voit modeleCuivre", D.etat()!==e0);
+  ANT.modeleCuivre=cuivre;
+  const nf=JSON.stringify(ANT.nf2ff); ANT.nf2ff=Object.assign({},ANT.nf2ff,{actif:!(ANT.nf2ff&&ANT.nf2ff.actif)});
+  verifie("l'etat voit nf2ff", D.etat()!==e0);
+  ANT.nf2ff=JSON.parse(nf);
+
+  /* La carte affichee est celle qui s'applique : « port. » vise le port courant, et s'il a
+     change entre l'affichage et le clic, l'application est refusee. */
+  antPortAjouter(); ANT.portActif=0;
+  const cartePort={type:"reglages", valeurs:{"port.R":75}};
+  const propPort=D.proposer({carte:cartePort});
+  ANT.portActif=1;
+  let refusPort="";
+  try{ D.appliquer({carte:cartePort}, propPort); }catch(e){ refusPort=e.message; }
+  verifie("port change entre l'affichage et le clic : refuse", /chang/.test(refusPort)&&ANT.ports[1].R!==75);
+  ANT.portActif=0; antPortRetirer(1);
+
   let msg="";
   try{ D.proposer({carte:{type:"reglages", valeurs:{"arret.secret":1}}}); }catch(e){ msg=e.message; }
   verifie("une carte sans rien d'applicable est refusee en disant pourquoi", /secret/.test(msg));
@@ -3261,6 +3282,14 @@ console.log("10. Le canal de pilotage");
     verifie("un balayage applique est arme", ANT.balayage.actif===true&&ANT.balayage.source==="L");
     D.annuler({carte:{type:"balayage"}}, j);
     verifie("et l'annuler le remet tel qu'avant", JSON.stringify(ANT.balayage)===bal0);
+    /* Des cotes qui redessinent le motif : iaAnnuler ne remet que les cotes, pas le motif.
+       L'annulation est refusee en le disant, plutot que d'afficher « Annulee » a moitie. */
+    window.iaProposition=()=>({type:"cotes", tracer:true, titre:"Cotes", lignes:[{chemin:"L", nom:"L", avant:1, apres:2}], refus:[]});
+    window.iaAppliquer=()=>"trace";
+    const jc=D.appliquer({carte:{type:"cotes"}});
+    let refusCotes="";
+    try{ D.annuler({carte:{type:"cotes"}}, jc); }catch(e){ refusCotes=e.message; }
+    verifie("cotes avec motif redessine : Annuler refuse en le disant", /motif/.test(refusCotes));
   }finally{ window.iaProposition=vraiP; window.iaAppliquer=vraiA; }
   }finally{ Object.assign(global, vrais); }
 })();

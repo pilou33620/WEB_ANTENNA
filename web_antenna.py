@@ -1045,6 +1045,9 @@ class Poste(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
         if not self._route().startswith("/api/"):
             self.send_header("Cache-Control", "no-store")
+        # Pas d'affichage dans le cadre d'un autre site : un clic piégé sur « Appliquer » du panneau Claude
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
+        self.send_header("Content-Security-Policy", "frame-ancestors 'self'")
         super().end_headers()
 
     def translate_path(self, path):

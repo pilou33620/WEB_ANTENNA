@@ -93,6 +93,11 @@ PILOTE = [
     ("js/pilote.js servi", code("/js/pilote.js") == 200 and code("/js/pilote-antenna.js") == 200),
     ("css/pilote.css servi", code("/css/pilote.css") == 200),
 ]
+_c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+_c.request("GET", "/")
+_r = _c.getresponse(); _r.read(); _c.close()
+PILOTE.append(("cadres : même origine seulement", _r.getheader("X-Frame-Options") == "SAMEORIGIN"
+               and "frame-ancestors 'self'" in (_r.getheader("Content-Security-Policy") or "")))
 for nom, bon in PILOTE:
     if not bon:
         echecs += 1

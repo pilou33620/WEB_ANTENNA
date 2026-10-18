@@ -20,7 +20,9 @@
   "use strict";
 
   const CLE_NAVIGATEUR = "websuite.pilote.navigateur";
-  const LARGEUR_MAX = 1600;
+  const LARGEUR_MAX = 1600;        // px, en largeur comme en hauteur
+  const MAX_PANNEAU = 30;          // entrées gardées dans le panneau
+  const FINAUX = ["appliquee", "refusee", "finie", "echouee"];
   const NOM = /^[a-z_][a-z0-9_]{0,63}$/;
 
   function nouvelId() {
@@ -55,11 +57,23 @@
     const traitees = new Set();     // ids de commandes déjà reçues : une redistribution ne rejoue rien
     const nav = idNavigateur(env.stockage, P.id);
 
+    function visible() {
+      if (env.visible) return !!env.visible();
+      return !(env.document && env.document.visibilityState === "hidden");
+    }
+
+    /* Le focus voyage en heure absolue : les onglets d'un navigateur partagent la même horloge, et
+       le relais le convertit en « il y a » au moment d'écrire au serveur (qui, lui, a la sienne). */
     function vue() {
       let projet = "";
       try { projet = String(P.projet() || ""); } catch (_) { /* projet illisible : vide */ }
-      return { id: P.id, page: P.page, projet: projet.slice(0, 200),
-               focus_il_y_a: Math.max(0, Date.now() - P.focus), interrupteur: P.interrupteur };
+      return { id: P.id, page: P.page, projet: projet.slice(0, 200), focus: P.focus,
+               interrupteur: P.interrupteur, visible: visible() };
+    }
+
+    function pourServeur(onglets) {
+      return onglets.map(o => ({ id: o.id, page: o.page, projet: o.projet, interrupteur: o.interrupteur,
+                                 focus_il_y_a: Math.max(0, Date.now() - o.focus) }));
     }
 
     function vivants() {
@@ -70,40 +84,66 @@
     async function envoyer(route, corps) {
       const r = await env.fetch("/api/pilote/" + route, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
-      if (!r.ok) throw new Error("pilote : " + route + " a répondu " + r.status);
+      if (!r.ok) {
+        const e = new Error("pilote : " + route + " a répondu " + r.status);
+        e.statut = r.status;
+        throw e;
+      }
+      return true;
     }
 
+    /* La réponse porte le navigateur : le serveur n'accepte que celui de la commande. Un état final
+       perdu laisserait Claude attendre pour rien : trop gros, on le dit ; sinon, un second essai. */
     function repondre(id, etat, resultat) {
-      envoyer("reponse", { id, etat, resultat: resultat === undefined ? null : resultat })
-        .catch(e => console.warn(e.message));
+      const corps = { navigateur: nav, id, etat, resultat: resultat === undefined ? null : resultat };
+      return envoyer("reponse", corps).catch(e => {
+        if (!FINAUX.includes(etat)) { console.warn(e.message); return false; }
+        const suite = e.statut === 413
+          ? envoyer("reponse", { navigateur: nav, id, etat: "echouee", resultat: "Réponse trop grosse pour le serveur." })
+          : new Promise(f => setTimeout(f, 1000)).then(() => envoyer("reponse", corps));
+        return suite.catch(e2 => { console.warn(e2.message); return false; });
+      });
     }
 
     // -- relais : battement et long-poll ------------------------------------
     function battre(force) {
-      const onglets = [vue()].concat(vivants());
-      const cle = onglets.map(o => o.id + o.page + o.projet + o.interrupteur).sort().join("|");
+      const onglets = pourServeur([vue()].concat(vivants()));
+      // L'ordre par focus fait partie de la clé : un clic dans un autre onglet part aussitôt
+      const cle = onglets.slice().sort((a, b) => a.focus_il_y_a - b.focus_il_y_a)
+        .map(o => o.id + o.page + o.projet + o.interrupteur).join("|");
       if (!force && cle === dernierEnvoi) return;
       dernierEnvoi = cle;
-      envoyer("battement", { navigateur: nav, onglets }).catch(e => console.warn(e.message));
+      envoyer("battement", { navigateur: nav, onglets }).catch(e => { dernierEnvoi = ""; console.warn(e.message); });
+    }
+
+    function annoncer() {
+      if (canal) canal.postMessage({ t: "present", onglet: vue() });
     }
 
     async function boucle() {
+      let enPanne = false;
       while (actif && P.relais) {
         const ctl = typeof AbortController === "function" ? new AbortController() : null;
         arretPoll = ctl;
         try {
           const r = await env.fetch("/api/pilote/attendre?navigateur=" + nav, ctl ? { signal: ctl.signal } : {});
           if (!r.ok) throw new Error("pilote : attendre a répondu " + r.status);
+          if (enPanne) { enPanne = false; battre(true); }    // serveur redémarré : il ne connaît plus nos onglets
           const d = await r.json();
           (d.commandes || []).forEach(livrer);
         } catch (_) {
+          enPanne = true;
           if (actif && P.relais) await new Promise(f => setTimeout(f, R.repos));   // serveur arrêté : on réessaie
         }
       }
     }
 
+    /* Le relais : le plus petit id parmi les onglets visibles s'il y en a. Un onglet caché, que le
+       navigateur ralentit, s'annonce mal et tiendrait mal le long-poll. */
     function elire() {
-      const ids = [P.id].concat(vivants().map(o => o.id)).sort();
+      const tous = [vue()].concat(vivants());
+      const visibles = tous.filter(o => o.visible !== false);
+      const ids = (visibles.length ? visibles : tous).map(o => o.id).sort();
       const moi = ids[0] === P.id;
       if (moi && !P.relais) { P.relais = true; battre(true); boucle(); }
       else if (!moi && P.relais) { P.relais = false; if (arretPoll) arretPoll.abort(); }
@@ -116,17 +156,19 @@
     }
 
     // -- onglet visé : exécuter --------------------------------------------
-    function recevoir(c) {
+    /* N'exécuter qu'une commande que le serveur reconnaît (accusé accepté) : un script de la même
+       origine ne peut pas en fabriquer une sur le BroadcastChannel. */
+    async function recevoir(c) {
       if (traitees.has(c.id)) return;
       traitees.add(c.id);
-      repondre(c.id, "recue");
+      if (!(await repondre(c.id, "recue"))) { traitees.delete(c.id); return; }   // la redistribution réessaiera
       executer(c);
     }
 
     async function executer(c) {
       const args = c.args || {};
       try {
-        if (c.nom === "capture") return repondre(c.id, "finie", capturer());
+        if (c.nom === "capture") { const image = capturer(); tracer("Claude a capturé la vue."); return repondre(c.id, "finie", image); }
         const def = P.commandes[c.nom];
         if (!def) throw new Error("Commande « " + c.nom + " » inconnue de cette page (" + P.page + ").");
         if (def.ecriture) return ecrire(c, def, args);
@@ -140,10 +182,10 @@
     function capturer() {
       if (!P.capturer) throw new Error("Cette page n'a pas de canevas à capturer.");
       let toile = P.capturer();
-      if (toile.width > LARGEUR_MAX) {
-        const k = LARGEUR_MAX / toile.width;
+      const k = Math.min(1, LARGEUR_MAX / toile.width, LARGEUR_MAX / toile.height);
+      if (k < 1) {
         const petite = env.document.createElement("canvas");
-        petite.width = LARGEUR_MAX;
+        petite.width = Math.max(1, Math.round(toile.width * k));
         petite.height = Math.max(1, Math.round(toile.height * k));
         petite.getContext("2d").drawImage(toile, 0, 0, petite.width, petite.height);
         toile = petite;
@@ -168,7 +210,8 @@
 
     function appliquer(carte, direct) {
       try {
-        carte.jeton = carte.def.appliquer(carte.args);
+        // La proposition affichée suit : l'adaptateur vérifie qu'elle n'a pas changé depuis
+        carte.jeton = carte.def.appliquer(carte.args, carte.prop);
         if (carte.def.etat) carte.apres = texte(carte.def.etat());   // instantané : l'Annuler compare
         carte.etat = "appliquee";
         repondre(carte.id, "appliquee", { titre: texte(carte.prop.titre || carte.nom), avant: carte.prop.avant,
@@ -204,7 +247,19 @@
 
     // -- panneau « Claude » (texte par textContent seulement : jamais d'innerHTML) --
     let panneau = null, liste = null, minuteurRepli = null;
-    const cartesDom = new Map();
+    const cartesDom = new Map(), entrees = [];
+
+    function garder(noeud) {
+      entrees.push(noeud);
+      // Les plus vieilles entrées partent ; jamais une carte qui attend un clic
+      while (entrees.length > MAX_PANNEAU) {
+        const i = entrees.findIndex(n => !n.enAttente);
+        if (i < 0) break;
+        const [vieux] = entrees.splice(i, 1);
+        vieux.remove();
+        if (vieux.idCarte) cartesDom.delete(vieux.idCarte);
+      }
+    }
 
     function el(tag, classe, contenu) {
       const e = env.document.createElement(tag);
@@ -220,6 +275,7 @@
       tete.type = "button";
       tete.addEventListener("click", () => ouvrir(!panneau.classList.contains("ouvert")));
       liste = el("div", "pilote-liste");
+      liste.setAttribute("aria-live", "polite");
       const pied = el("label", "pilote-pied");
       const inter = el("input");
       inter.type = "checkbox";
@@ -249,7 +305,7 @@
 
     function tracer(message) {
       if (!construire()) return;
-      liste.appendChild(el("div", "pilote-trace", message));
+      garder(liste.appendChild(el("div", "pilote-trace", message)));
     }
 
     function bouton(libelle, action) {
@@ -262,8 +318,14 @@
     function dessinerCarte(carte) {
       if (!construire()) return;
       let d = cartesDom.get(carte.id);
-      if (!d) { d = { carte, noeud: el("div", "pilote-carte") }; cartesDom.set(carte.id, d); liste.appendChild(d.noeud); }
+      if (!d) {
+        d = { carte, noeud: el("div", "pilote-carte") };
+        d.noeud.idCarte = carte.id;
+        cartesDom.set(carte.id, d);
+        garder(liste.appendChild(d.noeud));
+      }
       const n = d.noeud;
+      n.enAttente = carte.etat === "proposee";
       n.replaceChildren();
       n.className = "pilote-carte " + carte.etat;
       n.appendChild(el("div", "pilote-titre", texte(carte.prop.titre || carte.nom)));
@@ -281,7 +343,9 @@
     }
 
     // -- API de la page ----------------------------------------------------
+    let declaration = null;
     P.declarer = function (o) {
+      declaration = o;
       P.page = String(o.page || "");
       if (typeof o.projet === "function") P.projet = o.projet;
       if (actif || typeof env.BroadcastChannel !== "function") return P;
@@ -289,12 +353,16 @@
       canal = new env.BroadcastChannel(env.canal || "websuite.pilote.v1");
       canal.onmessage = ev => {
         const m = ev.data || {};
-        if (m.t === "present" && m.onglet && m.onglet.id) vus.set(m.onglet.id, { onglet: m.onglet, t: Date.now() });
+        if (m.t === "present" && m.onglet && m.onglet.id) {
+          vus.set(m.onglet.id, { onglet: m.onglet, t: Date.now() });
+          if (P.relais) battre(false);      // un clic ailleurs part tout de suite (battre ne renvoie que s'il y a du nouveau)
+        }
         else if (m.t === "bye") { vus.delete(m.id); elire(); }
         else if (m.t === "commande" && m.c) { if (m.c.onglet === P.id) recevoir(m.c); }
       };
-      const annoncer = () => canal.postMessage({ t: "present", onglet: vue() });
       annoncer();
+      if (env.document && env.document.addEventListener)   // visible ou caché : l'élection en dépend
+        env.document.addEventListener("visibilitychange", annoncer);
       // Le bouton « Claude » et l'interrupteur dès le chargement : on doit pouvoir l'allumer avant toute carte
       if (env.document && env.document.body) construire();
       else if (env.document && env.document.addEventListener) env.document.addEventListener("DOMContentLoaded", construire);
@@ -324,7 +392,7 @@
 
     P.capture = function (fn) { P.capturer = fn; return P; };
     P.replier = function () { ouvrir(false); };
-    P.focaliser = function () { P.focus = Date.now(); if (P.relais) battre(false); };
+    P.focaliser = function () { P.focus = Date.now(); annoncer(); if (P.relais) battre(false); };
 
     P.arreter = function () {
       if (!actif) return;
@@ -332,7 +400,7 @@
       if (P.relais && env.balise) {
         // Seul onglet de son navigateur, personne d'autre ne préviendrait le serveur : il garderait
         // l'onglet fermé une minute et lui enverrait des commandes. Une balise part même à la fermeture.
-        env.balise("/api/pilote/battement", JSON.stringify({ navigateur: nav, onglets: vivants() }));
+        env.balise("/api/pilote/battement", JSON.stringify({ navigateur: nav, onglets: pourServeur(vivants()) }));
       }
       P.relais = false;
       minuteurs.forEach(m => { clearInterval(m); clearTimeout(m); });
@@ -344,6 +412,8 @@
       env.fenetre.addEventListener("focus", P.focaliser);
       env.fenetre.addEventListener("pointerdown", P.focaliser);
       env.fenetre.addEventListener("pagehide", P.arreter);
+      // Revenue du cache de navigation (bouton Précédent) : la page reprend le canal
+      env.fenetre.addEventListener("pageshow", e => { if (e.persisted && !actif && declaration) P.declarer(declaration); });
     }
     return P;
   }
