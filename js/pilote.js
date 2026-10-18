@@ -341,8 +341,11 @@
       n.replaceChildren();
       n.className = "pilote-carte " + carte.etat;
       n.appendChild(el("div", "pilote-titre", texte(carte.prop.titre || carte.nom)));
-      if (carte.prop.avant !== undefined || carte.prop.apres !== undefined)
+      // La flèche seulement si l'on a les deux côtés : sinon « … → undefined »
+      if (carte.prop.avant !== undefined && carte.prop.apres !== undefined)
         n.appendChild(el("div", "pilote-diff", texte(carte.prop.avant) + " → " + texte(carte.prop.apres)));
+      else if (carte.prop.avant !== undefined || carte.prop.apres !== undefined)
+        n.appendChild(el("div", "pilote-diff", texte(carte.prop.avant !== undefined ? carte.prop.avant : carte.prop.apres)));
       if (carte.prop.details) n.appendChild(el("div", "pilote-details", texte(carte.prop.details)));
       if (carte.def.irreversible) n.appendChild(el("div", "pilote-aide", carte.def.irreversible));
       if (carte.etat === "en_cours") n.appendChild(el("div", "pilote-aide", "En cours…"));
