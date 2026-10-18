@@ -171,7 +171,7 @@
         if (c.nom === "capture") { const image = capturer(); tracer("Claude a capturé la vue."); return repondre(c.id, "finie", image); }
         const def = P.commandes[c.nom];
         if (!def) throw new Error("Commande « " + c.nom + " » inconnue de cette page (" + P.page + ").");
-        if (def.ecriture) return ecrire(c, def, args);
+        if (def.ecriture) return await ecrire(c, def, args);
         tracer("Claude a lancé : " + c.nom);
         repondre(c.id, "finie", await def.executer(args));
       } catch (e) {
@@ -196,8 +196,9 @@
     // -- écritures : carte, interrupteur, annulation ------------------------
     function texte(v) { return typeof v === "string" ? v : JSON.stringify(v); }
 
-    function ecrire(c, def, args) {
-      const prop = def.proposer(args) || {};          // une exception remonte en « echouee »
+    async function ecrire(c, def, args) {
+      // proposer peut lire avant de montrer la carte (liste de fichiers) : un rejet remonte en « echouee »
+      const prop = (await def.proposer(args)) || {};
       const carte = { id: c.id, nom: c.nom, def, args, prop, etat: "proposee", jeton: undefined, apres: null };
       if (P.interrupteur) {
         appliquer(carte, true);
