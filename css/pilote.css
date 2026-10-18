@@ -1,0 +1,35 @@
+/* Panneau « Claude » du canal de pilotage (pilote.js).
+   COPIE IDENTIQUE dans WEB_CAO, WEB_ANTENNA et WEB_3D ; l'original est
+   web_suite/lanceur/pilote.css. Replié : un bouton dans un coin ; ouvert : les
+   cartes de Claude et l'interrupteur de l'onglet. */
+.pilote {
+  position: fixed; right: 12px; bottom: 12px; z-index: 2147483000;
+  max-width: min(360px, calc(100vw - 24px));
+  font: 13px/1.4 system-ui, sans-serif; color: #e8e8ea;
+}
+.pilote-tete {
+  display: block; margin-left: auto; padding: 6px 12px; border: 1px solid #5b5bd6; border-radius: 16px;
+  background: #23233a; color: #e8e8ea; cursor: pointer; font: inherit;
+}
+.pilote-liste, .pilote-pied { display: none; }
+.pilote.ouvert .pilote-liste {
+  display: block; max-height: 50vh; overflow: auto; margin-top: 6px; padding: 6px;
+  background: #1b1b24; border: 1px solid #3a3a4a; border-radius: 8px;
+}
+.pilote.ouvert .pilote-pied {
+  display: flex; gap: 6px; align-items: center; margin-top: 6px; padding: 6px 8px;
+  background: #1b1b24; border: 1px solid #3a3a4a; border-radius: 8px; cursor: pointer;
+}
+.pilote-trace { color: #9a9aac; padding: 2px 4px; }
+.pilote-carte { margin: 6px 0; padding: 8px; border-radius: 6px; background: #262633; border-left: 3px solid #5b5bd6; }
+.pilote-carte.appliquee { border-left-color: #3fb37f; }
+.pilote-carte.refusee, .pilote-carte.annulee { border-left-color: #777; opacity: .75; }
+.pilote-carte.echouee { border-left-color: #d65b5b; }
+.pilote-titre { font-weight: 600; word-break: break-word; }
+.pilote-diff, .pilote-details { margin-top: 4px; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, monospace; }
+.pilote-aide, .pilote-message { margin-top: 4px; color: #b8b8c8; }
+.pilote-bouton {
+  margin: 6px 6px 0 0; padding: 4px 10px; border: 1px solid #5b5bd6; border-radius: 4px;
+  background: #2f2f4a; color: #e8e8ea; cursor: pointer; font: inherit;
+}
+.pilote-bouton:focus-visible, .pilote-tete:focus-visible { outline: 2px solid #9a9aff; outline-offset: 2px; }

@@ -3206,6 +3206,65 @@ console.log("Verification du port et etat des etapes");
   Object.assign(ANT,{nets:garde.nets, couches:garde.couches, modele:garde.modele}); LT.gap=garde.gap;
 })();
 
+/* ==========================================================================
+   10. Le canal de pilotage (MCP de web_suite) : js/pilote-antenna.js
+   --------------------------------------------------------------------------
+   La page se declare et offre « antenna_proposer » : la carte de l'assistant,
+   proposee puis appliquee au clic dans le panneau « Claude » (js/pilote.js,
+   eprouve dans web_suite). Ici : l'adaptateur, sur les vraies fonctions de
+   30-ia.js — ce qu'il montre, ce qu'il ecrit, et ce qu'il defait.
+   ========================================================================== */
+console.log("");
+console.log("10. Le canal de pilotage");
+(function(){
+  /* Comme en section 9 : rafraichir l'affichage n'a pas de DOM ici. 13-assistant.js,
+     charge depuis, a remplace les doublures ; on les remet le temps de la section. */
+  const vrais={antMaj:global.antMaj, antAssistantRendre:global.antAssistantRendre};
+  global.antMaj=function(){}; global.antAssistantRendre=function(){};
+  try{
+  const PIL={};
+  global.Pilote={declarer(o){PIL.page=o.page;PIL.projet=o.projet;return this;},
+                 capture(f){PIL.capture=f;return this;},commande(n,d){PIL[n]=d;return this;}};
+  charger("pilote-antenna.js");
+  piloteAntenna();
+  verifie("la page se declare « antenna », avec sa capture",
+          PIL.page==="antenna"&&typeof PIL.capture==="function"&&typeof PIL.projet()==="string");
+  const D=PIL.antenna_proposer;
+  verifie("antenna_proposer est une ecriture annulable, avec son etat",
+          !!D&&D.ecriture===true&&typeof D.annuler==="function"&&typeof D.etat==="function");
+
+  ANT.bande={f1:2.4e9, f2:2.5e9, n:401, fcible:2.45e9};
+  const carte={type:"reglages", titre:"Recentrer", valeurs:{"bande.f1":2.08e9, "bande.f9":1}};
+  const prop=D.proposer({carte});
+  verifie("la carte montre l'avant, l'apres, et ce qui est refuse",
+          prop.titre==="Recentrer"&&/2\.4e\+?9|2400000000/.test(prop.details)&&
+          /2\.08e\+?9|2080000000/.test(prop.details)&&/f9/.test(prop.details));
+  verifie("proposer n'ecrit rien", ANT.bande.f1===2.4e9);
+  const avant=D.etat(), jeton=D.appliquer({carte}), apres=D.etat();
+  verifie("appliquer ecrit, et l'etat le voit", ANT.bande.f1===2.08e9&&apres!==avant);
+  D.annuler({carte}, jeton);
+  verifie("annuler remet l'avant", ANT.bande.f1===2.4e9&&D.etat()===avant);
+
+  let msg="";
+  try{ D.proposer({carte:{type:"reglages", valeurs:{"arret.secret":1}}}); }catch(e){ msg=e.message; }
+  verifie("une carte sans rien d'applicable est refusee en disant pourquoi", /secret/.test(msg));
+
+  /* Le balayage : iaAnnuler ne sait pas le defaire, l'adaptateur garde et remet
+     ANT.balayage lui-meme. Doublures le temps de l'essai : un balayage valide
+     exige un motif ouvert en mode conception. */
+  const vraiP=window.iaProposition, vraiA=window.iaAppliquer;
+  window.iaProposition=()=>({type:"balayage", titre:"Balayer L", lignes:[{chemin:"L", nom:"L", avant:"", apres:"10 → 20"}], refus:[]});
+  window.iaAppliquer=()=>{ Object.assign(ANT.balayage,{actif:true, source:"L", min:10, max:20, pas:1}); return "arme"; };
+  try{
+    const bal0=JSON.stringify(ANT.balayage);
+    const j=D.appliquer({carte:{type:"balayage"}});
+    verifie("un balayage applique est arme", ANT.balayage.actif===true&&ANT.balayage.source==="L");
+    D.annuler({carte:{type:"balayage"}}, j);
+    verifie("et l'annuler le remet tel qu'avant", JSON.stringify(ANT.balayage)===bal0);
+  }finally{ window.iaProposition=vraiP; window.iaAppliquer=vraiA; }
+  }finally{ Object.assign(global, vrais); }
+})();
+
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")
                                             :"toutes passees."));

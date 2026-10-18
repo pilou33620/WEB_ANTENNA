@@ -66,6 +66,38 @@ for chemin, hote, attendu in CAS:
 if code("/.git/config", methode="HEAD") != 404:
     echecs += 1
     print("ECHEC HEAD /.git/config")
+
+
+# Canal de pilotage (pilote.py, MCP de web_suite) : une page bat, le MCP de ce poste voit
+# l'onglet ; une autre origine est refusée ; les fichiers de la page sont servis
+def pilote(methode, route, corps=None, origine=None):
+    import json
+    c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
+    entetes = {"Content-Type": "application/json"}
+    if origine:
+        entetes["Origin"] = origine
+    c.request(methode, route, body=None if corps is None else json.dumps(corps), headers=entetes)
+    r = c.getresponse()
+    donnees = r.read()
+    c.close()
+    return r.status, (json.loads(donnees) if donnees[:1] == b"{" else None)
+
+
+onglet = {"id": "o1", "page": "antenna", "projet": "dipole", "focus_il_y_a": 0}
+PILOTE = [
+    ("autre origine refusée", pilote("POST", "/api/pilote/battement", {"navigateur": "n1", "onglets": [onglet]},
+                                     origine="http://evil.example")[0] == 403),
+    ("battement de la page", pilote("POST", "/api/pilote/battement", {"navigateur": "n1", "onglets": [onglet]},
+                                    origine="http://127.0.0.1:%d" % PORT)[0] == 200),
+    ("onglet vu par le MCP", [o["id"] for o in pilote("GET", "/api/pilote/onglets")[1]["onglets"]] == ["o1"]),
+    ("js/pilote.js servi", code("/js/pilote.js") == 200 and code("/js/pilote-antenna.js") == 200),
+    ("css/pilote.css servi", code("/css/pilote.css") == 200),
+]
+for nom, bon in PILOTE:
+    if not bon:
+        echecs += 1
+        print("ECHEC canal de pilotage : " + nom)
+CAS += [None] * len(PILOTE)
 serveur.shutdown()
 print("%d/%d ok" % (len(CAS) + 1 - echecs, len(CAS) + 1))
 sys.exit(1 if echecs else 0)

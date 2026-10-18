@@ -167,6 +167,8 @@ def adresse_lanceur():
 # le lanceur WEB_SUITE). Remplace dans main() selon --local.
 hote_permis = appairage.hote_permis
 GARDE = appairage.Garde("WEB_ANTENNA", actif=False)
+import pilote  # noqa: E402  (canal de pilotage des pages par le MCP de web_suite)
+PILOTE = pilote.Pilote()
 
 
 class Refus(Exception):
@@ -905,6 +907,8 @@ class Poste(http.server.SimpleHTTPRequestHandler):
            "/api/ia/cle")
 
     def do_GET(self):
+        if PILOTE.traiter(self):
+            return
         route = self._route()
         if route == "/api/ipc2581":
             self._api(self._ipc_etat)
@@ -953,6 +957,8 @@ class Poste(http.server.SimpleHTTPRequestHandler):
 
     def do_POST(self):
         if not self._csrf():
+            return
+        if PILOTE.traiter(self):
             return
         route = self._route()
         if route == "/api/ipc2581":
