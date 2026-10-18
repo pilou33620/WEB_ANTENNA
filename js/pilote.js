@@ -40,7 +40,11 @@
   }
 
   function creer(env, reglages) {
-    const R = Object.assign({ annonce: 2000, silence: 5000, battement: 20000, repos: 2000 }, reglages || {});
+    /* silence > 60 s : après 5 min en arrière-plan, Chrome ne réveille plus les minuteurs d'un onglet
+       qu'une fois par minute ; un onglet caché s'annonce donc rarement, mais il est vivant. Un onglet
+       qui se ferme proprement le dit (« bye ») : l'attente ne joue que pour un onglet tué net. */
+    const R = Object.assign({ annonce: 2000, amorce: 5000, silence: 90000, battement: 20000, repos: 2000 },
+                            reglages || {});
     const P = {
       id: nouvelId(), relais: false, _env: env,
       page: "", projet: () => "", focus: Date.now(), interrupteur: false,
@@ -291,9 +295,12 @@
       };
       const annoncer = () => canal.postMessage({ t: "present", onglet: vue() });
       annoncer();
+      // Le bouton « Claude » et l'interrupteur dès le chargement : on doit pouvoir l'allumer avant toute carte
+      if (env.document && env.document.body) construire();
+      else if (env.document && env.document.addEventListener) env.document.addEventListener("DOMContentLoaded", construire);
       minuteurs.push(setInterval(annoncer, R.annonce));
       // Écouter les autres avant de se croire seul : sinon chaque onglet ouvrirait son long-poll
-      minuteurs.push(setTimeout(() => { elire(); minuteurs.push(setInterval(elire, R.annonce)); }, R.silence));
+      minuteurs.push(setTimeout(() => { elire(); minuteurs.push(setInterval(elire, R.annonce)); }, R.amorce));
       minuteurs.push(setInterval(() => { if (P.relais) battre(true); }, R.battement));
       return P;
     };
