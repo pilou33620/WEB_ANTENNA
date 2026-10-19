@@ -72,11 +72,93 @@ const PILOTE_ANTENNA = {
   etat:piloteAntennaEtat,
 };
 
+/* antenna_vue : la vue seulement, sans toucher au projet ni aux préférences. Tout est vérifié
+   avant le premier changement. La capture suit la toile choisie (carte 2D, vue 3D, courbes). */
+let PILOTE_TOILE = "carte";
+
+function piloteAntennaToile(){
+  if(PILOTE_TOILE === "3d" && ANT.vue === "3d"){
+    // la toile WebGL n'a pas preserveDrawingBuffer : un rendu juste avant, pilote.js la copie aussitôt
+    if(typeof ant3dDessiner === "function") ant3dDessiner();
+    return document.getElementById("vue3d");
+  }
+  if(PILOTE_TOILE === "courbe" && document.getElementById("courbe")) return document.getElementById("courbe");
+  return document.getElementById("carte");
+}
+
+/* Un panneau montré et déplié, sans enregistrer la disposition (wsShow passerait par wsSave). */
+function piloteAntennaPanneau(id){
+  if(wsPlaceOf(id) === "hidden"){
+    const p = WS.panels[id], cible = WS_DOCKS.indexOf(p.last) >= 0 ? p.last : "dockR";
+    wsPluck(id); WS.order[cible].push(id);
+  }
+  WS.panels[id].collapsed = false;
+  wsApply(false);
+}
+
+function piloteAntennaVue(a){
+  const faire = [], dit = [];
+  let vue = ANT.vue, toile = null;
+  if(a.vue != null){
+    if(a.vue !== "2d" && a.vue !== "3d") throw new Error("« vue » : 2d ou 3d.");
+    vue = a.vue; toile = a.vue === "3d" ? "3d" : "carte";
+    faire.push(() => antVuePoser(a.vue)); dit.push("vue " + a.vue.toUpperCase());
+  }
+  if(a.maillage != null){
+    if(typeof a.maillage !== "boolean") throw new Error("« maillage » : true ou false.");
+    faire.push(() => antBasculerVueMaillage(a.maillage)); dit.push("maillage " + (a.maillage ? "montré" : "caché"));
+  }
+  if(a.ajuster){
+    if(vue !== "2d") throw new Error("« ajuster » vaut pour la vue 2D.");
+    faire.push(() => fit()); dit.push("vue ajustée");
+  }
+  if(a.onglet != null){
+    const o = ANT_ONGLETS.find(x => x.id === a.onglet);
+    if(!o) throw new Error("onglet « " + a.onglet + " » inconnu : " + ANT_ONGLETS.map(x => x.id).join(", ") + ".");
+    const r = antRes();
+    if(!r) throw new Error("Pas de résultat dans la page : lance un calcul depuis la page.");
+    if((o.id === "bal" && !antBal()) || (o.id === "ts" && !(typeof antTs === "function" && antTs())) ||
+       (o.id === "s21" && !r.couplages) || (o.id === "ff" && !r.nf2ff))
+      throw new Error("onglet « " + o.id + " » sans objet pour ce résultat.");
+    faire.push(() => { ANT_ONGLET = o.id; antResultatsRendre(); }); dit.push("onglet " + o.titre);
+  }
+  if(a.point_balayage != null){
+    const b = antBal();
+    if(!b) throw new Error("« point_balayage » : aucun balayage terminé.");
+    if(!Number.isInteger(a.point_balayage) || a.point_balayage < 1 || a.point_balayage > b.points.length)
+      throw new Error("« point_balayage » : de 1 à " + b.points.length + ".");
+    faire.push(() => { ANT_BAL_POINT = a.point_balayage - 1; antResultatsRendre(); }); dit.push("point " + a.point_balayage + " du balayage");
+  }
+  if(a.etape != null){
+    if(!Number.isInteger(a.etape) || a.etape < 1 || a.etape > ANT_ETAPES.length)
+      throw new Error("« etape » : de 1 à " + ANT_ETAPES.length + " (" + ANT_ETAPES.map(e => e.id).join(", ") + ").");
+    faire.push(() => { ANT.etape = a.etape - 1; antAssistantRendre(true); }); dit.push("étape " + ANT_ETAPES[a.etape - 1].id);
+  }
+  if(a.panneau != null){
+    if(typeof a.panneau !== "string" || !Object.prototype.hasOwnProperty.call(WS.panels, a.panneau))
+      throw new Error("panneau « " + a.panneau + " » inconnu : " + Object.keys(WS.panels).join(", ") + ".");
+    faire.push(() => piloteAntennaPanneau(a.panneau)); dit.push("panneau " + a.panneau);
+  }
+  if(a.toile != null){
+    if(!["carte", "3d", "courbe"].includes(a.toile)) throw new Error("« toile » : carte, 3d ou courbe.");
+    if(a.toile === "3d" && vue !== "3d") throw new Error("« toile » 3d : passe d'abord en vue 3D (vue: 3d).");
+    if(a.toile === "courbe" && !antRes()) throw new Error("« toile » courbe : pas de résultat dans la page.");
+    toile = a.toile;
+  }
+  if(!faire.length && !toile) throw new Error("Rien à faire : vue, maillage, ajuster, onglet, point_balayage, etape, panneau ou toile.");
+  faire.forEach(f => f());
+  if(toile){ PILOTE_TOILE = toile; dit.push("capture : " + toile); }
+  if(PILOTE_TOILE === "courbe" && !document.getElementById("courbe"))
+    dit.push("les courbes ne sont pas affichées : ouvre le panneau resultats pour les capturer");
+  return "Vue : " + dit.join(" ; ") + ".";
+}
+
 function piloteAntenna(){
   if(typeof Pilote === "undefined") return;
   Pilote.declarer({page:"antenna", projet:() => (typeof PRJ !== "undefined" ? PRJ.nom : "")});
-  Pilote.capture(() => document.getElementById("carte"));
+  Pilote.capture(piloteAntennaToile);
   Pilote.commande("antenna_proposer", PILOTE_ANTENNA);
   // les lectures (js/29-lecture-antenna.js) : rien d'écrit, rien de lancé
   Pilote.commande("antenna_lire", {executer:async a => LECTURE_ANTENNA.lire(a.quoi, a)});
+  Pilote.commande("antenna_vue", {executer:async a => piloteAntennaVue(a)});
 }

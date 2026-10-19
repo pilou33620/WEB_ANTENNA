@@ -3379,6 +3379,44 @@ console.log("10. Le canal de pilotage");
       verifie("un quoi inconnu est refuse en donnant la liste", /REFUS « quoi » inconnu : conception, resultats/.test(await lire({quoi:"tout"})));
       verifie("aucune lecture n'ecrit", instantane()===avant);
       verifie("aucune lecture ne lance de calcul", lance.length===0, lance.join(", "));
+      /* antenna_vue : la vue seulement, tout verifie avant le premier changement, aucune preference */
+      const V2=PIL.antenna_vue;
+      verifie("antenna_vue est une commande de lecture", !!V2&&!V2.ecriture);
+      const appels=[], noms=["antVuePoser","antBasculerVueMaillage","fit","antResultatsRendre","antAssistantRendre",
+                             "wsPlaceOf","wsPluck","wsApply","ant3dDessiner","antReglagesEcrire"];
+      const vraisVue={}; for(const n of noms) vraisVue[n]=global[n];
+      const docGarde=global.document, wsGarde=[global.WS,global.WS_DOCKS], lsGarde=global.localStorage;
+      const toiles={carte:{id:"carte"}, vue3d:{id:"vue3d"}, courbe:{id:"courbe"}};
+      try{
+        for(const n of noms) global[n]=(...x)=>{ appels.push([n].concat(x)); if(n==="antVuePoser")ANT.vue=x[0]; if(n==="wsPlaceOf")return "hidden"; };
+        global.document=Object.assign({},docGarde,{getElementById:id=>toiles[id]||null});
+        global.WS={panels:{resultats:{last:"dockB", collapsed:true}, couches:{last:"dockL"}}, order:{dockL:[],dockR:[],dockB:[]}};
+        global.WS_DOCKS=["dockL","dockR","dockB"];
+        const ecrits=[]; global.localStorage={setItem:(k)=>ecrits.push(k), getItem:()=>null, removeItem:()=>{}};
+        ANT.vue="2d";
+        const vue=async a=>{ try{ return await V2.executer(a); }catch(e){ return "REFUS "+e.message; } };
+        for(const [a,motif] of [[{vue:"4d"},/2d ou 3d/],[{onglet:"phase"},/onglet « phase » inconnu/],[{vue:"3d",etape:99},/de 1 à \d+/],
+                                [{panneau:"cuisine"},/panneau « cuisine » inconnu : resultats, couches/],[{toile:"3d"},/passe d'abord en vue 3D/],
+                                [{vue:"3d",ajuster:true},/vaut pour la vue 2D/],[{onglet:"bal"},/sans objet/],[{},/Rien à faire/]])
+          verifie("antenna_vue refuse "+JSON.stringify(a)+" sans rien changer", motif.test(await vue(a))&&appels.length===0, appels.map(x=>x[0]).join(","));
+        const t=await vue({vue:"3d", maillage:true, onglet:"s21", etape:2, panneau:"resultats"});
+        verifie("antenna_vue applique tout, et le dit",
+                ANT.vue==="3d"&&ANT_ONGLET==="s21"&&ANT.etape===1&&WS.order.dockB.includes("resultats")&&WS.panels.resultats.collapsed===false&&
+                /^Vue : vue 3D ; maillage montré ; onglet Couplage ; étape \w+ ; panneau resultats ; capture : 3d\.$/.test(t), t);
+        verifie("le panneau s'ouvre sans enregistrer la disposition", appels.some(x=>x[0]==="wsApply"&&x[1]===false)&&!appels.some(x=>x[0]==="wsApply"&&x[1]!==false));
+        const cap=PIL.capture;
+        verifie("capture : la vue 3D, apres un rendu force", cap()===toiles.vue3d&&appels.some(x=>x[0]==="ant3dDessiner"));
+        await vue({toile:"courbe"});
+        verifie("capture : les courbes", cap()===toiles.courbe);
+        await vue({vue:"2d"});
+        verifie("revenir en 2D : la capture reprend la carte", cap()===toiles.carte);
+        verifie("aucune preference ecrite (localStorage, antReglagesEcrire)", ecrits.length===0&&!appels.some(x=>x[0]==="antReglagesEcrire"), ecrits.join(","));
+        verifie("la vue n'ecrit rien dans le projet", instantane()===avant);
+      }finally{
+        for(const n of noms) global[n]=vraisVue[n];
+        global.document=docGarde; [global.WS,global.WS_DOCKS]=wsGarde; global.localStorage=lsGarde;
+        ANT_ONGLET="s11"; ANT.etape=0; ANT.vue="2d";
+      }
       ANT.resultat=null;
       verifie("sans resultat : refus qui dit de lancer depuis la page", /REFUS Pas de résultat dans la page : lance un calcul depuis la page/.test(await lire({quoi:"resultats"})));
     }finally{
