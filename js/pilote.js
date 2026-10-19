@@ -237,6 +237,10 @@
 
     function refuser(carte) {
       carte.etat = "refusee";
+      // crochet facultatif : la page oublie ce qu'elle montrait pour cette carte (un aperçu dessiné)
+      if (typeof carte.def.refuser === "function") {
+        try { carte.def.refuser(carte.args, carte.prop); } catch (e) { console.warn(e); }
+      }
       repondre(carte.id, "refusee");
       dessinerCarte(carte);
       replierPlusTard();
