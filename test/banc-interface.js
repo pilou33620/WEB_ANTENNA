@@ -1254,13 +1254,15 @@ global.antAssistantRendre=function(){};
 global.btoa=s=>Buffer.from(s,"binary").toString("base64");
 global.atob=s=>Buffer.from(s,"base64").toString("binary");
 charger("29-lecture-antenna.js");
+charger("31-cartes-antenna.js");
 charger("30-ia.js");
 
-const iaResoudre=window.iaResoudre, iaValider=window.iaValider,
-      iaProposition=window.iaProposition, iaAppliquer=window.iaAppliquer,
-      iaAnnuler=window.iaAnnuler, iaControles=window.iaControles,
-      iaGrammaire=window.iaGrammaire, iaMd=window.iaFormaterMarkdown,
-      IA_CHAMPS=window.IA_CHAMPS;
+// le registre des cartes et l'audit : js/31-cartes-antenna.js (CARTES_ANTENNA)
+const iaResoudre=CARTES_ANTENNA.resoudre, iaValider=CARTES_ANTENNA.valider,
+      iaProposition=CARTES_ANTENNA.proposition, iaAppliquer=CARTES_ANTENNA.appliquer,
+      iaAnnuler=CARTES_ANTENNA.annuler, iaControles=CARTES_ANTENNA.controles,
+      iaGrammaire=CARTES_ANTENNA.grammaire, iaMd=window.iaFormaterMarkdown,
+      IA_CHAMPS=CARTES_ANTENNA.CHAMPS;
 
 verifie("le module expose ce qu'il faut pour l'eprouver",
         [iaResoudre,iaValider,iaProposition,iaAppliquer,iaAnnuler,
@@ -3276,7 +3278,7 @@ console.log("10. Le canal de pilotage");
   D.annuler({carte}, jeton);
   verifie("annuler remet l'avant", ANT.bande.f1===2.4e9&&D.etat()===avant);
 
-  /* L'etat couvre tout ce qu'une carte peut ecrire (les racines de IA_CHAMPS) : sinon Annuler
+  /* L'etat couvre tout ce qu'une carte peut ecrire (les racines de CARTES_ANTENNA.CHAMPS) : sinon Annuler
      ecraserait un reglage change a la main entre-temps. */
   const e0=D.etat(), cuivre=ANT.modeleCuivre;
   ANT.modeleCuivre=(cuivre==="pec"?"feuille":"pec");
@@ -3304,9 +3306,9 @@ console.log("10. Le canal de pilotage");
   /* Le balayage : iaAnnuler ne sait pas le defaire, l'adaptateur garde et remet
      ANT.balayage lui-meme. Doublures le temps de l'essai : un balayage valide
      exige un motif ouvert en mode conception. */
-  const vraiP=window.iaProposition, vraiA=window.iaAppliquer;
-  window.iaProposition=()=>({type:"balayage", titre:"Balayer L", lignes:[{chemin:"L", nom:"L", avant:"", apres:"10 → 20"}], refus:[]});
-  window.iaAppliquer=()=>{ Object.assign(ANT.balayage,{actif:true, source:"L", min:10, max:20, pas:1}); return "arme"; };
+  const vraiP=CARTES_ANTENNA.proposition, vraiA=CARTES_ANTENNA.appliquer;
+  CARTES_ANTENNA.proposition=()=>({type:"balayage", titre:"Balayer L", lignes:[{chemin:"L", nom:"L", avant:"", apres:"10 → 20"}], refus:[]});
+  CARTES_ANTENNA.appliquer=()=>{ Object.assign(ANT.balayage,{actif:true, source:"L", min:10, max:20, pas:1}); return "arme"; };
   try{
     const bal0=JSON.stringify(ANT.balayage);
     const j=D.appliquer({carte:{type:"balayage"}});
@@ -3315,13 +3317,13 @@ console.log("10. Le canal de pilotage");
     verifie("et l'annuler le remet tel qu'avant", JSON.stringify(ANT.balayage)===bal0);
     /* Des cotes qui redessinent le motif : iaAnnuler ne remet que les cotes, pas le motif.
        L'annulation est refusee en le disant, plutot que d'afficher « Annulee » a moitie. */
-    window.iaProposition=()=>({type:"cotes", tracer:true, titre:"Cotes", lignes:[{chemin:"L", nom:"L", avant:1, apres:2}], refus:[]});
-    window.iaAppliquer=()=>"trace";
+    CARTES_ANTENNA.proposition=()=>({type:"cotes", tracer:true, titre:"Cotes", lignes:[{chemin:"L", nom:"L", avant:1, apres:2}], refus:[]});
+    CARTES_ANTENNA.appliquer=()=>"trace";
     const jc=D.appliquer({carte:{type:"cotes"}});
     let refusCotes="";
     try{ D.annuler({carte:{type:"cotes"}}, jc); }catch(e){ refusCotes=e.message; }
     verifie("cotes avec motif redessine : Annuler refuse en le disant", /motif/.test(refusCotes));
-  }finally{ window.iaProposition=vraiP; window.iaAppliquer=vraiA; }
+  }finally{ CARTES_ANTENNA.proposition=vraiP; CARTES_ANTENNA.appliquer=vraiA; }
 
   /* antenna_lire : les lectures de la page, sans rien ecrire ni lancer. Les fonctions de
      lancement sont remplacees par des pieges le temps de l'essai. */
@@ -3373,7 +3375,7 @@ console.log("10. Le canal de pilotage");
       const cartes=aud.split("\n").filter(x=>/^  carte pour antenna_proposer : /.test(x));
       verifie("antenna_lire audit : les controles, et leurs cartes acceptees par antenna_proposer",
               cartes.length>0&&cartes
-                 .every(x=>{ const pr=window.iaProposition(JSON.parse(x.replace(/^  carte pour antenna_proposer : /,""))); return pr&&pr.lignes.length>0&&!pr.refus.length; })&&
+                 .every(x=>{ const pr=CARTES_ANTENNA.proposition(JSON.parse(x.replace(/^  carte pour antenna_proposer : /,""))); return pr&&pr.lignes.length>0&&!pr.refus.length; })&&
               (/^- \[/m.test(aud)||/Aucun contrôle/.test(aud)), aud.slice(0,200));
       const mGarde=V.modele; V.modele=null;           // une section plus haut laisse un modele vide
       verifie("sans carte importee : refus clair", /REFUS Pas de carte importée/.test(await lire({quoi:"composants"})));

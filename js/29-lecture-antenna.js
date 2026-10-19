@@ -490,7 +490,7 @@ const LECTURE_ANTENNA = (function(){
      En plus du contexte et des outils ci-dessus : le résultat regardé, ses
      courbes, l'audit hors ligne et les réglages de la liste blanche. Rien n'est
      écrit, rien n'est lancé. L'audit et la liste blanche vivent encore dans
-     30-ia.js : ils sont lus au moment de l'appel (window.iaControles, IA_CHAMPS).
+     31-cartes-antenna.js : ils sont lus au moment de l'appel (CARTES_ANTENNA).
      Un refus est une Error, que le canal rend en clair.
      ========================================================================== */
   const PAS_DE_RESULTAT = "Pas de résultat dans la page : lance un calcul depuis la page (jamais depuis Claude).";
@@ -542,8 +542,8 @@ const LECTURE_ANTENNA = (function(){
   }
 
   function auditLignes(){
-    if(typeof window === "undefined" || typeof window.iaControles !== "function") throw new Error("L'audit n'est pas chargé dans cette page.");
-    const c = window.iaControles();
+    if(typeof CARTES_ANTENNA === "undefined") throw new Error("L'audit n'est pas chargé dans cette page.");
+    const c = CARTES_ANTENNA.controles();
     if(!c.length) return ["Aucun contrôle ne signale rien."];
     const L = [];
     for(const a of c.slice(0, 60)){                  // par contrôle entier : un titre ne se sépare pas de sa carte
@@ -565,7 +565,7 @@ const LECTURE_ANTENNA = (function(){
     return liste.map((_, k) => chemin.slice(0, i) + "." + k + chemin.slice(i + 2));
   }
   function reglagesLignes(filtre){
-    const champs = typeof window !== "undefined" ? window.IA_CHAMPS : null, resoudre = champs && window.iaResoudre;
+    const champs = typeof CARTES_ANTENNA !== "undefined" ? CARTES_ANTENNA.CHAMPS : null, resoudre = champs && CARTES_ANTENNA.resoudre;
     if(!champs || typeof resoudre !== "function") throw new Error("La liste des réglages n'est pas chargée dans cette page.");
     const L = [];
     for(const chemin of Object.keys(champs)){

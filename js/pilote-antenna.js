@@ -4,20 +4,20 @@
    « antenna_proposer » — la carte de l'assistant (reglages, cotes, balayage,
    formes), proposee dans le panneau « Claude » et appliquee au clic.
 
-   ANNULER, SEULEMENT SI RIEN N'A BOUGE. iaAnnuler remet l'avant sans regarder
+   ANNULER, SEULEMENT SI RIEN N'A BOUGE. CARTES_ANTENNA.annuler remet l'avant sans regarder
    ce qui s'est passe depuis, et ne sait pas defaire un balayage. Le panneau
    compare donc l'etat ci-dessous avant d'annuler, et l'adaptateur garde
    lui-meme ANT.balayage.
    Banc : node test/banc-interface.js (section 10).
    ========================================================================== */
 
-/* Ce qu'une carte peut toucher : les racines de IA_CHAMPS (lues dans la liste blanche elle-meme,
+/* Ce qu'une carte peut toucher : les racines de CARTES_ANTENNA.CHAMPS (lues dans la liste blanche elle-meme,
    pour qu'un champ ajoute plus tard soit couvert d'office), le balayage, et ce que les cartes
    cotes et formes changent du mode conception. */
 function piloteAntennaEtat(){
   const ant = {balayage:ANT.balayage}, con = {};
   const aCon = typeof CON !== "undefined";
-  for(const k of Object.keys(window.IA_CHAMPS || {})){
+  for(const k of Object.keys(typeof CARTES_ANTENNA !== "undefined" ? CARTES_ANTENNA.CHAMPS : {})){
     const b = k.split(".");
     if(b[0] === "con"){ if(aCon) con[b[1]] = CON[b[1]]; }
     else ant[b[0]] = ANT[b[0]];
@@ -31,7 +31,7 @@ function piloteAntennaAttendu(p){
 }
 
 function piloteAntennaProposition(carte){
-  const p = window.iaProposition(carte);
+  const p = CARTES_ANTENNA.proposition(carte);
   if(!p || !p.lignes || !p.lignes.length){
     const refus = p && p.refus && p.refus.length ? " : " + p.refus.join(" ; ") : ".";
     throw new Error("Rien d'applicable dans cette carte" + refus);
@@ -54,19 +54,19 @@ const PILOTE_ANTENNA = {
     if(prop && prop.attendu && JSON.stringify(piloteAntennaAttendu(p)) !== JSON.stringify(prop.attendu))
       throw new Error("La carte a changé depuis son affichage (port ou réglage courant) : redemande-la.");
     const balayage = JSON.parse(JSON.stringify(ANT.balayage));
-    window.iaAppliquer(p);
+    CARTES_ANTENNA.appliquer(p);
     return {p:p, balayage:balayage};
   },
   annuler:function(_a, jeton){
     if(jeton.p.type === "cotes" && jeton.p.tracer)
-      // iaAnnuler remet les cotes, pas le motif redessiné : refuser plutôt qu'annuler à moitié
+      // CARTES_ANTENNA.annuler remet les cotes, pas le motif redessiné : refuser plutôt qu'annuler à moitié
       throw new Error("le motif a été redessiné : utilise l'Annuler du mode conception.");
     if(jeton.p.type === "balayage"){
       for(const k of Object.keys(ANT.balayage)) delete ANT.balayage[k];
       Object.assign(ANT.balayage, jeton.balayage);
       if(typeof antMaj === "function") antMaj(true);
     }else{
-      window.iaAnnuler(jeton.p);
+      CARTES_ANTENNA.annuler(jeton.p);
     }
   },
   etat:piloteAntennaEtat,
