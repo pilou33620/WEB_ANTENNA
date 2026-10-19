@@ -54,6 +54,7 @@ CAS = [
     ("/", "localhost:8000", 200),
     ("/", "evil.example:8000", 403),
     ("/api/ia/cle", "evil.example", 403),
+    ("/api/ia/cle", None, 404),      # l'assistant IA est retire : plus de route de cle
 ]
 
 echecs = 0

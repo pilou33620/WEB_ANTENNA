@@ -23,19 +23,9 @@
 #      dit, et le stockage local d'un navigateur n'est ni un dossier, ni
 #      partageable, ni sauvegarde.
 #
-# Et une quatrieme, minuscule, qui tient a la meme raison que la troisieme :
+# Et une quatrieme, quand WEB_SUITE l'a lance :
 #
-#   4. RELIRE LA CLE DU MODE IA. Une page ne lit pas un fichier du disque, et
-#      la seule autre facon de ne pas retaper une cle a chaque seance serait
-#      de l'ecrire dans le stockage local du navigateur -- en clair, pour
-#      toujours, dans un dossier que personne ne surveille. Le serveur ne la
-#      garde pas et ne s'en sert pas : il la relit et la rend. Voir _ia_cle.
-#      C'est la SEULE route reservee a la boucle locale : elle rend un secret
-#      facturable, et ce serveur ecoute le reseau local par defaut.
-#
-# Et une cinquieme, quand WEB_SUITE l'a lance :
-#
-#   5. RELAYER L'ENVOI SUR GITHUB. « Enregistrer + GitHub » ecrit le projet,
+#   4. RELAYER L'ENVOI SUR GITHUB. « Enregistrer + GitHub » ecrit le projet,
 #      puis demande au lanceur WEB_SUITE de commiter et pousser PROJETS --
 #      le meme geste que dans WEB_CAO. Voir `_github_garde`.
 #
@@ -126,7 +116,7 @@ MAX_PROJET = MAX_IPC
 
 
 # CE QUE LA PAGE CHARGE, ET RIEN D'AUTRE. Le dossier servi est aussi celui
-# du depot : .git/, env/, openEMS/, la cle du mode IA, les cartes posees a la
+# du depot : .git/, env/, openEMS/, un fichier de cle oublie, les cartes posees a la
 # racine. Aucun ne regarde un client du reseau. Un segment ne commence jamais
 # par un point (ni « .. », ni fichier cache), et ni « \ » ni « : » ne passent :
 # sous Windows, « /C:%5cWindows%5cwin.ini » sortait du depot.
@@ -264,11 +254,11 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         le reseau local n'envoie aucun `Origin`, et `_csrf` le laisse passer
         — deliberement, puisque c'est ainsi qu'une tablette ouvre la page.
 
-        Pour la cle du mode IA, ce marche-la ne tient plus : elle est
-        personnelle et facturable, et le serveur ecoute sur toutes les
-        interfaces par defaut pour que la tablette y arrive. Une adresse de
-        boucle locale est le seul filtre qui distingue « ce poste » de « le
-        reseau », et c'est exactement la distinction qu'on veut ici.
+        Pour les routes qui designent un chemin du disque, ce marche-la ne
+        tient plus : le serveur ecoute sur toutes les interfaces par defaut
+        pour que la tablette y arrive. Une adresse de boucle locale est le
+        seul filtre qui distingue « ce poste » de « le reseau », et c'est
+        exactement la distinction qu'on veut ici.
         """
         hote = (self.client_address[0] if self.client_address else "") or ""
         # ::ffff:127.0.0.1 : une IPv4 vue par la socket en double pile.
@@ -622,7 +612,7 @@ class Poste(http.server.SimpleHTTPRequestHandler):
     def _ce_poste(self):
         """Les routes qui designent un chemin du disque restent a ce poste.
 
-        Meme raison que pour la cle du mode IA (voir `_boucle_locale`) : sans
+        Voir `_boucle_locale` : sans
         cela, un client du reseau deplacait la racine des projets n'importe
         ou sur le disque, ou y lisait un dossier quelconque. La tablette garde
         tout le reste : ouvrir, enregistrer, archiver dans la racine choisie.
@@ -751,71 +741,6 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         return out
 
     # ==================================================================
-    # La cle du mode IA
-    # ==================================================================
-    # POURQUOI LE SERVEUR TOUCHE A CA, alors qu'il ne sert que ce qu'un
-    # navigateur ne sait pas faire. Justement : une page ne lit pas un
-    # fichier du disque, et la seule autre facon de ne pas retaper une cle
-    # a chaque seance serait de l'ecrire dans le stockage local du
-    # navigateur -- c'est-a-dire en clair, dans un dossier de profil que
-    # personne ne surveille, pour toujours. Un fichier a la racine du
-    # depot, ignore par git, se voit, se lit, et se supprime.
-    #
-    # LA CLE N'EST PAS UN SECRET DE CE SERVEUR : il ne la garde pas, ne
-    # l'utilise pas, et n'appelle personne avec. Il la relit a chaque
-    # demande et la rend a la page, qui la garde en memoire vive le temps
-    # de la session (voir js/30-ia.js).
-    #
-    # MAIS CE SERVEUR N'ECOUTE PAS QUE LA BOUCLE LOCALE, et c'est ce qui a
-    # manque longtemps ici. Il se lie a toutes les interfaces par defaut
-    # pour qu'une tablette puisse ouvrir la page -- il faut `--local` pour
-    # qu'il s'en abstienne. Le controle d'origine, lui, arrete les pages et
-    # non les clients : un `curl` du reseau local n'envoie aucun `Origin` et
-    # passait donc, cle comprise. C'est la seule route ou ce marche ne tient
-    # pas, et c'est la seule qui exige desormais une adresse de boucle
-    # locale -- voir `_boucle_locale`. Depuis le reseau, la page demande sa
-    # cle comme sur un poste qui n'en a pas.
-    CLE_IA = "api_key_free_ia_studio.txt"
-
-    def _ia_cle(self):
-        """GET /api/ia/cle : la cle Google AI Studio posee sur ce poste.
-
-        ELLE NE SORT PAS DE CETTE MACHINE, et c'est la seule route qui le
-        vérifie. Voir `_boucle_locale` pour pourquoi le controle d'origine
-        n'y suffisait pas : il arrete les pages, pas les clients. Une
-        tablette qui ouvre la page depuis le reseau local voit donc l'ecran
-        de saisie de cle, comme n'importe quel poste sans fichier — ce qui
-        est exactement ce qu'on veut, la cle du poste restant au poste.
-        """
-        if not self._boucle_locale():
-            return {"dispo": False, "cle": "", "origine": "",
-                    "fichier": self.CLE_IA,
-                    "detail": "La cle de ce poste n'est rendue qu'a la "
-                              "machine qui fait tourner le serveur. Depuis "
-                              "le reseau, saisissez la votre dans le "
-                              "panneau : elle ne vivra que dans cet onglet."}
-        cle = (os.environ.get("GEMINI_API_KEY")
-               or os.environ.get("GOOGLE_API_KEY") or "").strip()
-        origine = "environnement"
-        if not cle:
-            chemin = os.path.join(ROOT, self.CLE_IA)
-            if os.path.isfile(chemin):
-                try:
-                    with open(chemin, "r", encoding="utf-8") as f:
-                        txt = f.read().strip()
-                    # Un gabarit laisse en place n'est pas une cle. Le
-                    # rendre ferait echouer l'appel avec un message de
-                    # Google, et on chercherait la panne du mauvais cote.
-                    if txt and not txt.upper().startswith(("YOUR_", "AIZA_")):
-                        cle = txt
-                        origine = "fichier"
-                except OSError:
-                    pass
-        return {"dispo": bool(cle), "cle": cle,
-                "origine": origine if cle else "",
-                "fichier": self.CLE_IA}
-
-    # ==================================================================
     # Enregistrer + GitHub : relai au lanceur WEB_SUITE
     # ------------------------------------------------------------------
     # Le lanceur exige son jeton de tout autre appareil que ce poste : sans
@@ -903,8 +828,7 @@ class Poste(http.server.SimpleHTTPRequestHandler):
            "/api/projet/enregistrer", "/api/projet/fermer",
            "/api/projet/dossier", "/api/projet/archiver",
            "/api/projet/calculs", "/api/projet/importer",
-           "/api/github", "/api/github/envoyer", "/api/github/identite",
-           "/api/ia/cle")
+           "/api/github", "/api/github/envoyer", "/api/github/identite")
 
     def do_GET(self):
         if PILOTE.traiter(self):
@@ -935,9 +859,6 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             return
         if route == "/api/projet/ouvrir":
             self._api(self._pr_ouvrir)
-            return
-        if route == "/api/ia/cle":
-            self._api(self._ia_cle)
             return
         if route == "/api/github":
             self._api(self._github_etat)
