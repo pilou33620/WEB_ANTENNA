@@ -105,8 +105,7 @@ essais figure dans l'état renvoyé à la page.
 ├── css/
 │   ├── theme.css           le thème « dashboard nocturne » et les styles des modales / badges
 │   ├── workspace.css       les panneaux détachables
-│   ├── antenne.css         ce que cet outil ajoute
-│   └── ia.css              le panneau de l'assistant IA, repris de WEB_CAO
+│   └── antenne.css         ce que cet outil ajoute
 ├── js/
 │   ├── 00 … 06             lire, afficher et classifier la carte IPC-2581 (GND, PWR, Signal)
 │   ├── 10 … 16             l'outil : état, géométrie, assistant, 3D, surimpression 2D accélérée Path2D
@@ -120,7 +119,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── 27-apercu-motif.js  le dessin coté d'un motif d'antenne, avant de le poser
 │   ├── 28-projet.js        capturer la séance, et la reprendre
 │   ├── 29-tableau-s.js     le tableau S complet, et son fichier Touchstone
-│   ├── 30-ia.js            l'assistant IA : vérification locale, et le modèle si on veut
+│   ├── 31-cartes-antenna.js les cartes d'action (liste blanche) et l'audit des réglages, pour le canal de pilotage
 │   ├── 31-rapport.js       le rapport d'ingénierie (avec charge cellules × nmax et localisation de la plus petite cellule)
 │   ├── 32-visionneuse.js   la carte de champ animée, lue dans les .vtr
 │   ├── 33-pieces.js        les pièces importées (STEP, STL) : boîtier, piles, une matière par corps
@@ -165,14 +164,6 @@ Il ne sert que ce **qu'un navigateur ne sait pas faire** :
    choisissez — voir « Les projets » ci-dessous. Une page web n'écrit pas là
    où on lui dit, et le stockage local d'un navigateur n'est ni un dossier,
    ni sauvegardable, ni partageable.
-
-Et une quatrième, minuscule, qui tient à la même raison que la troisième :
-
-4. **relire la clé du mode IA.** `GET /api/ia/cle` rend ce qu'il trouve dans
-   `api_key_free_ia_studio.txt` ou dans `GEMINI_API_KEY`. Il ne la garde pas,
-   ne s'en sert pas, et n'appelle personne avec — voir « Le mode IA ». C'est
-   la **seule route réservée à la boucle locale** : elle rend un secret
-   facturable, et ce serveur écoute le réseau local par défaut.
 
 Tout le reste — l'affichage, la désignation du cuivre, l'assistant, la 3D, les
 courbes — est dans le navigateur et n'a besoin de personne.
@@ -1565,7 +1556,7 @@ Une décision explicite l'emporte sur une supposition.
 Ouvrir un fichier fait sortir du mode : un dessin et une carte réelle ne
 cohabitent pas, et le premier coup de crayon effacerait la seconde.
 
-## L'assistant IA — un relecteur, et rien de plus
+## Claude, par le MCP de web_suite — un relecteur, et rien de plus
 
 Sept étapes, une soixantaine de nombres, et deux d'entre eux suffisent à rendre
 un résultat faux sans qu'aucun message ne le dise : une marge d'air trop
@@ -1575,36 +1566,18 @@ serveur sait déjà **chiffrer** ce que ça va coûter. Ni l'un ni l'autre ne sa
 dire « votre encastrement est trois millimètres trop profond, et c'est pour ça
 que votre patch ne s'adapte pas ».
 
-Le bouton **✨ IA** ouvre un panneau qui sait le dire. Il ne décide de rien : il
-lit, il explique, il propose — et **aucune valeur ne s'écrit sans un clic**.
+Claude Code, par le serveur MCP de
+[web_suite](https://github.com/pilou33620/web_suite) (`lanceur/docs/DETAILS.md`),
+sait le dire. Il ne décide de rien : il lit la page (`antenna_lire`), il explique,
+il propose une carte (`antenna_proposer`) qui s'affiche dans le panneau
+« Claude » — et **aucune valeur ne s'écrit sans un clic**, sauf si l'on allume
+l'interrupteur de l'onglet. Il remplace l'ancien assistant IA intégré, retiré.
 
-### C'est le panneau de WEB_CAO
+### L'audit des réglages, exécuté par l'outil
 
-Même espace de travail, même thème, même panneau : `js/30-ia.js` reprend
-l'interface de `commun/ia-assistant.js` de
-[WEB_CAO](https://github.com/pilou33620/WEB_CAO), comme les modules `00` à `06`
-de cet outil viennent de sa visionneuse. On y retrouve, à l'identique :
-
-* la **barre de connexion** qui demande la clé, avec son œil pour la relire et
-  son lien vers la clé gratuite ;
-* la **barre d'état** une fois connecté : le modèle (Gemma 4 31B, Gemini 3.8
-  Flash, Gemini 3.8 Flash Thinking), le contexte détecté, « Vider », « Oublier clé » ;
-* les **bulles** de discussion, les **puces de questions**, le **manuel local**
-  sur fond jaune, les **cartes d'action** bleues ;
-* le **menu du clic droit** sur la carte — `js/04-interaction.js` appelait déjà
-  `iaAfficherMenuContextuel`, il attendait ce fichier ;
-* **Alt+I** pour ouvrir et fermer, **Échap** dans le panneau, **Entrée** pour
-  envoyer, **Maj+Entrée** pour aller à la ligne.
-
-### Deux commandes locales, et elles ne demandent rien à personne
-
-Comme `help` dans WEB_CAO, elles sont exécutées par l'outil : **zéro requête,
-zéro jeton, et aucune donnée ne sort du poste**. Elles marchent sans clé, et
-sur une machine débranchée.
-
-`help` rend le manuel. **`verifier`** — la puce verte, le bouton « 🔎 Vérifier »
-de la barre d'état, ou le premier élément du menu du clic droit — lance l'audit
-des réglages :
+Il tourne dans la page (`js/31-cartes-antenna.js`, `controles`) : **zéro
+requête, et aucune donnée ne sort du poste**. Claude le lit par `antenna_lire`
+(audit) :
 
 | Ce qui est vérifié | Ce qui est attrapé |
 |---|---|
@@ -1617,76 +1590,21 @@ des réglages :
 | le dernier résultat | une résonance au bord de la bande ; un écart à la cible, avec le sens de la correction ; une désadaptation, en séparant ce qui vient de la réactance de ce qui vient de la partie réelle |
 | un balayage terminé | le meilleur point — jugé par son S₁₁ **à la fréquence visée**, pas par son creux le plus profond où qu'il tombe —, chiffres à l'appui, et s'il est **au bord** de la plage, cote par cote — coin compris sur un croisement : un optimum de bord n'est que le meilleur des points essayés. La règle lit et n'écrit rien : prolonger une plage, ce sont des simulations de plus, et cela se décide au devis |
 
-L'audit sort en markdown, avec ses corrections en blocs `action` — c'est-à-dire
-**par le même rendu que la réponse du modèle**. Une correction locale et une
-correction proposée par l'IA donnent la même carte, avec la même barrière
-derrière : deux chemins de rendu auraient fini par diverger, et c'est celui qui
-écrit dans l'état qu'on ne veut pas voir diverger.
-
-**Poser une question**, en revanche, appelle un modèle de langage. C'est pour
-tout ce qu'une règle ne sait pas faire : *pourquoi* la résonance est 80 MHz
-trop basse, *quoi* balayer en premier, ce diagramme est-il crédible.
-
-Deux fournisseurs, au choix dans la barre de connexion : **Google AI Studio**
-(avec sa clé), ou un **modèle local** compatible OpenAI — Ollama, LM Studio,
-llama.cpp, vLLM, tout ce qui sert `/v1/chat/completions`. Pour le local, on
-donne l'adresse (`http://localhost:11434` pour Ollama, `…:1234/v1` pour LM
-Studio) et le nom du modèle ; **aucune clé ne lui est envoyée**, et le résumé
-ne part que vers ce serveur-là. Le choix vit comme la clé : dans l'onglet,
-oublié à la fermeture du panneau. Ollama n'accepte d'emblée que les pages
-servies par `localhost` : une page ouverte par l'adresse réseau du poste
-(`--reseau`) est refusée tant que `OLLAMA_ORIGINS` ne la nomme pas.
-
-### Ce qui sort du poste, et il faut le dire
-
-Le reste de l'outil ne dépend d'aucun service tiers — three.js est dans le
-dépôt pour cette raison, et une simulation qui dépendrait d'un serveur
-extérieur ne serait pas reproductible. Ce mode-ci fait exception, et il
-l'annonce : quand la case **« Contexte projet »** est cochée, un résumé des
-réglages part chez Google — ou vers le modèle local choisi, et alors il ne
-quitte pas le réseau.
-
-Le **résumé**, et rien d'autre : la bande, l'empilage, le cuivre retenu en
-nombre d'objets, les ports, la boîte, le maillage, l'arrêt, les chiffres que
-le serveur a rendus, le motif ouvert avec ses cotes, les cotes balayables, et
-le dernier résultat. **Ni le fichier IPC-2581, ni les polygones de cuivre, ni
-les courbes.** La case se décoche, et le mode reste utilisable en questions
-générales.
-
-### La clé
-
-Elle vient du poste : `GET /api/ia/cle` rend celle que le serveur trouve dans
-`api_key_free_ia_studio.txt` à la racine du dépôt, ou dans la variable
-d'environnement `GEMINI_API_KEY`. Le fichier est dans `.gitignore`.
-
-**Et elle ne sort pas de ce poste.** C'est la seule route qui exige une
-adresse de boucle locale, et la raison tient en une phrase : le contrôle
-d'origine arrête les *pages*, pas les *clients*. Une page ouverte sur
-`evil.com` ne peut pas lire la réponse d'une route d'ici — il n'y a pas
-d'en-tête `Access-Control-Allow-Origin` pour elle — mais un `curl` lancé
-depuis n'importe quelle machine du réseau local n'envoie aucun `Origin`, et
-rien ne le distinguait du navigateur de la tablette. C'est délibéré pour les
-autres routes ; ça ne l'était pas pour une clé personnelle et facturable.
-Depuis le réseau, la page demande donc sa clé comme sur un poste qui n'en a
-pas — et elle ne vivra que dans cet onglet-là.
-
-Sans elle, la barre de connexion la demande. Elle ne vit alors qu'**en mémoire
-vive et dans le `sessionStorage` de cet onglet** : ni stockage local, ni
-cookie, ni projet — et **fermer le panneau l'efface**, par le ✕, par Alt+I, par
-Échap ou par « Oublier clé ». Le serveur, lui, ne la garde pas, ne s'en sert
-pas, et n'appelle personne avec : il la relit à chaque demande et la rend à la
-page, qui fait l'appel elle-même.
+Chaque remarque porte sa correction sous forme de carte prête pour
+`antenna_proposer` : une correction de l'audit et une correction imaginée par
+Claude passent par la même barrière, et rien d'autre n'écrit dans l'état.
 
 ### La liste blanche, et pourquoi elle est étroite
 
-C'est la seule barrière entre un texte venu du réseau et l'état de la
+C'est la seule barrière entre une carte proposée de l'extérieur et l'état de la
 simulation, et c'est le seul endroit de l'outil où une faute **ne se verrait
 pas** : le réglage changerait, la simulation tournerait, et le résultat aurait
 l'air d'un résultat.
 
-Une proposition arrive dans un bloc `action` — que le modèle écrit, ou que
-l'audit local produit. La page le relit, valide **chemin par chemin** contre
-`IA_CHAMPS`, borne chaque valeur, et affiche l'avant en face de l'après :
+Une proposition arrive en carte — que Claude écrit, ou que l'audit local
+produit. La page la relit, valide **chemin par chemin** contre la liste blanche
+(`CHAMPS`, `js/31-cartes-antenna.js`), borne chaque valeur, et affiche l'avant en
+face de l'après :
 
 ```
 ⚡ Affiner le maillage
@@ -1699,7 +1617,7 @@ l'audit local produit. La page le relit, valide **chemin par chemin** contre
 Ce qui est **refusé est affiché aussi** : une proposition à moitié valable dont
 la moitié fautive disparaîtrait donnerait une carte qui ne fait pas ce que le
 texte à côté vient d'expliquer. Ce qui est appliqué devient `✓ 2 réglage(s)
-appliqué(s)` et **reste annulable** tant que la conversation est ouverte — un
+appliqué(s)` et **reste annulable** par le bouton de la carte — un
 réglage de simulation n'a pas d'historique comme le dessin, et sans ce bouton
 il faudrait retrouver la valeur d'avant à la main.
 
@@ -1709,19 +1627,17 @@ l'**armement d'un balayage**, et de la **géométrie libre** dans le dessin.
 Jamais la sélection de cuivre, jamais l'empilage lu dans le fichier, jamais un
 chemin qui ferait disparaître un travail.
 
-La consigne envoyée au modèle **est engendrée depuis cette liste** : une liste
-recopiée à la main aurait dérivé dès le premier champ ajouté, et le modèle
-aurait proposé des réglages que la page refuse — ce qui ressemble beaucoup à un
-modèle qui se trompe, et n'en est pas un. Le banc d'essai le vérifie
-(`test/banc-interface.js`, section 9).
+La lecture `antenna_lire` (reglages) **est engendrée depuis cette liste** : une
+liste recopiée à la main aurait dérivé dès le premier champ ajouté, et Claude
+aurait proposé des réglages que la page refuse. Le banc d'essai éprouve la
+barrière (`test/banc-interface.js`, section 9).
 
 ### La géométrie libre — quand aucun motif ne trace l'antenne
 
 Les six motifs du mode conception couvrent ce qui se calcule : patch, monopôle,
 IFA, MIFA, dipôle, ligne étalon. Une fente, un anneau, un patch à coins coupés,
-un motif qu'on a en tête — rien de tout cela n'a de gabarit, et la réponse de
-l'assistant était jusqu'ici une liste de cotes à reporter à la main, c'est-à-dire
-exactement le travail qu'on venait lui confier.
+un motif qu'on a en tête — rien de tout cela n'a de gabarit, et une liste de
+cotes à reporter à la main serait exactement le travail qu'on voulait confier.
 
 Une carte `formes` pose donc du cuivre. Elle donne une liste de primitives en
 millimètres — `rect`, `disque`, `poly`, `piste`, `via`, et `trou` pour une
@@ -1766,14 +1682,15 @@ cette carte-là et elle seule, même si trois formes ont été dessinées à la 
 entre-temps ; le Ctrl+Z du mode conception, lui, ne saurait pas faire la
 différence.
 
-**Un motif reste préférable dès qu'il en existe un**, et la consigne le dit dans
-ces termes : un motif calcule ses cotes, tient une fiche, se repose et se
+**Un motif reste préférable dès qu'il en existe un**, et le savoir métier de
+Claude le dit dans ces termes : un motif calcule ses cotes, tient une fiche, se repose et se
 balaye. Une géométrie libre ne sait rien d'elle-même — c'est un tas de formes,
 et l'outil ne peut en dire que ce qu'il mesure.
 
-### Ce que le modèle sait de cet outil
+### Ce que Claude sait de cet outil
 
-Sa consigne porte ce que les mesures de ce dépôt ont tranché, et qu'on ne lit
+Le skill `web-suite` de web_suite (fiche `antenne.md`, lisible aussi par l'outil
+MCP `savoir_lire`) porte ce que les mesures de ce dépôt ont tranché, et qu'on ne lit
 nulle part ailleurs : que le gabarit patch surestime la résistance de bord d'un
 facteur 3,5 et propose donc un encastrement trop profond d'un quart ; que
 resserrer les encoches gagne 8 dB ; que λ/20 dans le diélectrique ne suffit pas
@@ -1951,7 +1868,7 @@ colonnes d'un tableau S et le résultat complet que chacune garde, la calibratio
 de la durée sur le débit du poste, la facture du maillage et la plus petite
 cellule (« pincée »), le calcul qui ne rend rien et son diagnostic d'énergie,
 le désembedage d'une ligne d'alimentation, le port court-circuité par le cuivre
-lui-même, et les refus d'un nom de projet — et la **liste blanche du mode IA**,
+lui-même, et les refus d'un nom de projet — et la **liste blanche des cartes d'action**,
 qui sont les deux seuls endroits de l'outil où une chaîne venue du réseau touche
 quelque chose : le système de fichiers pour l'un, l'état de la simulation pour
 l'autre.
@@ -1981,7 +1898,7 @@ du code de ce dépôt au sens ordinaire :
    du net d'antenne recopiée sur le plan de masse sous le port (le cas vu sur
    `P01x274PCB-C.xml`) et vérifie qu'un avis grave bloque le calcul, tout en
    laissant passer une sonde normale ou une pastille fondue dans la masse.
-5. **La liste blanche du mode IA** : éprouve une *barrière* et non un calcul : un
+5. **La liste blanche des cartes d'action** : éprouve une *barrière* et non un calcul : un
    calcul faux rend un mauvais nombre et finit par se voir, une barrière qui
    laisse passer ne se voit jamais — le réglage change, la simulation tourne, et
    le résultat a l'air d'un résultat. Elle vérifie donc qu'un chemin hors liste
@@ -1992,11 +1909,11 @@ du code de ce dépôt au sens ordinaire :
 
 Le **serveur** a son propre banc (`python python/test/banc-serveur.py`,
 quelques secondes) : il ne sert que `index.html`, `css/` et `js/` —
-ni `.git/`, ni `env/`, ni la clé du mode IA, ni un chemin Windows comme
+ni `.git/`, ni `env/`, ni un chemin Windows comme
 `/C:%5cWindows%5cwin.ini` — et refuse un en-tête `Host` qui n'est ni une IP, ni
 `localhost`, ni le nom du poste (DNS rebinding). Les trois routes qui désignent un
 chemin du disque (racine des projets, import d'un calcul, ouverture de
-l'explorateur) ne répondent qu'à ce poste, comme la clé du mode IA.
+l'explorateur) ne répondent qu'à ce poste.
 
 Un bloc à part éprouve le **lecteur de champs** (`python/test/banc-champs.py`,
 appelé lui aussi par le banc principal). Il n'a besoin ni
@@ -2143,7 +2060,7 @@ découpes de versement l'ont toujours été.
   une piste. C'est fidèle parce que la carte est enregistrée *avec* le projet
   et rouverte telle quelle ; remplacer `carte.json` à la main par un autre
   fichier ferait désigner autre chose, en silence.
-* **Le mode IA ne vérifie pas la physique**, il vérifie des **réglages**. Ses
+* **L'audit ne vérifie pas la physique**, il vérifie des **réglages**. Ses
   règles locales attrapent ce qui est incohérent — une cible hors bande, un
   garde-fou qui coupera trop tôt, trois cellules en travers d'une ligne — et
   elles se taisent sur une antenne parfaitement réglée qui ne rayonnera jamais
@@ -2154,12 +2071,6 @@ découpes de versement l'ont toujours été.
   aucune borne ne rattrape un raisonnement faux : la valeur sera dans les
   limites, et elle pourra être la mauvaise. Ce qu'il dit se relit, et se
   vérifie par une simulation — c'est-à-dire par l'outil, pas par lui.
-* **Le mode IA est le seul morceau de cet outil qui dépende d'un service
-  tiers**, et le seul qui ait besoin d'un accès réseau. Les vérifications
-  locales, elles, n'en demandent aucun : c'est pour cela qu'elles existent.
-* **La conversation ne va pas dans le projet.** Elle vit le temps de la page,
-  la clé comprise. Ce qui reste d'une séance, ce sont les réglages qu'on a
-  appliqués — et ceux-là, le projet les garde comme les autres.
 * **Les calques hors simulation dans les exports IPC-2581** : les exports CAO
   industriels portent souvent des dizaines de calques documentaires (sérigraphie,
   masque de soudure, pâte, zones de composants, keepouts, cotations). Le parseur les
@@ -2251,12 +2162,7 @@ de **WEB_CAO** (<https://github.com/pilou33620/WEB_CAO>), sous licence MIT.
 propres à ce dépôt-là (profils d'utilisateur, dossiers de projet, reprise de
 session d'un outil à l'autre) : ici il n'y a qu'un outil.
 
-L'**assistant IA** en vient aussi. `css/ia.css` est une copie de
-`commun/ia-assistant.css`, et `js/30-ia.js` reprend l'interface de
-`commun/ia-assistant.js` telle quelle : barre de connexion, barre d'état,
-bulles, puces de questions, manuel local, cartes d'action et menu contextuel.
-C'est le même panneau, dans le même espace de travail — `js/04-interaction.js`
-appelait d'ailleurs déjà `iaAfficherMenuContextuel` sur le clic droit, en
-attendant ce fichier. Ce qui change est ce qui devait changer : le contexte
-transmis, ce que l'assistant sait du domaine, et ce qu'une carte d'action a le
-droit d'écrire.
+Les **cartes d'action** (`js/31-cartes-antenna.js`) viennent de l'ancien
+assistant IA, repris de WEB_CAO puis retiré quand Claude, par le MCP de
+web_suite, l'a remplacé : seuls la liste blanche, l'audit et les cartes sont
+restés.

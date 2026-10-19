@@ -156,7 +156,7 @@ Même document, 420 000 cellules par point, 46 minutes. Données dans
   d'un réglage — l'élargir demande un substrat plus épais ou moins tenu.
 * **Le meilleur S₁₁ du tableau n'est pas la bonne antenne.** Le −33,9 dB de
   `L` = 28,2 résonne à 2,40 GHz. La relecture d'un balayage par l'assistant
-  (`lireBalayage`, js/30-ia.js) classe les points par le seul S₁₁ minimal :
+  (`lireBalayage`, js/31-cartes-antenna.js) classe les points par le seul S₁₁ minimal :
   sur un balayage de `L`, elle désignerait ce point-là. **Corrigé le même
   jour** : avec les courbes, elle juge le S₁₁ **à** `fcible` ; sans elles, elle
   garde le S₁₁ minimal et dit de combien le point désigné résonne à côté.
@@ -275,18 +275,15 @@ qu'il impose le long du ruban — à vérifier en posant ces mêmes lignes de
 maillage sous un port localisé. Tant que ce n'est pas tranché, il reste une
 option, pas le défaut.
 
-### L'assistant IA — posé, et ce qu'il lui manque
+### Les cartes d'action et l'audit — ce qu'il leur manque
 
-`js/30-ia.js` et le bouton **✨ IA** : l'**interface de WEB_CAO reprise telle
-quelle** — barre de connexion, barre d'état, bulles, puces, manuel local,
-cartes d'action, menu du clic droit, Alt+I —, avec deux commandes exécutées en
-local (`help` et `verifier`) et, si l'on veut, un modèle de langage qui lit les
-mêmes réglages et propose des corrections. Rien ne s'écrit sans un clic, tout
-passe par la liste blanche `IA_CHAMPS`, et le banc en éprouve la barrière
-(section 9 de `test/banc-interface.js`). Le README le décrit en entier ; ce qui
-suit est ce qui reste ouvert.
+L'assistant IA intégré est **retiré** (19/10/2026) : Claude, par le MCP de
+web_suite, fait son travail (`antenna_lire`, `antenna_proposer`). Restent, dans
+`js/31-cartes-antenna.js`, la liste blanche, l'audit et les cartes d'action :
+rien ne s'écrit sans un clic, et le banc en éprouve la barrière (section 9 de
+`test/banc-interface.js`). Ce qui suit est ce qui reste ouvert.
 
-Faits le 02/10/2026, et décrits au README : la **relecture d'un balayage terminé** (l'optimum est-il au bord de la plage, cote par cote), un **modèle local** compatible OpenAI à côté de Google, et la règle qui relève **une couche déclarée masse sans cuivre** (le dipôle imprimé en géométrie libre).
+Faits le 02/10/2026, et décrits au README : la **relecture d'un balayage terminé** (l'optimum est-il au bord de la plage, cote par cote) et la règle qui relève **une couche déclarée masse sans cuivre** (le dipôle imprimé en géométrie libre).
 
 **1. Les quatre autres motifs — mesurés le 03/10/2026, à 2,45 GHz sur FR-4
 1,53 mm, un cas chacun.** Un croisement « cote de résonance × cote
@@ -315,10 +312,7 @@ entre dents. Le monopôle, lui, gagnerait un croisement de la largeur du brin
 pour sa réactance.
 
 Faits le 03/10/2026 : le **contexte porte un balayage terminé en tableau**
-(une ligne par point, S₁₁ à la cible compris) ; la **copie de `css/ia.css`
-est surveillée** — la CI de WEB_SUITE vérifie que ses 785 lignes communes
-restent un début de `commun/ia-assistant.css` de WEB_CAO, un dossier partagé
-étant exclu tant que chaque outil doit tourner seul ; et **des formes ajoutées
+(une ligne par point, S₁₁ à la cible compris) ; et **des formes ajoutées
 par-dessus un motif ne retirent plus ses cotes du balayage** — chaque point
 repose le motif et recolle les ajouts aux mêmes coordonnées.
 

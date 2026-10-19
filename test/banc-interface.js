@@ -1232,7 +1232,7 @@ verifie("l'echantillon de legende reprend le motif du trait",
         antTiretsCss([7,4],"#fff"));
 
 /* ==========================================================================
-   9. Le mode IA — la liste blanche, et rien d'autre
+   9. Les cartes d'action — la liste blanche, et rien d'autre
    --------------------------------------------------------------------------
    POURQUOI CETTE SECTION EXISTE. Tout le reste du banc eprouve des calculs :
    une conversion fausse rend un mauvais nombre, et on finit par le voir. Ici
@@ -1241,12 +1241,12 @@ verifie("l'echantillon de legende reprend le motif du trait",
    resultat. C'est le seul endroit de l'outil ou du texte venu du reseau
    touche a l'etat, et c'est donc celui qui doit etre verifie ligne a ligne.
 
-   `js/30-ia.js` est une fermeture, comme l'assistant de WEB_CAO dont il
-   reprend l'interface : ce qui suit passe par les fonctions qu'il expose sur
-   `window`, c'est-a-dire exactement celles dont la justesse doit etre prouvee.
+   `js/31-cartes-antenna.js` est une fermeture : ce qui suit passe par ce
+   qu'elle expose (CARTES_ANTENNA), c'est-a-dire exactement ce dont la justesse
+   doit etre prouvee, et par les lectures du canal de pilotage (LECTURE_ANTENNA).
    ========================================================================== */
 console.log("");
-console.log("9. Le mode IA");
+console.log("9. Les cartes d'action");
 
 global.hint=function(){};
 global.antMaj=function(){};
@@ -1255,60 +1255,58 @@ global.btoa=s=>Buffer.from(s,"binary").toString("base64");
 global.atob=s=>Buffer.from(s,"base64").toString("binary");
 charger("29-lecture-antenna.js");
 charger("31-cartes-antenna.js");
-charger("30-ia.js");
 
 // le registre des cartes et l'audit : js/31-cartes-antenna.js (CARTES_ANTENNA)
-const iaResoudre=CARTES_ANTENNA.resoudre, iaValider=CARTES_ANTENNA.valider,
-      iaProposition=CARTES_ANTENNA.proposition, iaAppliquer=CARTES_ANTENNA.appliquer,
-      iaAnnuler=CARTES_ANTENNA.annuler, iaControles=CARTES_ANTENNA.controles,
-      iaGrammaire=CARTES_ANTENNA.grammaire, iaMd=window.iaFormaterMarkdown,
-      IA_CHAMPS=CARTES_ANTENNA.CHAMPS;
+const resoudreCarte=CARTES_ANTENNA.resoudre, validerCarte=CARTES_ANTENNA.valider,
+      propositionCarte=CARTES_ANTENNA.proposition, appliquerCarte=CARTES_ANTENNA.appliquer,
+      annulerCarte=CARTES_ANTENNA.annuler, controlesCarte=CARTES_ANTENNA.controles,
+      CHAMPS_CARTES=CARTES_ANTENNA.CHAMPS;
 
 verifie("le module expose ce qu'il faut pour l'eprouver",
-        [iaResoudre,iaValider,iaProposition,iaAppliquer,iaAnnuler,
-         iaControles,iaGrammaire,iaMd].every(f=>typeof f==="function")&&
-        !!IA_CHAMPS);
+        [resoudreCarte,validerCarte,propositionCarte,appliquerCarte,annulerCarte,
+         controlesCarte].every(f=>typeof f==="function")&&
+        !!CHAMPS_CARTES);
 
 /* -- ce qui est refuse --------------------------------------------------- */
 verifie("un chemin hors de la liste blanche est refuse",
-        !!iaResoudre("arret.secret").refus);
+        !!resoudreCarte("arret.secret").refus);
 verifie("un chemin qui ressemble a un vrai est refuse aussi",
-        !!iaResoudre("bande.f3").refus);
+        !!resoudreCarte("bande.f3").refus);
 verifie("on ne peut pas ecrire dans la selection de cuivre",
-        !!iaResoudre("nets").refus&&!!iaResoudre("formes").refus);
+        !!resoudreCarte("nets").refus&&!!resoudreCarte("formes").refus);
 verifie("un port qui n'existe pas est refuse",
-        !!iaResoudre("ports.7.x").refus);
+        !!resoudreCarte("ports.7.x").refus);
 CON.actif=false;
 verifie("les chemins du mode conception sont refuses hors de ce mode",
-        !!iaResoudre("con.carte.L").refus);
+        !!resoudreCarte("con.carte.L").refus);
 
 /* -- ce qui est accepte, et borne ---------------------------------------- */
 ANT.bande={f1:2.4e9, f2:2.5e9, n:401, fcible:2.45e9};
 ANT.balayage.actif=false;
-const IA_CIBLE=iaResoudre("bande.f1");
+const IA_CIBLE=resoudreCarte("bande.f1");
 verifie("un chemin de la liste blanche se resout",
         !IA_CIBLE.refus&&IA_CIBLE.obj===ANT.bande&&IA_CIBLE.cle==="f1");
 verifie("une valeur hors bornes est refusee en disant laquelle",
-        iaValider(IA_CIBLE.descr,1e15).ok===false&&
-        iaValider(IA_CIBLE.descr,1e15).pourquoi.indexOf("borne haute")>=0);
+        validerCarte(IA_CIBLE.descr,1e15).ok===false&&
+        validerCarte(IA_CIBLE.descr,1e15).pourquoi.indexOf("borne haute")>=0);
 verifie("un nombre ecrit a la virgule passe quand meme",
-        iaValider(IA_CHAMPS["arret.energie"],"-45,5").v===-45.5);
+        validerCarte(CHAMPS_CARTES["arret.energie"],"-45,5").v===-45.5);
 verifie("un entier reste entier",
-        iaValider(IA_CHAMPS["boite.pml"],"8,4").v===8);
+        validerCarte(CHAMPS_CARTES["boite.pml"],"8,4").v===8);
 verifie("un choix hors liste est refuse",
-        iaValider(IA_CHAMPS["pertes.mode"],"debye").ok===true&&
-        iaValider(IA_CHAMPS["pertes.mode"],"lorentz").ok===false);
+        validerCarte(CHAMPS_CARTES["pertes.mode"],"debye").ok===true&&
+        validerCarte(CHAMPS_CARTES["pertes.mode"],"lorentz").ok===false);
 
 /* -- « port. » vise le port en cours de reglage -------------------------- */
 antPortAjouter();
 ANT.portActif=1;
 verifie("« port.x » vise le port courant, pas le premier",
-        iaResoudre("port.x").obj===ANT.ports[1]);
+        resoudreCarte("port.x").obj===ANT.ports[1]);
 ANT.portActif=0;
 antPortRetirer(1);
 
 /* -- une proposition : l'avant, l'apres, et l'aller-retour ---------------- */
-const IA_P=iaProposition({type:"reglages", titre:"Recentrer",
+const IA_P=propositionCarte({type:"reglages", titre:"Recentrer",
                           valeurs:{"bande.f1":2.08e9, "bande.f2":2.82e9,
                                    "bande.f9":1, "boite.pml":99}});
 verifie("une proposition garde l'avant en face de l'apres",
@@ -1318,10 +1316,10 @@ verifie("et elle dit ce qu'elle a refuse au lieu de le taire",
         IA_P.refus.length===2);
 verifie("preparer une proposition n'ecrit rien",
         ANT.bande.f1===2.4e9);
-iaAppliquer(IA_P);
+appliquerCarte(IA_P);
 verifie("l'appliquer ecrit, et seulement ce qui etait valide",
         ANT.bande.f1===2.08e9&&ANT.bande.f2===2.82e9&&ANT.boite.pml!==99);
-iaAnnuler(IA_P);
+annulerCarte(IA_P);
 verifie("l'annuler remet exactement ce qui etait la",
         ANT.bande.f1===2.4e9&&ANT.bande.f2===2.5e9);
 
@@ -1329,65 +1327,17 @@ verifie("l'annuler remet exactement ce qui etait la",
 /* Elles doivent marcher sans reseau NI clef : c'est leur raison d'etre. */
 V.modele={};
 ANT.bande.fcible=5.8e9;
-const IA_C=iaControles();
+const IA_C=controlesCarte();
 const IA_HORS=IA_C.find(a=>a.titre.indexOf("hors de la bande")>=0);
 verifie("une cible hors de la bande est relevee comme grave",
         !!IA_HORS&&IA_HORS.rang==="grave");
 verifie("et la remarque porte sa correction",
         !!IA_HORS.prop&&IA_HORS.prop.valeurs["bande.f1"]>4.9e9);
-iaAppliquer(iaProposition(IA_HORS.prop));
+appliquerCarte(propositionCarte(IA_HORS.prop));
 verifie("appliquer la correction remet la cible dans la bande",
         ANT.bande.fcible>ANT.bande.f1&&ANT.bande.fcible<ANT.bande.f2);
 verifie("et la faute ne se releve plus",
-        !iaControles().some(a=>a.titre.indexOf("hors de la bande")>=0));
-
-/* -- la consigne envoyee au modele ne peut pas deriver -------------------- */
-/* Elle est ENGENDREE depuis la liste blanche. Un champ ajoute a IA_CHAMPS
-   sans toucher a la consigne y apparait donc tout seul ; sans cela, le modele
-   proposerait des reglages que la page refuse — ce qui ressemble beaucoup a
-   un modele qui se trompe, et n'en est pas un. */
-const IA_G=iaGrammaire();
-verifie("la consigne liste tous les chemins de la liste blanche, et eux seuls",
-        Object.keys(IA_CHAMPS).every(c=>IA_G.indexOf(c+"  (")>=0)&&
-        IA_G.split("\n").length===Object.keys(IA_CHAMPS).length);
-
-/* -- ce qui revient du reseau est une donnee, jamais du HTML -------------- */
-verifie("le texte du modele est echappe avant d'etre rendu",
-        iaMd("<img src=x onerror=alert(1)>").indexOf("<img")<0);
-
-/* UN BLOC DE CODE EST RENDU TEL QUEL, Y COMPRIS SES DOLLARS. Les blocs sont
-   mis de cote pendant le rendu puis reinseres a leur place ; tant que la
-   reinsertion se faisait par une CHAINE, `$&`, `$'` et « $-accent-grave » y
-   etaient lus comme des motifs de remplacement — et un bloc de shell ou de
-   perl se reecrivait tout seul. Ce n'etait pas une faille, tout est deja
-   echappe a ce stade ; c'etait un bloc de code qui n'etait plus celui qu'on
-   avait ecrit, ce qui est le pire defaut possible pour un bloc de code. */
-const IA_D=iaMd("Avant.\n```sh\necho \"$& et $' et $\\u0060\"\n```\nApres.");
-verifie("un bloc de code garde ses dollars, sans se reecrire",
-        IA_D.indexOf("$&amp;")>=0&&IA_D.indexOf("$&#39;")>=0&&
-        IA_D.indexOf("CODEBLOCK")<0,
-        IA_D.replace(/\s+/g," ").slice(0,160));
-verifie("et le texte autour du bloc est intact",
-        IA_D.indexOf("Avant.")>=0&&IA_D.indexOf("Apres.")>=0);
-
-/* -- les blocs d'action deviennent des cartes ---------------------------- */
-/* Le rendu est celui de WEB_CAO : un bloc ```action devient une carte, et un
-   bloc casse est ignore SANS emporter la reponse qui l'entoure. */
-/* Le bloc casse fait ecrire un avertissement a la console : c'est ce qu'on
-   veut de l'outil, pas ce qu'on veut du banc. On le tait le temps de l'appel,
-   sans quoi une trace de pile au milieu des « ok » ferait croire a une panne. */
-const _warn=console.warn; console.warn=function(){};
-const IA_H=iaMd("Voici.\n```action\n{\"type\":\"reglages\",\"titre\":\"Essai\","+
-                "\"valeurs\":{\"boite.pml\":10}}\n```\nEt un bloc casse :\n"+
-                "```action\n{ pas du json\n```\n");
-console.warn=_warn;
-verifie("un bloc d'action devient une carte cliquable",
-        IA_H.indexOf("ia-action-card")>=0&&
-        IA_H.indexOf("data-ia-appliquer")>=0);
-verifie("la carte montre l'avant en face de l'apres",
-        IA_H.indexOf("cellules de PML")>=0&&IA_H.indexOf("10")>=0);
-verifie("un bloc casse est ignore sans emporter la reponse",
-        IA_H.indexOf("Voici.")>=0&&IA_H.indexOf("bloc casse")>=0);
+        !controlesCarte().some(a=>a.titre.indexOf("hors de la bande")>=0));
 
 /* -- la geometrie libre : la seule carte qui pose du CUIVRE --------------- */
 /* POURQUOI CELLE-CI MERITE SES PROPRES EPREUVES. Les trois autres cartes
@@ -1398,7 +1348,7 @@ verifie("un bloc casse est ignore sans emporter la reponse",
    les deux sens — ce qui est refuse, et ce qui se defait. */
 CON.actif=false;
 verifie("hors du mode conception, une carte « formes » ne pose rien",
-        iaProposition({type:"formes", elements:[
+        propositionCarte({type:"formes", elements:[
           {type:"rect", couche:"haut", x1:0, y1:0, x2:10, y2:10}
         ]}).refus.length===1);
 
@@ -1410,7 +1360,7 @@ CON.elements=[]; CON.sel=-1; CON.gabarit=null; CON.calcul=null;
 ANT.ports=[antPortNeuf(true)]; ANT.portActif=0;
 conHistRaz();
 
-const IA_F=iaProposition({type:"formes", titre:"Essai",
+const IA_F=propositionCarte({type:"formes", titre:"Essai",
   elements:[
     {type:"rect",  couche:"bas",  net:"GND",     x1:0, y1:0, x2:40, y2:45},
     {type:"poly",  couche:"haut", net:"ANTENNE", pts:[[8,12],[30,12],[30,36],[8,36]]},
@@ -1442,7 +1392,7 @@ verifie("les nets proposes sont repris tels quels",
 verifie("preparer une geometrie n'ecrit rien",
         CON.elements.length===0&&ANT.port.pose===false);
 
-iaAppliquer(IA_F);
+appliquerCarte(IA_F);
 verifie("l'appliquer pose le cuivre ET le port",
         CON.elements.length===5&&ANT.port.pose===true&&
         Math.abs(ANT.port.x-20)<1e-9&&ANT.port.dir==="z",
@@ -1452,7 +1402,7 @@ verifie("l'appliquer pose le cuivre ET le port",
    avec elle changerait sous le doigt. */
 verifie("les formes posees sont des copies, pas les objets prepares",
         CON.elements[1].pts!==IA_F.els[1].pts);
-iaAnnuler(IA_F);
+annulerCarte(IA_F);
 verifie("l'annuler rend le dessin et le port a ce qu'ils etaient",
         CON.elements.length===0&&ANT.port.pose===false);
 
@@ -1461,19 +1411,19 @@ const IA_FN=[];
 for(let i=0;i<60;i++)IA_FN.push({type:"rect",couche:"haut",
                                  x1:0,y1:0,x2:1,y2:1});
 verifie("au-dela du garde-fou, aucune forme n'est preparee",
-        iaProposition({type:"formes", elements:IA_FN}).els.length===0);
+        propositionCarte({type:"formes", elements:IA_FN}).els.length===0);
 
 /* -- la carte est jugee AVANT les formes qu'elle accueille ---------------- */
 /* Une forme mesuree contre l'ANCIENNE taille serait refusee alors que la
    proposition agrandit justement la carte pour elle. */
-const IA_FC=iaProposition({type:"formes", carte:{L:60, W:50},
+const IA_FC=propositionCarte({type:"formes", carte:{L:60, W:50},
   elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:0,y1:0,x2:55,y2:48}]});
 verifie("une forme qui n'entre que dans la carte proposee est acceptee",
         IA_FC.els.length===1&&IA_FC.refus.length===0,
         (IA_FC.refus[0]||""));
 
 /* -- ce qui deborde est pose, mais dit --------------------------------- */
-const IA_FD=iaProposition({type:"formes",
+const IA_FD=propositionCarte({type:"formes",
   elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:-5,y1:5,x2:10,y2:15}]});
 verifie("une forme a cheval sur le bord est posee, et la carte le signale",
         IA_FD.els.length===1&&IA_FD.avis.some(a=>a.indexOf("borde")>=0));
@@ -1483,7 +1433,7 @@ verifie("une forme a cheval sur le bord est posee, et la carte le signale",
    bord de la carte — ce que font les six motifs de l'outil — debordait donc
    toujours de w/2, et l'avis se serait allume sur presque chaque
    proposition. Un avis qui se declenche tout le temps ne se lit plus. */
-const IA_FL=iaProposition({type:"formes",
+const IA_FL=propositionCarte({type:"formes",
   elements:[{type:"piste",couche:"haut",net:"ANTENNE",
              pts:[[20,0],[20,12]], w:3.06}]});
 verifie("une ligne qui meurt au bord de la carte ne passe pas pour un debord",
@@ -1494,35 +1444,16 @@ verifie("une ligne qui meurt au bord de la carte ne passe pas pour un debord",
 CON.elements=[{type:"rect", cu:conPremierCuivre(), net:"ANTENNE", trou:false,
                x1:1, y1:1, x2:5, y2:5}];
 ANT.port.pose=true; ANT.port.x=9; ANT.port.y=9;
-const IA_FX=iaProposition({type:"formes", remplacer:true,
+const IA_FX=propositionCarte({type:"formes", remplacer:true,
   elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:2,y1:2,x2:8,y2:8}]});
-iaAppliquer(IA_FX);
+appliquerCarte(IA_FX);
 verifie("« remplacer » efface le dessin et depose les ports",
         CON.elements.length===1&&CON.elements[0].x2===8&&
         ANT.port.pose===false);
-iaAnnuler(IA_FX);
+annulerCarte(IA_FX);
 verifie("et l'annuler rend le dessin d'avant ET le port qui allait avec",
         CON.elements.length===1&&CON.elements[0].x2===5&&
         ANT.port.pose===true&&ANT.port.x===9);
-
-/* -- la consigne envoyee au modele decrit bien cette quatrieme carte ------ */
-verifie("la consigne annonce la geometrie libre et ses genres",
-        window.iaPromptSysteme().indexOf('"type":"formes"')>=0&&
-        window.iaPromptSysteme().indexOf("GEOMETRIE LIBRE")>=0);
-
-/* -- la carte rendue LISTE ce qu'elle va poser --------------------------- */
-/* C'est la moitie visible de la barriere : une carte qui annoncerait
-   « 2 formes » sans les dire demanderait de presser pour savoir ce qu'on pose,
-   et un refus qu'elle tairait ferait croire au dessin qu'on vient de lire. */
-const IA_HF=iaMd("Voici.\n```action\n"+JSON.stringify({type:"formes",
-  titre:"Essai de trace",
-  elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:2,y1:2,x2:12,y2:22},
-            {type:"trapeze",couche:"haut"}]})+"\n```\n");
-verifie("la carte d'une geometrie libre liste chaque forme qu'elle pose",
-        IA_HF.indexOf("ia-action-liste")>=0&&IA_HF.indexOf("rectangle")>=0,
-        IA_HF.replace(/\s+/g," ").slice(0,200));
-verifie("et elle affiche le refus a cote de ce qu'elle pose",
-        IA_HF.indexOf("ia-action-refus")>=0&&IA_HF.indexOf("trapeze")>=0);
 
 /* -- une couche declaree masse qui ne porte aucun cuivre ------------------ */
 /* LE DIPOLE IMPRIME EN GEOMETRIE LIBRE : ses deux bras sur le dessus, et la
@@ -1540,7 +1471,7 @@ CON.elements=[
      taire l'avis */
   {type:"rect", cu:IA_CU[1].e.uid, net:"", trou:true, x1:1, y1:1, x2:3, y2:3},
   {type:"via",  cu:IA_CU[1].e.uid, net:"GND", trou:false, x:5, y:5, d:0.6}];
-const iaMasseVide=()=>iaControles().filter(a=>a.titre.indexOf("déclarée masse")>=0);
+const iaMasseVide=()=>controlesCarte().filter(a=>a.titre.indexOf("déclarée masse")>=0);
 let IA_MV=iaMasseVide();
 verifie("une couche declaree masse sans cuivre est relevee, en la nommant",
         IA_MV.length===1&&IA_MV[0].titre.indexOf(IA_CU[1].e.nom)>=0&&
@@ -1548,7 +1479,7 @@ verifie("une couche declaree masse sans cuivre est relevee, en la nommant",
         IA_MV.map(a=>a.titre).join(" | "));
 verifie("et la remarque ne propose aucune ecriture : le role n'est pas dans la liste blanche",
         IA_MV.length===1&&!IA_MV[0].prop&&
-        !Object.keys(IA_CHAMPS).some(c=>c.indexOf("role")>=0));
+        !Object.keys(CHAMPS_CARTES).some(c=>c.indexOf("role")>=0));
 IA_CU[1].e.role="signal";
 verifie("declaree signal, la meme couche vide ne dit plus rien",
         iaMasseVide().length===0);
@@ -1573,12 +1504,12 @@ const iaBalSimple=function(s11){
                               z0_im:-10+3*i}};
           })};
 };
-const iaLecture=()=>iaControles().filter(a=>a.titre.indexOf("L'optimum du balayage")===0);
+const lectureBalayage=()=>controlesCarte().filter(a=>a.titre.indexOf("L'optimum du balayage")===0);
 const IA_AVANT=JSON.stringify([ANT.bande,ANT.balayage,ANT.maillage,ANT.boite]);
 ANT_BAL_POINT=0;
 
 ANT.resultat=iaBalSimple([-5,-9,-14,-10,-6]);
-let IA_L=iaLecture();
+let IA_L=lectureBalayage();
 verifie("un optimum interieur est dit DANS la plage, chiffres a l'appui",
         IA_L.length===1&&IA_L[0].rang==="info"&&
         IA_L[0].titre.indexOf("dans la plage")>=0&&
@@ -1587,7 +1518,7 @@ verifie("un optimum interieur est dit DANS la plage, chiffres a l'appui",
         IA_L.map(a=>a.texte).join(" | "));
 
 ANT.resultat=iaBalSimple([-15,-12,-9,-6,-4]);
-IA_L=iaLecture();
+IA_L=lectureBalayage();
 verifie("un optimum a la borne basse dit de prolonger vers les petites valeurs",
         IA_L.length===1&&IA_L[0].rang==="attention"&&
         IA_L[0].titre.indexOf("au bord")>=0&&
@@ -1596,15 +1527,15 @@ verifie("un optimum a la borne basse dit de prolonger vers les petites valeurs",
         IA_L[0].texte.indexOf("COIN")<0,
         IA_L.map(a=>a.texte).join(" | "));
 ANT.resultat=iaBalSimple([-4,-6,-9,-12,-15]);
-IA_L=iaLecture();
+IA_L=lectureBalayage();
 verifie("et a la borne haute, vers les grandes",
         IA_L.length===1&&IA_L[0].texte.indexOf("borne haute")>=0&&
         IA_L[0].texte.indexOf("grandes valeurs")>=0);
 
 ANT.resultat=iaBalSimple([-1,-2,-1.5]);
 verifie("un balayage dont aucun point ne resonne ne designe pas d'optimum",
-        iaLecture().length===0&&
-        iaControles().some(a=>a.titre.indexOf("Aucun point du balayage")===0));
+        lectureBalayage().length===0&&
+        controlesCarte().some(a=>a.titre.indexOf("Aucun point du balayage")===0));
 
 /* LES NEUF POINTS DU CROISEMENT g × y0, tels que le serveur les a rendus
    (`croisement-g-y0.json`, a la racine) : le meilleur est g = 1,49 et
@@ -1615,7 +1546,7 @@ ANT.resultat=Object.assign({balayage:true, pente_hz_par_unite:null,
                             points:IA_X.points.map(p=>({etiquette:p.etiquette,
                               valeur:p.valeur, valeur2:p.valeur2, resultat:p}))},
                            IA_X.balayage);
-IA_L=iaLecture();
+IA_L=lectureBalayage();
 verifie("le croisement g × y0 : le meilleur point est nomme, avec son S11",
         IA_L.length===1&&IA_L[0].texte.indexOf("1,4896 × 8,5112")>=0&&
         IA_L[0].texte.indexOf("-16,02 dB")>=0&&
@@ -1647,20 +1578,27 @@ ANT.resultat={balayage:true, croise:false, nom:"Patch rectangulaire — longueur
               points:[[27,2.50e9,-18],[27.5,2.45e9,-22],[28,2.40e9,-34]].map(q=>
                 ({etiquette:String(q[0]), valeur:q[0], valeur2:null,
                   resultat:iaCourbe(q[1],q[2])}))};
-IA_L=iaLecture();
+IA_L=lectureBalayage();
 verifie("avec les courbes, le meilleur point est celui qui s'adapte A la cible",
         IA_L.length===1&&IA_L[0].texte.indexOf("à 2.45 GHz est -22 dB en « 27.5 »")>=0&&
         IA_L[0].titre.indexOf("dans la plage")>=0,
         IA_L.map(a=>a.texte).join(" | "));
-/* LE CONTEXTE ENVOYE AU MODELE annonce le balayage ; son TABLEAU, une ligne
-   par point avec la colonne du S11 a la cible, le modele le demande par
-   l'outil de lecture « balayage » — il ne pese pas sur chaque question. */
+/* LE CONTEXTE (antenna_lire conception) annonce le balayage ; son TABLEAU, une
+   ligne par point avec la colonne du S11 a la cible, se lit a part (balayage). */
+/* les outils de lecture disponibles, comme l'assistant les offrait : ceux de la
+   carte importee hors mode conception, celui du balayage quand il est fini */
+const outilsLecture=()=>{
+  const o={};
+  if(typeof V!=="undefined"&&V.modele&&!CON.actif)Object.assign(o,LECTURE_ANTENNA.carte);
+  if(LECTURE_ANTENNA.aides.balayageTermine())Object.assign(o,LECTURE_ANTENNA.balayage);
+  return o;
+};
 const IA_MDL=ANT.modele; ANT.modele=null;   // le faux modele d'un essai plus haut
-const IA_CTX=window.iaContexte();
-const IA_TAB=window.iaOutils().balayage.fn({});
+const IA_CTX=LECTURE_ANTENNA.contexte();
+const IA_TAB=outilsLecture().balayage.fn({});
 ANT.modele=IA_MDL;
 /* LES LECTURES DU CANAL DE PILOTAGE (web_suite, registre-antenna) sont celles de
-   l'assistant, sorties de 30-ia.js : leur texte doit rester le meme au caractere
+   l'ancien assistant, sorties de son fichier : leur texte doit rester le meme au caractere
    pres. Le releve a ete pris AVANT le deplacement (RELEVE=1 l'ecrit), sur ce
    balayage, sur le faux modele d'un essai plus haut, et sur une petite carte
    importee faite a la main pour les outils de la carte. */
@@ -1668,7 +1606,7 @@ ANT.modele=IA_MDL;
   const FIX=path.join(__dirname,"releve-lecture-antenna.json"), vu={};
   const garde={V:global.V, nets:ANT.nets, con:CON.actif};
   ANT.modele=null;                           // le faux modele d'un essai plus haut ne se lit pas
-  vu.contexte_balayage=window.iaContexte();
+  vu.contexte_balayage=LECTURE_ANTENNA.contexte();
   global.V=window.V={unite:"mm", fichier:"carte.xml", sel:[],
     couches:[{nom:"TOP"},{nom:"BOTTOM"}],
     parNet:[{i:0, nom:"GND", classe:"Masse", longueur:12.3456, couches:new Set([0,1]), pistes:[1,2], arcs:[], plans:[1], pads:[1,2,3], trous:[1]},
@@ -1676,8 +1614,8 @@ ANT.modele=IA_MDL;
     modele:{composants:[{ref:"U1", val:"NRF52", pkg:"QFN-48", part:"NRF52832", c:0, x:1, y:2, r:90, pins:[{num:"1", n:0},{num:"2", n:null}]},
                         {ref:"J1", val:"SMA", pkg:"", part:"", c:1, x:5, y:6, r:0, pins:[{num:"1", n:1},{num:"2", n:0}]}]}};
   ANT.nets=new Set([1]); CON.actif=false;  // la carte importee : hors du mode conception
-  vu.contexte_carte=window.iaContexte();
-  const o=window.iaOutils();
+  vu.contexte_carte=LECTURE_ANTENNA.contexte();
+  const o=outilsLecture();
   for(const [cle,nom,a] of [["composants","composants",{}],["composants_u","composants",{filtre:"u"}],["composant","composant",{ref:"u1"}],
                             ["composant_x","composant",{ref:"X9"}],["nets","nets",{}],["net","net",{nom:"gnd"}],["net_x","net",{nom:"Z"}],
                             ["balayage","balayage",{}]])
@@ -1698,16 +1636,6 @@ verifie("l'outil « balayage » rend le tableau, S11 a la cible compris",
         IA_TAB[0].indexOf("S11 a 2.45 GHz")>=0&&
         IA_TAB[2].split(";")[0]==="27.5"&&IA_TAB[2].split(";")[3]==="-22",
         IA_TAB.join(" / "));
-/* LA BOUCLE : un bloc ```outil est execute, un outil inconnu est dit, et le
-   reste de la reponse ne declenche rien. */
-const IA_BL=window.iaExecuterOutils("Je regarde.\n```outil\n{\"outil\":\"balayage\"}\n```\n```outil\n{\"outil\":\"meteo\"}\n```",
-                                    window.iaOutils());
-verifie("les blocs outil sont executes, un outil inconnu est signale",
-        IA_BL.length===2&&IA_BL[0].texte===IA_TAB.join(String.fromCharCode(10))&&
-        IA_BL[1].texte.indexOf("inconnu")>=0&&
-        window.iaExecuterOutils("Reponse sans bloc.",window.iaOutils())===null,
-        JSON.stringify(IA_BL));
-
 /* LE CROISEMENT L × y0 DU 02/10 (`croisement-L-y0.json`), sans ses courbes :
    le S11 minimal designe 28,2 × 7 (-33,9 dB a 2,40 GHz), et la lecture doit
    dire que ce creux tombe 2 % sous la cible. */
@@ -1716,69 +1644,13 @@ ANT.resultat=Object.assign({balayage:true, lignes:IA_LY.lignes,
                             points:IA_LY.points.map(p=>({etiquette:p.etiquette,
                               valeur:p.valeur, valeur2:p.valeur2, resultat:p}))},
                            IA_LY.balayage);
-IA_L=iaLecture();
+IA_L=lectureBalayage();
 verifie("sans courbes, le creux le plus profond est dit hors de la cible",
         IA_L.length===1&&IA_L[0].texte.indexOf("28,2 × 7")>=0&&
         IA_L[0].texte.indexOf("sous la cible")>=0,
         IA_L.map(a=>a.texte).join(" | "));
 ANT.bande.fcible=IA_CIBLE_AVANT;
 ANT.resultat=null;
-
-/* -- le second fournisseur : la requete, sans reseau ---------------------- */
-/* Ce qui est prouve ici est ce qu'un appel reel ne montrerait pas : OU part
-   la cle. Google la recoit dans l'en-tete, jamais dans l'URL ; un serveur
-   local ne la recoit pas du tout — il n'en demande pas, et la lui envoyer
-   serait la donner a quiconque ecoute sur ce port. */
-const iaRequete=window.iaRequete, iaTexteRep=window.iaTexteReponse;
-const IA_HIST=[{role:"user", parts:[{text:"Q1"}]},
-               {role:"model", parts:[{text:"R1"}]},
-               {role:"user", parts:[{text:"Q2"}]}];
-const IA_RG=iaRequete("google",{cle:"CLE-ESSAI", url:"http://localhost:11434",
-  modele:"gemma-4-31b-it", systeme:"CONSIGNE", contents:IA_HIST,
-  genConfig:{temperature:0.7}});
-const IA_RGB=JSON.parse(IA_RG.init.body);
-verifie("Google : la cle part dans l'en-tete x-goog-api-key, pas dans l'URL",
-        IA_RG.init.headers["x-goog-api-key"]==="CLE-ESSAI"&&
-        IA_RG.url.indexOf("CLE-ESSAI")<0&&IA_RG.init.body.indexOf("CLE-ESSAI")<0&&
-        /\/models\/gemma-4-31b-it:generateContent$/.test(IA_RG.url));
-verifie("Google : la consigne en systemInstruction, l'historique tel quel",
-        IA_RGB.systemInstruction.parts[0].text==="CONSIGNE"&&
-        IA_RGB.contents.length===3&&IA_RGB.contents[1].role==="model");
-verifie("Google : le repli sans consigne n'envoie pas de systemInstruction",
-        !("systemInstruction" in JSON.parse(iaRequete("google",{cle:"K",
-          modele:"m", systeme:"", contents:IA_HIST, genConfig:{}}).init.body)));
-
-const IA_RL=iaRequete("local",{cle:"CLE-ESSAI", url:"http://localhost:11434/",
-  modele:"llama3.1", systeme:"CONSIGNE", contents:IA_HIST, genConfig:{}});
-const IA_RLB=JSON.parse(IA_RL.init.body);
-verifie("local : la route OpenAI d'Ollama, a partir de l'adresse nue",
-        IA_RL.url==="http://localhost:11434/v1/chat/completions"&&
-        IA_RL.init.method==="POST",IA_RL.url);
-verifie("local : AUCUNE cle ne part vers le serveur local",
-        JSON.stringify(IA_RL).indexOf("CLE-ESSAI")<0&&
-        !Object.keys(IA_RL.init.headers).some(h=>/key|auth/i.test(h)));
-verifie("local : la consigne en message system, model devenu assistant",
-        IA_RLB.model==="llama3.1"&&IA_RLB.stream===false&&
-        IA_RLB.messages.map(m=>m.role).join(",")==="system,user,assistant,user"&&
-        IA_RLB.messages[0].content==="CONSIGNE"&&IA_RLB.messages[3].content==="Q2");
-verifie("local : une adresse deja en /v1 (LM Studio) ne double pas le /v1",
-        iaRequete("local",{url:"http://127.0.0.1:1234/v1", modele:"m",
-          contents:[]}).url==="http://127.0.0.1:1234/v1/chat/completions");
-let IA_URL_REFUS=0;
-for(const u of ["localhost:11434","javascript:alert(1)",""]){
-  try{ iaRequete("local",{url:u, modele:"m", contents:[]}); }
-  catch(e){ IA_URL_REFUS++; }
-}
-verifie("local : une adresse sans http(s):// est refusee avant tout appel",
-        IA_URL_REFUS===3);
-verifie("les deux reponses se lisent, pensees de Google ecartees",
-        iaTexteRep("local",{choices:[{message:{content:"Bonjour"}}]})==="Bonjour"&&
-        iaTexteRep("google",{candidates:[{content:{parts:[
-          {text:"je pense", thought:true},{text:"Bonjour"}]}}]})==="Bonjour"&&
-        iaTexteRep("local",{})==="");
-verifie("ce que rend le modele local est echappe comme le reste",
-        iaMd(iaTexteRep("local",{choices:[{message:{content:
-          "<img src=x onerror=alert(1)>"}}]})).indexOf("<img")<0);
 
 CON.actif=false;
 CON.elements=[]; CON.sel=-1;
@@ -3245,7 +3117,7 @@ console.log("Verification du port et etat des etapes");
    La page se declare et offre « antenna_proposer » : la carte de l'assistant,
    proposee puis appliquee au clic dans le panneau « Claude » (js/pilote.js,
    eprouve dans web_suite). Ici : l'adaptateur, sur les vraies fonctions de
-   30-ia.js — ce qu'il montre, ce qu'il ecrit, et ce qu'il defait.
+   31-cartes-antenna.js — ce qu'il montre, ce qu'il ecrit, et ce qu'il defait.
    ========================================================================== */
 console.log("");
 console.log("10. Le canal de pilotage");
@@ -3303,7 +3175,7 @@ console.log("10. Le canal de pilotage");
   try{ D.proposer({carte:{type:"reglages", valeurs:{"arret.secret":1}}}); }catch(e){ msg=e.message; }
   verifie("une carte sans rien d'applicable est refusee en disant pourquoi", /secret/.test(msg));
 
-  /* Le balayage : iaAnnuler ne sait pas le defaire, l'adaptateur garde et remet
+  /* Le balayage : annulerCarte ne sait pas le defaire, l'adaptateur garde et remet
      ANT.balayage lui-meme. Doublures le temps de l'essai : un balayage valide
      exige un motif ouvert en mode conception. */
   const vraiP=CARTES_ANTENNA.proposition, vraiA=CARTES_ANTENNA.appliquer;
@@ -3315,7 +3187,7 @@ console.log("10. Le canal de pilotage");
     verifie("un balayage applique est arme", ANT.balayage.actif===true&&ANT.balayage.source==="L");
     D.annuler({carte:{type:"balayage"}}, j);
     verifie("et l'annuler le remet tel qu'avant", JSON.stringify(ANT.balayage)===bal0);
-    /* Des cotes qui redessinent le motif : iaAnnuler ne remet que les cotes, pas le motif.
+    /* Des cotes qui redessinent le motif : annulerCarte ne remet que les cotes, pas le motif.
        L'annulation est refusee en le disant, plutot que d'afficher « Annulee » a moitie. */
     CARTES_ANTENNA.proposition=()=>({type:"cotes", tracer:true, titre:"Cotes", lignes:[{chemin:"L", nom:"L", avant:1, apres:2}], refus:[]});
     CARTES_ANTENNA.appliquer=()=>"trace";

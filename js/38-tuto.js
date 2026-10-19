@@ -45,8 +45,6 @@
      texte:"S<sub>11</sub>, impédance d'entrée et diagramme de rayonnement, à la fin du calcul ; <b>Champs</b> anime la carte de champ."},
     {sel:"#bRapport",titre:"Rapport",
      texte:"Un rapport d'ingénierie complet : résultats, empilage, géométrie, maillage et diagnostic des anomalies."},
-    {sel:"#bIaAssistant",titre:"Assistant IA",
-     texte:"Il vérifie les réglages, même sans réseau ni clé ; rien ne s'applique sans un clic. <kbd>Alt+I</kbd>."},
     {sel:"#bProjet",titre:"Projet",
      texte:"Où ranger le travail : une antenne se dimensionne en plusieurs passes, et chacune reprend la précédente."}
   ];

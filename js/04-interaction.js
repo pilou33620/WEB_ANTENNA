@@ -422,9 +422,6 @@ cv.addEventListener("contextmenu",function(e){
       if(typeof dessiner === "function") dessiner();
     }
   }
-  if(typeof iaAfficherMenuContextuel === "function"){
-    iaAfficherMenuContextuel(e);
-  }
 });
 
 /* ==========================================================================

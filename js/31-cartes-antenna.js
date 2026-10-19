@@ -12,9 +12,14 @@
    `antenna_lire` audit, js/29-lecture-antenna.js), dont chaque remarque porte sa
    carte prête.
 
-   Le code vient de l'ancien assistant (30-ia.js), déplacé tel quel : le banc
-   test/banc-interface.js §9 l'éprouve ligne à ligne.
+   Le code vient de l'ancien assistant IA intégré, déplacé tel quel quand Claude
+   (par le MCP) l'a remplacé : le banc test/banc-interface.js §9 l'éprouve ligne
+   à ligne.
    ============================================================================= */
+
+/* L'ancien assistant gardait sa clé et son serveur local dans le stockage de session :
+   on les efface une fois, au chargement, pour qu'une clé n'y traîne pas. */
+try { sessionStorage.removeItem("openems_ia_cle"); sessionStorage.removeItem("openems_ia_local"); } catch (_) {}
 
 const CARTES_ANTENNA = (function(){
   // les aides de lecture partagées (js/29-lecture-antenna.js), comme dans l'ancien assistant
@@ -34,11 +39,11 @@ const CARTES_ANTENNA = (function(){
      ports, « con.pile.N.ep » pour toutes les couches dessinées. « port.x » est
      une écriture de confort pour le port courant.
 
-     Cette table sert AUSSI à écrire la consigne envoyée au modèle (voir
-     `grammaire`) : la liste qu'il reçoit est celle que le code applique, et les
-     deux ne peuvent donc pas diverger.
+     Cette table sert AUSSI à la lecture `antenna_lire` reglages du canal de
+     pilotage (js/29-lecture-antenna.js) : la liste qu'on y lit est celle que le
+     code applique, et les deux ne peuvent donc pas diverger.
      ========================================================================== */
-  const IA_CHAMPS = {
+  const CHAMPS = {
     /* -- la bande ------------------------------------------------------- */
     "bande.f1":     {nom:"début de bande", u:"Hz", min:1e6, max:3e11, f:true},
     "bande.f2":     {nom:"fin de bande", u:"Hz", min:1e6, max:3e11, f:true},
@@ -134,7 +139,7 @@ const CARTES_ANTENNA = (function(){
   function resoudre(chemin){
     const p = normaliserChemin(chemin);
     const norme = p.replace(/\.\d+(?=\.|$)/g, ".N");
-    const descr = IA_CHAMPS[norme];
+    const descr = CHAMPS[norme];
     if(!descr) return {refus:"« " + chemin + " » ne fait pas partie des "+
                              "réglages que l'IA a le droit de proposer."};
     const bouts = p.split(".");
@@ -368,11 +373,11 @@ const CARTES_ANTENNA = (function(){
      tel : une carte qui poserait neuf formes sur dix sans le dire ferait
      croire au dessin qu'on vient de lire.
      ========================================================================== */
-  const IA_FORMES_MAX  = 40;    // formes par carte
-  const IA_PTS_MAX     = 200;   // sommets d'un polygone ou points d'une piste
-  const IA_COORD_MAX   = 2000;  // mm ; la carte dessinée est bornée là aussi
-  const IA_MIN_ETENDUE = 0.02;  // mm ; en dessous, c'est un clic qui a bougé
-  const IA_GENRES = ["rect", "disque", "poly", "piste", "via"];
+  const FORMES_MAX  = 40;    // formes par carte
+  const PTS_MAX     = 200;   // sommets d'un polygone ou points d'une piste
+  const COORD_MAX   = 2000;  // mm ; la carte dessinée est bornée là aussi
+  const MIN_ETENDUE = 0.02;  // mm ; en dessous, c'est un clic qui a bougé
+  const GENRES = ["rect", "disque", "poly", "piste", "via"];
 
   /* La couche de cuivre visée. LE NOM EXACT D'ABORD, LES RACCOURCIS ENSUITE :
      « haut » et « bas » sont les mots des motifs (`js/22-antennes.js`) et
@@ -380,7 +385,7 @@ const CARTES_ANTENNA = (function(){
      quatre couches, « Cuivre dessous » est le QUATRIÈME, et laisser le
      raccourci l'emporter poserait le cuivre deux étages trop haut sans que
      rien ne le signale. */
-  function iaCoucheCuivre(spec){
+  function coucheCuivre(spec){
     if(typeof conCuivres !== "function") return null;
     const cu = conCuivres();
     if(!cu.length) return null;
@@ -395,7 +400,7 @@ const CARTES_ANTENNA = (function(){
     return null;
   }
 
-  function iaNombre(v){
+  function nombreFini(v){
     if(v == null) return NaN;
     if(typeof v === "number") return isFinite(v) ? v : NaN;
     const n = +String(v).trim().replace(",", ".");
@@ -406,19 +411,19 @@ const CARTES_ANTENNA = (function(){
      dixième de micron. HORS BORNES ON REFUSE, ON N'ÉCRÊTE PAS : une forme
      silencieusement ramenée dans la carte n'est plus celle que le texte à côté
      décrit, et c'est la carte d'action qu'on croirait. */
-  function iaCoord(v){
-    const n = iaNombre(v);
-    if(!isFinite(n) || Math.abs(n) > IA_COORD_MAX) return NaN;
+  function coordonnee(v){
+    const n = nombreFini(v);
+    if(!isFinite(n) || Math.abs(n) > COORD_MAX) return NaN;
     return +n.toFixed(4);
   }
 
-  function iaPoints(src){
+  function pointsLus(src){
     if(!Array.isArray(src)) return null;
     const out = [];
     for(const q of src){
       let a, b;
-      if(Array.isArray(q)){ a = iaCoord(q[0]); b = iaCoord(q[1]); }
-      else if(q && typeof q === "object"){ a = iaCoord(q.x); b = iaCoord(q.y); }
+      if(Array.isArray(q)){ a = coordonnee(q[0]); b = coordonnee(q[1]); }
+      else if(q && typeof q === "object"){ a = coordonnee(q.x); b = coordonnee(q.y); }
       else return null;
       if(!isFinite(a) || !isFinite(b)) return null;
       out.push([a, b]);
@@ -432,7 +437,7 @@ const CARTES_ANTENNA = (function(){
      devient une antenne de plus. On le borne quand même — un nom de trois
      cents caractères rendrait la liste des nets illisible —, et le rôle
      d'usine de la couche donne le défaut qu'on attend. */
-  function iaNet(v, role){
+  function netDeForme(v, role){
     let s = String(v == null ? "" : v).trim().toUpperCase()
               .replace(/[^A-Z0-9_.+-]/g, "");
     if(!s) s = (role === "gnd") ? "GND" : "ANTENNE";
@@ -441,17 +446,17 @@ const CARTES_ANTENNA = (function(){
 
   /* Une forme du bloc d'action, ramenée à un élément de dessin — ou refusée en
      disant laquelle des conditions elle manque. Rend {el, texte} ou {refus}. */
-  function iaForme(brut, rang){
+  function formeLue(brut, rang){
     const ref = "forme " + (rang + 1);
     if(!brut || typeof brut !== "object")
       return {refus:ref + " : ce n'est pas un objet."};
 
     const genre = String(brut.type || brut.forme || "").trim().toLowerCase();
-    if(IA_GENRES.indexOf(genre) < 0)
+    if(GENRES.indexOf(genre) < 0)
       return {refus:ref + " : genre « " + (genre || "absent") +
-                    " » inconnu ; les genres sont " + IA_GENRES.join(", ") + "."};
+                    " » inconnu ; les genres sont " + GENRES.join(", ") + "."};
 
-    const c = iaCoucheCuivre(brut.couche != null ? brut.couche : brut.cu);
+    const c = coucheCuivre(brut.couche != null ? brut.couche : brut.cu);
     if(!c)
       return {refus:ref + " : « " + (brut.couche || brut.cu || "") +
                     " » ne désigne aucune couche de cuivre de l'empilage."};
@@ -461,70 +466,70 @@ const CARTES_ANTENNA = (function(){
       return {refus:ref + " : une découpe retire du cuivre à une SURFACE ; "+
                     "un via et une piste n'en sont pas une."};
 
-    const el = {type:genre, cu:c.uid, net:trou ? "" : iaNet(brut.net, c.role),
+    const el = {type:genre, cu:c.uid, net:trou ? "" : netDeForme(brut.net, c.role),
                 trou:trou};
     let quoi = "";
 
     if(genre === "rect"){
-      const x1 = iaCoord(brut.x1), y1 = iaCoord(brut.y1),
-            x2 = iaCoord(brut.x2), y2 = iaCoord(brut.y2);
+      const x1 = coordonnee(brut.x1), y1 = coordonnee(brut.y1),
+            x2 = coordonnee(brut.x2), y2 = coordonnee(brut.y2);
       if(!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2))
         return {refus:ref + " : un rectangle demande x1, y1, x2 et y2, finis "+
-                      "et d'au plus " + IA_COORD_MAX + " mm."};
+                      "et d'au plus " + COORD_MAX + " mm."};
       el.x1 = Math.min(x1, x2); el.x2 = Math.max(x1, x2);
       el.y1 = Math.min(y1, y2); el.y2 = Math.max(y1, y2);
-      if(el.x2 - el.x1 < IA_MIN_ETENDUE || el.y2 - el.y1 < IA_MIN_ETENDUE)
+      if(el.x2 - el.x1 < MIN_ETENDUE || el.y2 - el.y1 < MIN_ETENDUE)
         return {refus:ref + " : rectangle de moins de " +
-                      nbp(IA_MIN_ETENDUE, 3) + " mm de côté — ce n'est pas "+
+                      nbp(MIN_ETENDUE, 3) + " mm de côté — ce n'est pas "+
                       "une forme."};
       quoi = nbp(el.x2 - el.x1, 3) + " × " + nbp(el.y2 - el.y1, 3) +
              " mm, coin en (" + nbp(el.x1, 3) + " ; " + nbp(el.y1, 3) + ")";
     }
     else if(genre === "disque"){
-      const cx = iaCoord(brut.cx != null ? brut.cx : brut.x),
-            cy = iaCoord(brut.cy != null ? brut.cy : brut.y),
-            r  = iaNombre(brut.r != null ? brut.r : brut.rayon);
+      const cx = coordonnee(brut.cx != null ? brut.cx : brut.x),
+            cy = coordonnee(brut.cy != null ? brut.cy : brut.y),
+            r  = nombreFini(brut.r != null ? brut.r : brut.rayon);
       if(!isFinite(cx) || !isFinite(cy))
         return {refus:ref + " : un disque demande un centre cx, cy."};
-      if(!(r >= IA_MIN_ETENDUE / 2) || r > IA_COORD_MAX)
+      if(!(r >= MIN_ETENDUE / 2) || r > COORD_MAX)
         return {refus:ref + " : rayon « r » absent ou hors bornes."};
       el.cx = cx; el.cy = cy; el.r = +r.toFixed(4);
       quoi = "r = " + nbp(el.r, 3) + " mm, centre (" + nbp(cx, 3) + " ; " +
              nbp(cy, 3) + ")";
     }
     else if(genre === "poly"){
-      const pts = iaPoints(brut.pts || brut.points);
+      const pts = pointsLus(brut.pts || brut.points);
       if(!pts)
         return {refus:ref + " : « pts » doit être une liste de paires [x, y] "+
                       "finies et bornées."};
       if(pts.length < 3)
         return {refus:ref + " : un polygone demande au moins trois sommets ("+
                       pts.length + " reçu" + (pts.length > 1 ? "s" : "") + ")."};
-      if(pts.length > IA_PTS_MAX)
+      if(pts.length > PTS_MAX)
         return {refus:ref + " : " + pts.length + " sommets, le garde-fou est "+
-                      "à " + IA_PTS_MAX + "."};
+                      "à " + PTS_MAX + "."};
       el.pts = pts;
       const b = conBoite(el);
-      if(b.x2 - b.x1 < IA_MIN_ETENDUE || b.y2 - b.y1 < IA_MIN_ETENDUE)
+      if(b.x2 - b.x1 < MIN_ETENDUE || b.y2 - b.y1 < MIN_ETENDUE)
         return {refus:ref + " : polygone sans étendue — des points alignés ne "+
                       "font pas une surface."};
       quoi = pts.length + " sommets, encombrement " + nbp(b.x2 - b.x1, 3) +
              " × " + nbp(b.y2 - b.y1, 3) + " mm";
     }
     else if(genre === "piste"){
-      const pts = iaPoints(brut.pts || brut.points);
+      const pts = pointsLus(brut.pts || brut.points);
       if(!pts)
         return {refus:ref + " : « pts » doit être une liste de paires [x, y] "+
                       "finies et bornées."};
       if(pts.length < 2)
         return {refus:ref + " : une piste demande au moins deux points."};
-      if(pts.length > IA_PTS_MAX)
+      if(pts.length > PTS_MAX)
         return {refus:ref + " : " + pts.length + " points, le garde-fou est "+
-                      "à " + IA_PTS_MAX + "."};
-      const w = iaNombre(brut.w != null ? brut.w : brut.largeur);
-      if(!(w >= IA_MIN_ETENDUE) || w > IA_COORD_MAX)
+                      "à " + PTS_MAX + "."};
+      const w = nombreFini(brut.w != null ? brut.w : brut.largeur);
+      if(!(w >= MIN_ETENDUE) || w > COORD_MAX)
         return {refus:ref + " : une piste demande une largeur « w » d'au "+
-                      "moins " + nbp(IA_MIN_ETENDUE, 3) + " mm."};
+                      "moins " + nbp(MIN_ETENDUE, 3) + " mm."};
       el.pts = pts; el.w = +w.toFixed(4);
       let lg = 0;
       for(let i = 0; i + 1 < pts.length; i++)
@@ -533,8 +538,8 @@ const CARTES_ANTENNA = (function(){
              " mm (" + pts.length + " points)";
     }
     else{                                                        /* un via */
-      const x = iaCoord(brut.x), y = iaCoord(brut.y),
-            d = iaNombre(brut.d != null ? brut.d : brut.diametre);
+      const x = coordonnee(brut.x), y = coordonnee(brut.y),
+            d = nombreFini(brut.d != null ? brut.d : brut.diametre);
       if(!isFinite(x) || !isFinite(y))
         return {refus:ref + " : un via demande x et y."};
       if(!(d >= 0.05) || d > 50)
@@ -560,7 +565,7 @@ const CARTES_ANTENNA = (function(){
      toujours de w/2, et l'avis se serait allumé sur presque chaque
      proposition. Un avis qui se déclenche tout le temps ne se lit plus. On
      juge donc une piste sur son AXE, qui est ce que l'on cote. */
-  function iaBoiteJugee(el){
+  function boiteJugee(el){
     if(el.type !== "piste") return conBoite(el);
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
     for(const q of el.pts){
@@ -594,7 +599,7 @@ const CARTES_ANTENNA = (function(){
     let L = CON.carte.L, W = CON.carte.W;
     let ligneCarte = null;
     if(brut.carte && typeof brut.carte === "object"){
-      const nL = iaNombre(brut.carte.L), nW = iaNombre(brut.carte.W);
+      const nL = nombreFini(brut.carte.L), nW = nombreFini(brut.carte.W);
       if(!(nL >= 1 && nL <= 2000) || !(nW >= 1 && nW <= 2000)){
         p.refus.push("La carte proposée sort des bornes du mode conception "+
                      "(1 à 2000 mm de côté) : elle n'est pas posée.");
@@ -620,23 +625,23 @@ const CARTES_ANTENNA = (function(){
                    "formes, et il n'y en a pas.");
       return p;
     }
-    if(src.length > IA_FORMES_MAX){
+    if(src.length > FORMES_MAX){
       p.refus.push(src.length + " formes : le garde-fou est à " +
-                   IA_FORMES_MAX + ". Au-delà, ce n'est plus une proposition "+
+                   FORMES_MAX + ". Au-delà, ce n'est plus une proposition "+
                    "qu'on relit avant de presser.");
       return p;
     }
 
     let dehors = 0;
     src.forEach(function(f, i){
-      const r = iaForme(f, i);
+      const r = formeLue(f, i);
       if(r.refus){ p.refus.push(r.refus); return; }
       /* DU CUIVRE HORS DU SUBSTRAT N'EST PAS UNE ANTENNE : il flotte dans
          l'air du volume de calcul, il rayonne, et rien sur la courbe ne dira
          d'où vient ce qu'on lit. Entièrement dehors, on refuse ; à cheval sur
          le bord, on pose et on le DIT — un brin qui dépasse du substrat est
          parfois voulu, et c'est à qui lit la carte d'en décider. */
-      const b = iaBoiteJugee(r.el);
+      const b = boiteJugee(r.el);
       if(b.x2 < 0 || b.x1 > L || b.y2 < 0 || b.y1 > W){
         p.refus.push("forme " + (i + 1) + " : entièrement hors de la carte "+
                      "(x de 0 à " + nbp(L, 3) + ", y de 0 à " + nbp(W, 3) +
@@ -655,8 +660,8 @@ const CARTES_ANTENNA = (function(){
        qui la justifie. Il s'applique et se défait avec la même carte. */
     let lignePort = null;
     if(brut.port && typeof brut.port === "object"){
-      const px = iaCoord(brut.port.x), py = iaCoord(brut.port.y),
-            pw = iaNombre(brut.port.w), pl = iaNombre(brut.port.l);
+      const px = coordonnee(brut.port.x), py = coordonnee(brut.port.y),
+            pw = nombreFini(brut.port.w), pl = nombreFini(brut.port.l);
       if(cu.length < 2)
         p.refus.push("Un port vertical relie deux couches ; l'empilage n'en "+
                      "porte qu'une.");
@@ -1065,7 +1070,7 @@ const CARTES_ANTENNA = (function(){
     /* -- 3 bis. une couche déclarée masse qui ne porte rien -------------- */
     /* LE CAS DU DIPÔLE IMPRIMÉ EN GÉOMÉTRIE LIBRE. `conRoleSeconde()` met la
        seconde couche en « signal » pour les motifs qui le savent ; une carte
-       « formes » ne touche pas aux rôles — `IA_CHAMPS` n'en porte aucun, et
+       « formes » ne touche pas aux rôles — `CHAMPS` n'en porte aucun, et
        c'est voulu : une carte qui changerait un plan de masse en signal ferait
        disparaître une masse sans qu'aucune ligne ne le dise. La seconde couche
        reste donc « masse » d'usine sur une antenne qui n'en a pas. On le
@@ -1285,33 +1290,10 @@ const CARTES_ANTENNA = (function(){
   }
 
 
-  /* ==========================================================================
-     LA CONSIGNE ENVOYÉE AU MODÈLE
-     --------------------------------------------------------------------------
-     Elle est écrite ici, en toutes lettres, pour qu'on puisse la relire : ce
-     qu'un assistant a le droit de dire et de proposer est une décision de
-     l'outil, pas un réglage caché.
 
-     LA LISTE DES CHEMINS EST ENGENDRÉE À PARTIR DE `IA_CHAMPS`. Une liste
-     recopiée à la main aurait dérivé dès le premier champ ajouté, et le modèle
-     aurait proposé des réglages que la page refuse — ce qui ressemble beaucoup
-     à un modèle qui se trompe, et n'en est pas un.
-     ========================================================================== */
-  function grammaire(){
-    const l = [];
-    for(const c in IA_CHAMPS){
-      const d = IA_CHAMPS[c];
-      let borne;
-      if(d.bool) borne = "oui/non";
-      else if(d.choix) borne = d.choix.join(" | ");
-      else borne = nbp(d.min, 4) + " .. " + nbp(d.max, 4) + (d.u ? (" " + d.u) : "");
-      l.push("  " + c + "  (" + d.nom + " ; " + borne + ")");
-    }
-    return l.join("\n");
-  }
 
   return {
-    CHAMPS: IA_CHAMPS, FORMES_MAX: IA_FORMES_MAX, PTS_MAX: IA_PTS_MAX,
-    resoudre, valider, valeurTexte, proposition, appliquer, annuler, controles, grammaire
+    CHAMPS, FORMES_MAX, PTS_MAX,
+    resoudre, valider, valeurTexte, proposition, appliquer, annuler, controles
   };
 })();

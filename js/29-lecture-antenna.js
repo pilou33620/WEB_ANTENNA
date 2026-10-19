@@ -1,11 +1,10 @@
 "use strict";
 /* =============================================================================
    Antenne openEMS — 29-lecture-antenna.js
-   Les lectures de la page : le contexte et les outils de lecture de
-   l'assistant (30-ia.js), sortis tels quels pour que le canal de pilotage de
-   web_suite s'en serve aussi (module registre-antenna). Leur texte ne change
-   pas : le banc le compare à un relevé pris avant le déplacement. Script
-   classique, chargé avant 30-ia.js, qui reprend tout depuis LECTURE_ANTENNA.
+   Les lectures de la page : le contexte et les outils de lecture, servis au
+   canal de pilotage de web_suite (antenna_lire, module registre-antenna). Ils
+   viennent de l'ancien assistant IA ; leur texte ne change pas : le banc le
+   compare à un relevé pris avant le déplacement.
    Spec : web_suite/lanceur/docs/SPEC-mcp-registre-antenna.md.
    ========================================================================== */
 
