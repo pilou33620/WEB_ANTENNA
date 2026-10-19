@@ -3322,11 +3322,77 @@ console.log("10. Le canal de pilotage");
     try{ D.annuler({carte:{type:"cotes"}}, jc); }catch(e){ refusCotes=e.message; }
     verifie("cotes avec motif redessine : Annuler refuse en le disant", /motif/.test(refusCotes));
   }finally{ window.iaProposition=vraiP; window.iaAppliquer=vraiA; }
-  }finally{ Object.assign(global, vrais); }
-})();
+
+  /* antenna_lire : les lectures de la page, sans rien ecrire ni lancer. Les fonctions de
+     lancement sont remplacees par des pieges le temps de l'essai. */
+  const L=PIL.antenna_lire;
+  verifie("antenna_lire est une lecture", !!L&&!L.ecriture&&typeof L.executer==="function");
+  const pieges={}, lance=[];
+  for(const n of ["antLancer","antLancerBalayage","antLancerTableauS"]){ pieges[n]=global[n]; global[n]=()=>{lance.push(n);}; }
+  const lire=async a=>{ try{ return await L.executer(a); }catch(e){ return "REFUS "+e.message; } };
+  const instantane=()=>JSON.stringify([ANT.bande,ANT.ports,ANT.boite,ANT.maillage,ANT.arret,ANT.balayage,ANT.resultat,
+                                       CON.actif,CON.carte,CON.elements,CON_HIST.pile.length,typeof PRJ!=="undefined"?PRJ.modifie:null]);
+  return (async()=>{
+    const resGarde=ANT.resultat, vGarde=global.V;
+    try{
+      const f=[], s11=[], vswr=[], zr=[], zi=[], c21=[];
+      for(let k=0;k<450;k++){ f.push(2.3e9+1e6*k); s11.push(-3-20/(1+Math.pow((k-150)/10,2))); vswr.push(1.5); zr.push(50); zi.push(-5); c21.push(-25); }
+      ANT.resultat={f, s11_db:s11, vswr, z_re:zr, z_im:zi, f0:2.45e9, s11_min_db:-23, z0_re:48.2, z0_im:-3.1, bp_f1:2.44e9, bp_f2:2.46e9,
+                    nf2ff:{dmax_dbi:5.25, rendement:0.81}, couplages:{"21":{db:c21, db_f0:-25, pire_db:-21}}};
+      ANT.bande.fcible=2.45e9;
+      const avant=instantane();
+      const conc=await lire({quoi:"conception"});
+      verifie("antenna_lire conception : le contexte de l'assistant", conc===LECTURE_ANTENNA.contexte()&&conc.indexOf("===")>=0, conc.slice(0,80));
+      const res=await lire({quoi:"resultats"});
+      verifie("antenna_lire resultats : f0, S11, Z, bande, Dmax, couplage",
+              /^Résonance f0 : 2\.45 GHz \(cible 2\.45 GHz, écart 0 %\)/.test(res)&&/S11 minimal : -23 dB/.test(res)&&
+              /Impédance à f0 : 48\.2 - j3\.1 ohms/.test(res)&&/Dmax 5\.25 dBi/.test(res)&&/Couplage 21 : -25 dB/.test(res), res);
+      const c=(await lire({quoi:"courbe", grandeur:"s11"})).split("\n");
+      verifie("antenna_lire courbe : 200 points au plus, sous-echantillonnee au-dela",
+              c[0]==="f (Hz); S11 (dB)"&&c.length<=202&&/450 points ; un sur 3/.test(c[c.length-1]), c.length+" | "+c[c.length-1]);
+      verifie("antenna_lire courbe z : partie reelle et imaginaire",
+              (await lire({quoi:"courbe", grandeur:"z"})).split("\n")[0]==="f (Hz); R (ohms); X (ohms)");
+      verifie("antenna_lire courbe s21 : le couplage", /S21 \(dB\)/.test(await lire({quoi:"courbe", grandeur:"s21"})));
+      verifie("une grandeur inconnue est refusee", /REFUS « grandeur »/.test(await lire({quoi:"courbe", grandeur:"phase"})));
+      verifie("pas de balayage termine : refus clair", /REFUS Aucun balayage/.test(await lire({quoi:"balayage"})));
+      const reg=await lire({quoi:"reglages", filtre:"bande"});
+      verifie("antenna_lire reglages : chemins, valeurs, unites, bornes",
+              /^- bande\.f1 = 2400000000 \(Hz\) : début de bande ; de 1000000 à 300000000000$/m.test(reg)&&!/boite\./.test(reg), reg);
+      antPortAjouter();
+      verifie("les chemins « .N » valent pour chaque port",
+              /^- ports\.0\.R = /m.test(await lire({quoi:"reglages", filtre:"ports."}))&&/^- ports\.1\.R = /m.test(await lire({quoi:"reglages", filtre:"ports."})));
+      antPortRetirer(1);
+      const aud=await lire({quoi:"audit"});
+      const cartes=aud.split("\n").filter(x=>/^  carte pour antenna_proposer : /.test(x));
+      verifie("antenna_lire audit : les controles, et leurs cartes acceptees par antenna_proposer",
+              cartes.length>0&&cartes
+                 .every(x=>{ const pr=window.iaProposition(JSON.parse(x.replace(/^  carte pour antenna_proposer : /,""))); return !!pr; })&&
+              (/^- \[/m.test(aud)||/Aucun contrôle/.test(aud)), aud.slice(0,200));
+      const mGarde=V.modele; V.modele=null;           // une section plus haut laisse un modele vide
+      verifie("sans carte importee : refus clair", /REFUS Pas de carte importée/.test(await lire({quoi:"composants"})));
+      V.modele=mGarde;
+      global.V=window.V={unite:"mm", couches:[{nom:"TOP"}], parNet:[], sel:[], fichier:"x",
+                         modele:{composants:[{ref:"U1", val:"NRF52", pkg:"QFN", part:"", c:0, x:0, y:0, r:0, pins:[]}]}};
+      const conGarde=CON.actif; CON.actif=false;
+      verifie("avec une carte importee : composant", /^U1 = NRF52 \(QFN\)/.test(await lire({quoi:"composant", ref:"u1"})));
+      CON.actif=conGarde;
+      verifie("un quoi inconnu est refuse en donnant la liste", /REFUS « quoi » inconnu : conception, resultats/.test(await lire({quoi:"tout"})));
+      verifie("aucune lecture n'ecrit", instantane()===avant);
+      verifie("aucune lecture ne lance de calcul", lance.length===0, lance.join(", "));
+      ANT.resultat=null;
+      verifie("sans resultat : refus qui dit de lancer depuis la page", /REFUS Pas de résultat dans la page : lance un calcul depuis la page/.test(await lire({quoi:"resultats"})));
+    }finally{
+      ANT.resultat=resGarde; global.V=window.V=vGarde;
+      for(const n of Object.keys(pieges)) global[n]=pieges[n];
+      Object.assign(global, vrais);
+    }
+  })();
+  }catch(e){ Object.assign(global, vrais); throw e; }
+})().then(()=>{
 
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")
                                             :"toutes passees."));
 process.exit(ko.length?1:0);
 
+});

@@ -480,7 +480,118 @@ const LECTURE_ANTENNA = (function(){
     return S[k - 1] + (S[k] - S[k - 1]) * (fc - F[k - 1]) / (F[k] - F[k - 1]);
   }
 
-  return { contexte: extraireContexteOpenems, carte: OUTILS_CARTE, balayage: OUTIL_BALAYAGE,
+  /* ==========================================================================
+     LES LECTURES DU CANAL DE PILOTAGE (web_suite, antenna_lire)
+     --------------------------------------------------------------------------
+     En plus du contexte et des outils ci-dessus : le résultat regardé, ses
+     courbes, l'audit hors ligne et les réglages de la liste blanche. Rien n'est
+     écrit, rien n'est lancé. L'audit et la liste blanche vivent encore dans
+     30-ia.js : ils sont lus au moment de l'appel (window.iaControles, IA_CHAMPS).
+     Un refus est une Error, que le canal rend en clair.
+     ========================================================================== */
+  const PAS_DE_RESULTAT = "Pas de résultat dans la page : lance un calcul depuis la page (jamais depuis Claude).";
+
+  function resultatsLignes(){
+    const r = resultatCourant();
+    if(!r || !Array.isArray(r.f)) throw new Error(PAS_DE_RESULTAT);
+    const fc = (typeof ANT !== "undefined" && ANT.bande) ? ANT.bande.fcible : NaN;
+    const L = ["Résonance f0 : " + fHz(r.f0) +
+               (fc > 0 && isFinite(r.f0) ? " (cible " + fHz(fc) + ", écart " + nbp((r.f0 - fc) / fc * 100, 2) + " %)" : ""),
+               "S11 minimal : " + nbp(r.s11_min_db, 2) + " dB" + (fc > 0 ? " ; à la cible : " + nbp(s11ALaCible(r, fc), 2) + " dB" : "")];
+    if(isFinite(r.z0_re))
+      L.push("Impédance à f0 : " + nbp(r.z0_re, 1) + (r.z0_im < 0 ? " - j" : " + j") + nbp(Math.abs(r.z0_im), 1) + " ohms");
+    if(isFinite(r.bp_f1) && isFinite(r.bp_f2)) L.push("Bande à -10 dB : " + fHz(r.bp_f1) + " à " + fHz(r.bp_f2));
+    if(r.nf2ff) L.push("Rayonnement : Dmax " + nbp(r.nf2ff.dmax_dbi, 2) + " dBi" +
+                       (isFinite(r.nf2ff.rendement) ? ", rendement " + nbp(r.nf2ff.rendement, 3) : ""));
+    for(const n of Object.keys(r.couplages || {}))
+      L.push("Couplage " + n + " : " + nbp(r.couplages[n].db_f0, 2) + " dB à la résonance, pire " + nbp(r.couplages[n].pire_db, 2) + " dB");
+    return L;
+  }
+
+  const GRANDEURS = {
+    s11: r => [["S11 (dB)", r.s11_db]],
+    roe: r => [["ROE", r.vswr]],
+    z:   r => [["R (ohms)", r.z_re], ["X (ohms)", r.z_im]],
+    s21: r => Object.keys(r.couplages || {}).map(n => ["S" + n + " (dB)", r.couplages[n].db])
+  };
+  const COURBE_MAX = 200;
+  function courbeLignes(grandeur){
+    if(!Object.prototype.hasOwnProperty.call(GRANDEURS, grandeur))
+      throw new Error("« grandeur » : " + Object.keys(GRANDEURS).join(", ") + ".");
+    const r = resultatCourant();
+    if(!r || !Array.isArray(r.f)) throw new Error(PAS_DE_RESULTAT);
+    const series = GRANDEURS[grandeur](r).filter(x => Array.isArray(x[1]));
+    if(!series.length) throw new Error("Pas de courbe « " + grandeur + " » dans ce résultat.");
+    const n = r.f.length, pas = Math.max(1, Math.ceil(n / COURBE_MAX));
+    const L = ["f (Hz); " + series.map(x => x[0]).join("; ")];
+    for(let k = 0; k < n; k += pas) L.push(nbp(r.f[k], 0) + "; " + series.map(x => nbp(x[1][k], 3)).join("; "));
+    if(pas > 1) L.push("... (" + n + " points ; un sur " + pas + " gardé)");
+    return L;
+  }
+
+  function auditLignes(){
+    if(typeof window === "undefined" || typeof window.iaControles !== "function") throw new Error("L'audit n'est pas chargé dans cette page.");
+    const c = window.iaControles();
+    if(!c.length) return ["Aucun contrôle ne signale rien."];
+    const L = [];
+    for(const a of c){
+      L.push("- [" + a.rang + "] " + a.titre + " : " + a.texte);
+      if(a.prop) L.push("  carte pour antenna_proposer : " + JSON.stringify(a.prop));
+    }
+    return borner(L, 150, "lignes d'audit");
+  }
+
+  /* Les chemins « .N » valent pour chaque élément de la liste (ports, couches dessinées). */
+  function cheminsDe(chemin){
+    const i = chemin.indexOf(".N");
+    if(i < 0) return [chemin];
+    const bouts = chemin.slice(0, i).split(".");
+    let liste = bouts[0] === "con" ? (typeof CON !== "undefined" ? CON : null) : ANT;
+    for(const b of (bouts[0] === "con" ? bouts.slice(1) : bouts)) liste = liste == null ? null : liste[b];
+    if(!Array.isArray(liste)) return [];
+    return liste.map((_, k) => chemin.slice(0, i) + "." + k + chemin.slice(i + 2));
+  }
+  function reglagesLignes(filtre){
+    const champs = typeof window !== "undefined" ? window.IA_CHAMPS : null, resoudre = champs && window.iaResoudre;
+    if(!champs || typeof resoudre !== "function") throw new Error("La liste des réglages n'est pas chargée dans cette page.");
+    const L = [];
+    for(const chemin of Object.keys(champs)){
+      const d = champs[chemin];
+      for(const c of cheminsDe(chemin)){
+        if(!contient(filtre, c, d.nom)) continue;
+        const r = resoudre(c);
+        if(r.refus) continue;                        // hors du mode conception, ou couche sans objet
+        L.push("- " + c + " = " + JSON.stringify(r.obj[r.cle]) + (d.u ? " (" + d.u + ")" : "") + " : " + d.nom +
+               (d.choix ? " ; choix : " + d.choix.join(", ") : (d.min != null ? " ; de " + d.min + " à " + d.max : "")));
+      }
+    }
+    return L.length ? borner(L, 150, "réglages") : ["Aucun réglage ne correspond."];
+  }
+
+  function carteImportee(){
+    return typeof V !== "undefined" && V.modele && !(typeof CON !== "undefined" && CON.actif);
+  }
+  /* antenna_lire : le texte rendu au canal, en lignes. */
+  function lire(quoi, a){
+    a = a || {};
+    if(quoi === "conception") return extraireContexteOpenems();
+    if(quoi === "resultats") return resultatsLignes().join("\n");
+    if(quoi === "courbe") return courbeLignes(a.grandeur || "s11").join("\n");
+    if(quoi === "balayage"){
+      const rb = balayageTermine();
+      if(!rb) throw new Error("Aucun balayage terminé dans la page.");
+      return tableauBalayage(rb).join("\n");
+    }
+    if(quoi === "audit") return auditLignes().join("\n");
+    if(quoi === "reglages") return reglagesLignes(a.filtre).join("\n");
+    if(Object.prototype.hasOwnProperty.call(OUTILS_CARTE, quoi)){
+      if(!carteImportee()) throw new Error("Pas de carte importée dans la page (mode conception, ou aucun fichier ouvert).");
+      return [].concat(OUTILS_CARTE[quoi].fn(a)).join("\n");
+    }
+    throw new Error("« quoi » inconnu : conception, resultats, courbe, balayage, audit, reglages, " + Object.keys(OUTILS_CARTE).join(", ") + ".");
+  }
+
+  return { contexte: extraireContexteOpenems, carte: OUTILS_CARTE, balayage: OUTIL_BALAYAGE, lire,
            aides: { nb, nbp, fHz, uniteDoc, contient, borner, balayageTermine, tableauBalayage,
                     resultatCourant, s11ALaCible } };
 })();

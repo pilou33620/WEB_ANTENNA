@@ -77,4 +77,6 @@ function piloteAntenna(){
   Pilote.declarer({page:"antenna", projet:() => (typeof PRJ !== "undefined" ? PRJ.nom : "")});
   Pilote.capture(() => document.getElementById("carte"));
   Pilote.commande("antenna_proposer", PILOTE_ANTENNA);
+  // les lectures (js/29-lecture-antenna.js) : rien d'écrit, rien de lancé
+  Pilote.commande("antenna_lire", {executer:async a => LECTURE_ANTENNA.lire(a.quoi, a)});
 }
