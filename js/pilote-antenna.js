@@ -43,7 +43,11 @@ const PILOTE_ANTENNA = {
   ecriture:true,
   proposer:function(a){
     const p = piloteAntennaProposition(a.carte);
-    const lignes = p.lignes.map(l => (l.nom || l.chemin) + " : " + String(l.avant) + " → " + String(l.apres));
+    // les valeurs comme la page les écrit (unités, « au mailleur de décider »), puis chaque forme
+    // posée et les avis : c'est ce que l'utilisateur doit avoir lu avant de cliquer
+    const t = (l, v) => l.texte || !l.descr ? String(v) : CARTES_ANTENNA.valeurTexte(l.descr, v);
+    const lignes = p.lignes.map(l => (l.nom || l.chemin) + " : " + t(l, l.avant) + " → " + t(l, l.apres));
+    lignes.push(...(p.detail || []).map(x => "· " + x), ...(p.avis || []).map(x => "ⓘ " + x));
     if(p.refus && p.refus.length) lignes.push("Refusé : " + p.refus.join(" ; "));
     return {titre:p.titre || ("Carte " + p.type), details:lignes.join("\n"), attendu:piloteAntennaAttendu(p)};
   },

@@ -145,7 +145,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── carte-antenne.py    fabrique une carte d'essai IPC-2581
 │   ├── patch-2450.xml      … celle qu'elle produit
 │   ├── banc-polygones.js   le découpage des découpes, cas dégénérés compris
-│   └── banc-interface.js   ports, balayage, unités, liste blanche de l'IA, classification nets, robustesse
+│   └── banc-interface.js   ports, balayage, unités, liste blanche des cartes d'action, classification nets, robustesse
 ├── env/                    l'environnement virtuel Python (dépendances pip)
 └── openEMS/                les binaires du solveur (à télécharger, voir « Installation »)
 ```
@@ -1616,8 +1616,8 @@ face de l'après :
 
 Ce qui est **refusé est affiché aussi** : une proposition à moitié valable dont
 la moitié fautive disparaîtrait donnerait une carte qui ne fait pas ce que le
-texte à côté vient d'expliquer. Ce qui est appliqué devient `✓ 2 réglage(s)
-appliqué(s)` et **reste annulable** par le bouton de la carte — un
+texte à côté vient d'expliquer. Ce qui est appliqué **reste annulable** par le
+bouton « Annuler » de la carte, tant que rien n'a bougé depuis — un
 réglage de simulation n'a pas d'historique comme le dessin, et sans ce bouton
 il faudrait retrouver la valeur d'avant à la main.
 
@@ -1671,16 +1671,16 @@ et rien d'entièrement hors carte — **du cuivre hors substrat flotte dans l'ai
 du volume de calcul, il rayonne, et rien sur la courbe ne dira d'où vient ce
 qu'on lit**. Ce qui n'est pas refusé mais qu'on regretterait de ne pas avoir lu
 — du cuivre qui affleure le bord, un dessin qui va être effacé, un port absent
-— est dit dans un avis bleu, distinct du refus jaune. Une piste, elle, se juge
+— est dit dans un avis (ⓘ), distinct du refus. Une piste, elle, se juge
 sur son **axe** et non sur sa largeur : une ligne d'alimentation qui vient
 mourir au bord de carte — ce que font les six motifs — aurait sinon débordé de
 w/2 à chaque fois, et un avis qui se déclenche toujours ne se lit plus.
 
 Appliquer garde l'état d'avant **en entier** — les formes, la carte, la fiche
-de motif, et la pose de tous les ports — pour que le bouton « Annuler » défasse
-cette carte-là et elle seule, même si trois formes ont été dessinées à la main
-entre-temps ; le Ctrl+Z du mode conception, lui, ne saurait pas faire la
-différence.
+de motif, et la pose de tous les ports — pour que le bouton « Annuler » de la
+carte le remette. Il refuse si le dessin a bougé depuis : remettre l'état
+d'avant effacerait ce qui a été fait entre-temps, et le Ctrl+Z du mode
+conception reste là pour défaire à la main.
 
 **Un motif reste préférable dès qu'il en existe un**, et le savoir métier de
 Claude le dit dans ces termes : un motif calcule ses cotes, tient une fiche, se repose et se

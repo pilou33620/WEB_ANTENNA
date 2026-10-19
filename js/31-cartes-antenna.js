@@ -1293,7 +1293,7 @@ const CARTES_ANTENNA = (function(){
 
 
   return {
-    CHAMPS, FORMES_MAX, PTS_MAX,
+    CHAMPS,
     resoudre, valider, valeurTexte, proposition, appliquer, annuler, controles
   };
 })();

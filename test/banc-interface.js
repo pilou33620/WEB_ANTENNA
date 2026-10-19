@@ -3142,9 +3142,30 @@ console.log("10. Le canal de pilotage");
   const carte={type:"reglages", titre:"Recentrer", valeurs:{"bande.f1":2.08e9, "bande.f9":1}};
   const prop=D.proposer({carte});
   verifie("la carte montre l'avant, l'apres, et ce qui est refuse",
-          prop.titre==="Recentrer"&&/2\.4e\+?9|2400000000/.test(prop.details)&&
-          /2\.08e\+?9|2080000000/.test(prop.details)&&/f9/.test(prop.details));
+          prop.titre==="Recentrer"&&/2[.,]4 GHz/.test(prop.details)&&
+          /2[.,]08 GHz/.test(prop.details)&&/f9/.test(prop.details), prop.details);
   verifie("proposer n'ecrit rien", ANT.bande.f1===2.4e9);
+  /* la carte montre aussi chaque forme posee et les avis (dessin efface, port absent) */
+  {
+    const vraiP=CARTES_ANTENNA.proposition;
+    CARTES_ANTENNA.proposition=()=>({type:"formes", titre:"Formes", refus:[],
+      lignes:[{chemin:"formes", nom:"formes dessinees", texte:true, avant:"0", apres:"2"}],
+      detail:["rectangle · Cuivre dessus · 4 × 8 mm"], avis:["Aucun port n'est pose"]});
+    try{
+      const pf=D.proposer({carte:{type:"formes"}});
+      verifie("la carte d'une geometrie libre liste ses formes et ses avis",
+              /formes dessinees : 0 → 2/.test(pf.details)&&/· rectangle/.test(pf.details)&&/ⓘ Aucun port/.test(pf.details),
+              pf.details);
+    }finally{ CARTES_ANTENNA.proposition=vraiP; }
+  }
+  /* la lecture des reglages ne montre que des chemins de la liste blanche, et elle les montre */
+  {
+    const lus=LECTURE_ANTENNA.lire("reglages",{}).split("\n").filter(l=>l.startsWith("- "))
+      .map(l=>l.slice(2).split(" = ")[0].replace(/\.\d+(\.|$)/g,".N$1"));
+    verifie("antenna_lire reglages : la liste blanche, et elle seule",
+            lus.length>10&&lus.every(c=>Object.prototype.hasOwnProperty.call(CARTES_ANTENNA.CHAMPS,c))&&
+            lus.includes("bande.f1"), lus.filter(c=>!CARTES_ANTENNA.CHAMPS[c]).join(", "));
+  }
   const avant=D.etat(), jeton=D.appliquer({carte}), apres=D.etat();
   verifie("appliquer ecrit, et l'etat le voit", ANT.bande.f1===2.08e9&&apres!==avant);
   D.annuler({carte}, jeton);
