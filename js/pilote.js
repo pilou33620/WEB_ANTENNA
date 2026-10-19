@@ -200,7 +200,8 @@
       // proposer peut lire avant de montrer la carte (liste de fichiers) : un rejet remonte en « echouee »
       const prop = (await def.proposer(args)) || {};
       const carte = { id: c.id, nom: c.nom, def, args, prop, etat: "proposee", jeton: undefined, apres: null };
-      if (P.interrupteur) {
+      // « clic » : la carte attend toujours le clic, même interrupteur allumé (une écriture partagée)
+      if (P.interrupteur && !def.clic) {
         appliquer(carte, true);
       } else {
         dessinerCarte(carte);
