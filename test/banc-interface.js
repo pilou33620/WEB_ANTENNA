@@ -1253,6 +1253,7 @@ global.antMaj=function(){};
 global.antAssistantRendre=function(){};
 global.btoa=s=>Buffer.from(s,"binary").toString("base64");
 global.atob=s=>Buffer.from(s,"base64").toString("binary");
+charger("29-lecture-antenna.js");
 charger("30-ia.js");
 
 const iaResoudre=window.iaResoudre, iaValider=window.iaValider,
@@ -1656,6 +1657,36 @@ const IA_MDL=ANT.modele; ANT.modele=null;   // le faux modele d'un essai plus ha
 const IA_CTX=window.iaContexte();
 const IA_TAB=window.iaOutils().balayage.fn({});
 ANT.modele=IA_MDL;
+/* LES LECTURES DU CANAL DE PILOTAGE (web_suite, registre-antenna) sont celles de
+   l'assistant, sorties de 30-ia.js : leur texte doit rester le meme au caractere
+   pres. Le releve a ete pris AVANT le deplacement (RELEVE=1 l'ecrit), sur ce
+   balayage, sur le faux modele d'un essai plus haut, et sur une petite carte
+   importee faite a la main pour les outils de la carte. */
+{
+  const FIX=path.join(__dirname,"releve-lecture-antenna.json"), vu={};
+  const garde={V:global.V, nets:ANT.nets, con:CON.actif};
+  ANT.modele=null;                           // le faux modele d'un essai plus haut ne se lit pas
+  vu.contexte_balayage=window.iaContexte();
+  global.V=window.V={unite:"mm", fichier:"carte.xml", sel:[],
+    couches:[{nom:"TOP"},{nom:"BOTTOM"}],
+    parNet:[{i:0, nom:"GND", classe:"Masse", longueur:12.3456, couches:new Set([0,1]), pistes:[1,2], arcs:[], plans:[1], pads:[1,2,3], trous:[1]},
+            {i:1, nom:"ANT", classe:"RF", longueur:0, couches:new Set([0]), pistes:[], arcs:[], plans:[], pads:[1], trous:[]}],
+    modele:{composants:[{ref:"U1", val:"NRF52", pkg:"QFN-48", part:"NRF52832", c:0, x:1, y:2, r:90, pins:[{num:"1", n:0},{num:"2", n:null}]},
+                        {ref:"J1", val:"SMA", pkg:"", part:"", c:1, x:5, y:6, r:0, pins:[{num:"1", n:1},{num:"2", n:0}]}]}};
+  ANT.nets=new Set([1]); CON.actif=false;  // la carte importee : hors du mode conception
+  vu.contexte_carte=window.iaContexte();
+  const o=window.iaOutils();
+  for(const [cle,nom,a] of [["composants","composants",{}],["composants_u","composants",{filtre:"u"}],["composant","composant",{ref:"u1"}],
+                            ["composant_x","composant",{ref:"X9"}],["nets","nets",{}],["net","net",{nom:"gnd"}],["net_x","net",{nom:"Z"}],
+                            ["balayage","balayage",{}]])
+    vu[cle]=o[nom]?[].concat(o[nom].fn(a)).join("\n"):"(outil absent)";
+  global.V=window.V=garde.V; ANT.nets=garde.nets; ANT.modele=IA_MDL; CON.actif=garde.con;
+  if(process.env.RELEVE==="1")fs.writeFileSync(FIX,JSON.stringify(vu,null,1)+"\n");
+  const att=JSON.parse(fs.readFileSync(FIX,"utf8"));
+  verifie("lectures de l'assistant : sorties identiques au releve pris avant le deplacement",
+          JSON.stringify(vu)===JSON.stringify(att),
+          Object.keys(att).filter(k=>att[k]!==vu[k]).join(", "));
+}
 verifie("le contexte annonce le balayage et renvoie a l'outil, sans le tableau",
         IA_CTX.indexOf("=== BALAYAGE TERMINE : 3 POINTS")>=0&&
         IA_CTX.indexOf("outil « balayage »")>=0&&IA_CTX.indexOf("S11 a 2.45 GHz")<0,
