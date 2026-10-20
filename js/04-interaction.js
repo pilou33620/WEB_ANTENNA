@@ -70,6 +70,7 @@ function couchesDesignation(){
    cadre — elle passe donc en dernier, sinon elle avalerait tout ce qu'elle
    contient. */
 function designer(wx,wy){
+  if(!V.modele)return null;                 // aucune carte ouverte : rien à désigner
   const tol=PICK_PX/V.vue.scale;
   const ordre=couchesDesignation();
 

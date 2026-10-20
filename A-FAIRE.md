@@ -327,8 +327,6 @@ motif même quand l'antenne voulue s'en écarte.
 
 ### Pilotage par Claude (MCP de web_suite) — relevé du 19/10/2026
 
-- [ ] **Clic droit sans carte ouverte** → `TypeError` (`designer`, `js/04-interaction.js` : le
-  modèle est nul, lecture de `percages`). Antérieur au retrait de l'assistant ; une garde suffit.
 - [ ] **422 de `/api/openems` pendant le tutoriel** sur une page vide : une étape demande un
   chiffrage sans modèle. Antérieur au retrait.
 - [ ] **Essai réel des courbes** : `antenna_lire` (courbe) et `antenna_vue` (courbes) n'ont été
