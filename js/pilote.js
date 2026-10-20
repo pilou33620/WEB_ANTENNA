@@ -285,12 +285,61 @@
       return e;
     }
 
+    /* Place et masquage du panneau, gardés d'une visite à l'autre : il couvrait
+       les avis de la page, coin bas droit. Stockage refusé : rien de gardé. */
+    const PREF = "websuite.pilote.";
+    function pref(cle, val) {
+      try {
+        if (!env.stockage) return null;
+        if (val === undefined) return env.stockage.getItem(PREF + cle);
+        env.stockage.setItem(PREF + cle, val);
+      } catch (_) { /* navigation privée stricte */ }
+      return null;
+    }
+
     function construire() {
       if (panneau || !env.document || !env.document.body) return panneau;
       panneau = el("aside", "pilote");
+      const barre = el("div", "pilote-barre");
       const tete = el("button", "pilote-tete", "Claude");
       tete.type = "button";
-      tete.addEventListener("click", () => ouvrir(!panneau.classList.contains("ouvert")));
+      tete.title = "Ouvrir / replier — glisser pour déplacer";
+      /* Glisser la tête déplace le panneau ; un clic sans glisser l'ouvre. Ancré
+         en bas à droite (il grandit vers le haut) : on garde ses deux écarts. */
+      let glisse = null;
+      tete.addEventListener("pointerdown", e => {
+        const r = panneau.getBoundingClientRect ? panneau.getBoundingClientRect() : null;
+        if (!r) return;
+        glisse = { x: e.clientX, y: e.clientY, dr: r.right - e.clientX, db: r.bottom - e.clientY, bouge: false };
+        try { tete.setPointerCapture(e.pointerId); } catch (_) { /* pointeur déjà relâché */ }
+      });
+      tete.addEventListener("pointermove", e => {
+        if (!glisse || (!glisse.bouge && Math.hypot(e.clientX - glisse.x, e.clientY - glisse.y) < 5)) return;
+        glisse.bouge = true;
+        const f = env.fenetre || {};
+        const W = f.innerWidth || 1e4, H = f.innerHeight || 1e4;
+        const droite = Math.min(Math.max(0, W - e.clientX - glisse.dr), W - 60);
+        const bas = Math.min(Math.max(0, H - e.clientY - glisse.db), H - 30);
+        panneau.style.right = droite + "px";
+        panneau.style.bottom = bas + "px";
+      });
+      tete.addEventListener("pointerup", () => {
+        if (glisse && glisse.bouge) pref("place", panneau.style.right + " " + panneau.style.bottom);
+      });
+      tete.addEventListener("click", () => {
+        if (glisse && glisse.bouge) { glisse = null; return; }   // fin d'un glisser, pas un clic
+        glisse = null;
+        ouvrir(!panneau.classList.contains("ouvert"));
+      });
+      const masquer = el("button", "pilote-masquer", "×");
+      masquer.type = "button";
+      masquer.title = "Masquer — revient quand Claude propose une modification";
+      masquer.addEventListener("click", () => { panneau.classList.add("masque"); pref("masque", "1"); });
+      barre.appendChild(tete);
+      barre.appendChild(masquer);
+      const place = /^(\d+(?:\.\d+)?px) (\d+(?:\.\d+)?px)$/.exec(pref("place") || "");
+      if (place) { panneau.style.right = place[1]; panneau.style.bottom = place[2]; }
+      if (pref("masque") === "1") panneau.classList.add("masque");
       liste = el("div", "pilote-liste");
       liste.setAttribute("aria-live", "polite");
       const pied = el("label", "pilote-pied");
@@ -300,7 +349,7 @@
       inter.addEventListener("change", () => { P.interrupteur = !!inter.checked; if (P.relais) battre(false); });
       pied.appendChild(inter);
       pied.appendChild(el("span", "", "Appliquer directement (cet onglet)"));
-      panneau.appendChild(tete);
+      panneau.appendChild(barre);
       panneau.appendChild(liste);
       panneau.appendChild(pied);
       env.document.body.appendChild(panneau);
@@ -311,6 +360,8 @@
       if (!construire()) return;
       clearTimeout(minuteurRepli);
       panneau.classList.toggle("ouvert", !!oui);
+      // une carte à valider ne reste pas cachée : le panneau masqué revient
+      if (oui && panneau.classList.contains("masque")) { panneau.classList.remove("masque"); pref("masque", "0"); }
     }
 
     function replierPlusTard() {

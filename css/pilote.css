@@ -7,10 +7,19 @@
   max-width: min(360px, calc(100vw - 24px));
   font: 13px/1.4 system-ui, sans-serif; color: #e8e8ea;
 }
+.pilote.masque { display: none; }
+/* La tête se glisse pour déplacer le panneau ; × le masque */
+.pilote-barre { display: flex; justify-content: flex-end; align-items: center; gap: 4px; }
 .pilote-tete {
-  display: block; margin-left: auto; padding: 6px 12px; border: 1px solid #5b5bd6; border-radius: 16px;
-  background: #23233a; color: #e8e8ea; cursor: pointer; font: inherit;
+  display: block; padding: 6px 12px; border: 1px solid #5b5bd6; border-radius: 16px;
+  background: #23233a; color: #e8e8ea; cursor: grab; font: inherit; touch-action: none;
 }
+.pilote-tete:active { cursor: grabbing; }
+.pilote-masquer {
+  width: 22px; height: 22px; padding: 0; border: 1px solid #3a3a4a; border-radius: 50%;
+  background: #1b1b24; color: #9a9aac; cursor: pointer; font: inherit; line-height: 20px;
+}
+.pilote-masquer:hover { color: #e8e8ea; border-color: #5b5bd6; }
 .pilote-liste, .pilote-pied { display: none; }
 .pilote.ouvert .pilote-liste {
   display: block; max-height: 50vh; overflow: auto; margin-top: 6px; padding: 6px;
@@ -32,4 +41,4 @@
   margin: 6px 6px 0 0; padding: 4px 10px; border: 1px solid #5b5bd6; border-radius: 4px;
   background: #2f2f4a; color: #e8e8ea; cursor: pointer; font: inherit;
 }
-.pilote-bouton:focus-visible, .pilote-tete:focus-visible { outline: 2px solid #9a9aff; outline-offset: 2px; }
+.pilote-bouton:focus-visible, .pilote-tete:focus-visible, .pilote-masquer:focus-visible { outline: 2px solid #9a9aff; outline-offset: 2px; }
