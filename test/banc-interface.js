@@ -479,6 +479,12 @@ verifie("une empreinte egale au quart d'onde annule le meandre",
 const tN4=CON_MOTIF_MIFA.tracer(cx,Object.assign({},pMifa,{n:4}));
 verifie("doubler les replis ne change pas le developpe",
         Math.abs(mesure(tN4)-quart)<0.01, mesure(tN4).toFixed(4)+" mm");
+/* Le developpe vise (kd) allonge les dents, pas l'empreinte : c'est la cote
+   qui chiffre le couplage entre dents. */
+const tK=CON_MOTIF_MIFA.tracer(cx,Object.assign({},pMifa,{kd:140}));
+verifie("kd = 140 % allonge le developpe de 40 % a empreinte fixe",
+        Math.abs(mesure(tK)-1.4*quart)<0.01&&tK.carte.L===tMifa.carte.L,
+        mesure(tK).toFixed(4)+" pour "+(1.4*quart).toFixed(4)+" mm");
 verifie("le MIFA a un decroche de masse sous l'alimentation",
         tMifa.formes.some(f=>f.cu==="bas"&&f.trou&&f.type==="rect"));
 verifie("le port du MIFA est au fond du decroche",

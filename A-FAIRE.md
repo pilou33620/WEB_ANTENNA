@@ -325,6 +325,54 @@ c'est l'argument qui fait préférer un motif dès qu'il en existe un — et,
 depuis qu'on peut lui ajouter des formes sans perdre ses cotes, de partir d'un
 motif même quand l'antenne voulue s'en écarte.
 
+### Plans de mesure — arrêtés le 21/10/2026
+
+Ce qui reste ouvert sur la physique des antennes se tranche au solveur. Les
+plans sont arrêtés ; les calculs se lancent depuis la page (le balayage d'une
+cote de motif, croisé au besoin), et chaque relevé s'enregistre à la racine
+comme `croisement-*.json`. Sauf mention contraire : FR-4 1,53 mm, 2,45 GHz,
+réglages du croisement du patch.
+
+1. **MIFA — le couplage entre dents.** Le développé visé est devenu une cote,
+   `kd` (en % du quart d'onde, 100 par défaut) : à empreinte `Lx` fixe, il
+   allonge les dents et rien d'autre (vérifié par le banc). Croisement
+   **`kd` = 100 / 120 / 140 / 160 × `n` = 1 / 2 / 3**, soit 12 points. `n` = 4
+   est exclu : avec l'empreinte par défaut, l'écartement des brins devient
+   négatif. On lit ensuite `kd` pour 2,45 GHz en fonction de
+   l'écartement/largeur de bras, et le défaut de `kd` devient la loi qui en
+   sort, au lieu de 100. → `croisement-mifa-kd-n.json`.
+2. **Monopôle — la réactance de +16j.** Croisement **`wr` × 0,6 / 1 / 1,5 / 2
+   (du défaut) × `Lm` − 3 % / 0 / + 3 %**, soit 12 points : élargir le brin
+   abaisse aussi la résonance, d'où le croisement. On retient le `wr` où
+   Im Z ≈ 0 à la résonance, et le défaut de `wr` passe à ce rapport.
+   → `croisement-monopole-wr-Lm.json`.
+3. **Dipôle, monopôle, IFA — les facteurs tiennent-ils ?** Deux confirmations
+   par motif, aux cotes par défaut et sans croisement : **5,8 GHz sur FR-4
+   1,53 mm** et **2,45 GHz sur RO4003C 0,813 mm**, soit 6 points. Un écart de
+   résonance sous 2 % confirme le facteur ; au-delà, on mène le croisement de
+   ce motif à cette fréquence. → `validation-facteurs.json`.
+4. **Patch — les 15 Ω inductifs au pied.** Balayage fin de **`y₀` de − 1,5 à
+   0 mm sous le défaut corrigé, par pas de 0,25 mm**, soit 7 points (FR-4
+   1,6 mm, même document que `croisement-patch-2026-10.json`). Le point où
+   Im Z s'annule donne le recul à reporter sur la strate de `patchCorrRbord`.
+   → `balayage-patch-y0-fin.json`.
+5. **`AddMSLPort` — l'écart de + 1 %.** Le menu du port a deux essais :
+   « localisé + maillage du MSLPort » (`msl: "maillage"`, mêmes lignes que le
+   MSLPort sous un port localisé, 9 contre 9) et « MSLPort sans affinage »
+   (`msl: "grossier"`, 5 lignes au lieu de 9). Deux calculs sur le patch
+   d'essai, à comparer à 2,450 GHz (localisé) et 2,476 GHz (MSLPort).
+   * « maillage » vers 2,476 GHz **ou** « grossier » vers 2,450 GHz :
+     l'écart vient du maillage. C'est le port localisé qui est sous-maillé, et
+     le MSLPort peut devenir le défaut.
+   * Aucun des deux ne bouge : l'écart vient du port lui-même. Il reste alors
+     une option.
+6. ~~**Affichage : la dernière graduation chevauche « GHz ».**~~ — **fait le
+   21/10/2026** : elle tombait toujours en x₁, sous l'unité ; sa ligne reste,
+   son texte non.
+7. **Géométrie libre** — **décidé le 21/10/2026 : elle reste une limite.**
+   Partir d'un motif et lui ajouter des formes couvre le besoin (voir plus
+   haut, « Une géométrie entièrement libre… »).
+
 ### Pilotage par Claude (MCP de web_suite) — relevé du 19/10/2026
 
 - [x] **422 de `/api/openems` pendant le tutoriel** (21/10/2026) : la pose de l'exemple entre
@@ -334,7 +382,7 @@ motif même quand l'antenne voulue s'en écarte.
   0.0.37 compilé sous Linux, lancé depuis la page), puis lu par le MCP : `antenna_lire`
   resultats (f0 2,45 GHz, S11 −23,4 dB, 43,8 − j1,6 Ω, bande −10 dB 2,421–2,479 GHz,
   Dmax 5,84 dBi) et courbe ; `antenna_vue` S11 et impédance ; capture de la courbe juste.
-  Reste un détail d'affichage : la dernière graduation de fréquence chevauche « GHz ».
+  Le détail d'affichage (la dernière graduation qui chevauchait « GHz ») est corrigé le 21/10/2026.
 - [x] **Banc** (21/10/2026) : les noms hérités de l'assistant sont renommés (`CARTE_*`,
   `carteCourbe`, `carteMasseVide`…).
 - [x] **Vue de Claude et enregistrement** (21/10/2026) : l'étape montrée par `antenna_vue` n'est

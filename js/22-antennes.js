@@ -865,7 +865,13 @@ const CON_MOTIF_MIFA={
           "Synthétisé à 50 Ω, il faisait 3 mm de large à 1,6 mm du "+
           "court-circuit, et les deux se touchaient"},
     {id:"dVia", nom:"diamètre du via", aide:"le court-circuit, traversant"},
-    {id:"marge", nom:"marge de carte", aide:"le substrat qui dépasse"}
+    {id:"marge", nom:"marge de carte", aide:"le substrat qui dépasse"},
+    /* Le développé visé, en % du quart d'onde : à empreinte fixe, c'est la
+       hauteur des dents qu'il fait varier. La cote à balayer pour chiffrer le
+       couplage entre dents (A-FAIRE.md § 1, « Plans de mesure »). */
+    {id:"kd", nom:"développé visé", sym:"kd", unite:"%",
+     aide:"en % du quart d'onde : au-dessus de 100, des dents plus hautes "+
+          "pour la même empreinte — ce que le couplage entre brins réclame"}
   ],
   defauts:function(c){
     const quart=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
@@ -892,11 +898,12 @@ const CON_MOTIF_MIFA={
       Lg:Math.max(quart,15),
       wf:wb,
       dVia:dVia,
-      marge:Math.max(3*c.h,2)
+      marge:Math.max(3*c.h,2),
+      kd:100
     };
   },
   tracer:function(c,p){
-    const quart=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
+    const quart=CON_C0/(4*c.f*Math.sqrt(c.eeffAir))*(p.kd||100)/100;
     const n=Math.max(1,Math.round(p.n));
     const pas=p.Lx/n;
     /* La hauteur des dents est ce qui reste à loger : elle peut tomber à zéro
@@ -940,7 +947,7 @@ const CON_MOTIF_MIFA={
     const ecart=pas/2-p.wb;
 
     const lignes=[
-      ["Quart d'onde visé", conLong(quart,3)],
+      ["Développé visé (kd × λ/4)", conLong(quart,3)],
       ["Développé dessiné (sc + ha + Lx + 2·n·hm)", conLong(dev,3)],
       ["Court-circuit → alimentation", conLong(p.d,3)],
       ["Décroché de masse (ed × (wf + 2·gd))",

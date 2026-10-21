@@ -1957,11 +1957,23 @@ def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu, boites=None):
         # de plan de reference, ramene a la surface de la carte, et empiler un
         # second desembedage par-dessus reviendrait a compter deux fois.
         ligne = _ligne_alim(p, ca, cb, dielectriques, k_mm, rang)
+        # Deux ESSAIS pour l'ecart de +1 % du MSLPort (A-FAIRE.md, § 1) :
+        # « maillage » pose les lignes du MSLPort sous un port localise,
+        # « grossier » garde le MSLPort sans son affinage le long du ruban.
+        mode = p.get("msl")
+        if not (mode is True or mode in ("maillage", "grossier")):
+            mode = None
         if ligne:
             out["ligne"] = ligne
-            if p.get("msl") is True:
-                out["msl"] = _port_msl(out, ligne, ca, cb, boite_cu, rang, boites)
-        elif p.get("msl") is True:
+            if mode:
+                q = _port_msl(out, ligne, ca, cb, boite_cu, rang, boites)
+                if mode == "maillage":
+                    out["msl_maillage"] = q
+                else:
+                    out["msl"] = q
+                    if mode == "grossier":
+                        q["grossier"] = True
+        elif mode:
             raise ErreurModele(
                 "Le port %d est un port microruban sans ligne declaree." % rang,
                 "Le port microruban couvre la ligne d'alimentation : declarez "
@@ -2711,7 +2723,7 @@ def _maillage(modele, bande, res_air, res_die, res_fin=0.0, bandes=None):
         x_obl += [p["x1"], p["x2"]]
         y_obl += [p["y1"], p["y2"]]
         z_obl += [p["z1"], p["z2"]]
-        q = p.get("msl")
+        q = p.get("msl") or p.get("msl_maillage")
         if q:
             # LE PORT MICRORUBAN A BESOIN DE LIGNES LE LONG DU RUBAN : ses
             # trois sondes de tension tombent sur trois lignes voisines au
@@ -2723,7 +2735,8 @@ def _maillage(modele, bande, res_air, res_die, res_fin=0.0, bandes=None):
             z_obl += [q["z_ruban"], q["z_masse"]]
             # De l'AFFINAGE, comme les bandes fines : rangees dans le
             # remplissage, le fond les ecarterait.
-            pas = abs(q["fin"] - q["debut"]) / 8.0
+            # « grossier » : quatre pas, le minimum de cinq lignes du port.
+            pas = abs(q["fin"] - q["debut"]) / (4.0 if q.get("grossier") else 8.0)
             affiner = x_aff if q["axe"] == "x" else y_aff
             affiner += _lignes(min(q["debut"], q["fin"]), max(q["debut"], q["fin"]), pas)
         c = p.get("coax")

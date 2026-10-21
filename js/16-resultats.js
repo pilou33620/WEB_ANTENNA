@@ -732,7 +732,8 @@ function antCartesien(c,W,H,f,series,famille){
   for(let i=0;i<=4;i++){
     const k=Math.round(k0+(k1-k0)*i/4), x=fx(k);
     c.beginPath(); c.moveTo(x,y0); c.lineTo(x,y1); c.stroke();
-    c.fillText(aNb(f[k]/antKf(),3),x,y1+5);
+    // la dernière graduation tombe en x1, sous l'unité : sa ligne reste, son texte non
+    if(i<4)c.fillText(aNb(f[k]/antKf(),3),x,y1+5);
   }
   c.textAlign="right";
   c.fillText(ANT.uniteF,x1,y1+5);

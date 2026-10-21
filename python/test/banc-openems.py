@@ -2272,6 +2272,20 @@ try:
 except SyntaxError as _e:
     _ok_msl = str(_e)
 verifie("et ce script se compile", _ok_msl is True, str(_ok_msl))
+# Les deux essais de l'ecart de +1 % : le maillage du MSLPort sous un port
+# localise, et le MSLPort sans son affinage.
+_m_mm = openems_modele.normaliser(dict(_d_msl, port=dict(_d_msl["port"], msl="maillage")))
+_ly_mm = [v for v in _m_mm["maillage"]["y"] if _q["debut"] <= v <= _q["fin"]]
+_txt_mm = openems_script.generer(_m_mm, chemin_openems="")
+verifie("« maillage » : les lignes du MSLPort sous un port localise",
+        _ly_mm == _ly and "AddMSLPort" not in _txt_mm and "_au_pied(Zin" in _txt_mm,
+        "%d lignes contre %d" % (len(_ly_mm), len(_ly)))
+_m_gr = openems_modele.normaliser(dict(_d_msl, port=dict(_d_msl["port"], msl="grossier")))
+_qg = _m_gr["port"].get("msl") or {}
+_ly_gr = [v for v in _m_gr["maillage"]["y"] if _qg and _qg["debut"] <= v <= _qg["fin"]]
+verifie("« grossier » : le MSLPort reste, avec ses cinq lignes au moins",
+        "AddMSLPort" in openems_script.generer(_m_gr, chemin_openems="") and
+        5 <= len(_ly_gr) <= len(_ly), "%d lignes contre %d" % (len(_ly_gr), len(_ly)))
 refuse("un port microruban loin du bord du cuivre",
        dict(_d_msl, port=dict(_d_msl["port"], y=35.0)), "bord")
 refuse("un port microruban sans ligne declaree",
