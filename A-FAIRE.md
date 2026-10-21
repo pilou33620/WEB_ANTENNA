@@ -1,10 +1,9 @@
 # Ce qui reste à faire
 
-État relevé le **15/09/2026**, après la séance qui a traité les quatre
-chantiers ouverts de la version précédente et qui a mené la mesure que le
-premier réclamait. Le banc passe (relevé du 02/10/2026) :
-`python python/test/banc-openems.py` → **991 vérifications, toutes passées**,
-bancs JavaScript compris ; `--simuler` (deux vraies simulations FDTD) aussi. Aucun `TODO` ni `FIXME` dans le code.
+État relevé le **21/10/2026**. Le banc passe (relevé du 21/10/2026) :
+`python python/test/banc-openems.py` → **1053 vérifications, toutes passées**,
+bancs JavaScript compris. `--simuler` (deux vraies simulations FDTD) passait
+au relevé du 02/10/2026, et n'a pas été relancé. Aucun `TODO` ni `FIXME` dans le code.
 
 Ce qui a été fait — et qui ne se redécouvre donc plus ici : le **balayage
 d'une cote de motif** (c'est lui qui a rendu la mesure possible), le
@@ -156,8 +155,8 @@ Même document, 420 000 cellules par point, 46 minutes. Données dans
   d'un réglage — l'élargir demande un substrat plus épais ou moins tenu.
 * **Le meilleur S₁₁ du tableau n'est pas la bonne antenne.** Le −33,9 dB de
   `L` = 28,2 résonne à 2,40 GHz. La relecture d'un balayage par l'assistant
-  (`lireBalayage`, js/31-cartes-antenna.js) classe les points par le seul S₁₁ minimal :
-  sur un balayage de `L`, elle désignerait ce point-là. **Corrigé le même
+  (`lireBalayage`, js/31-cartes-antenna.js) ~~classe les points par le seul S₁₁ minimal :
+  sur un balayage de `L`, elle désignerait ce point-là.~~ **Corrigé le même
   jour** : avec les courbes, elle juge le S₁₁ **à** `fcible` ; sans elles, elle
   garde le S₁₁ minimal et dit de combien le point désigné résonne à côté.
 
@@ -283,7 +282,7 @@ web_suite, fait son travail (`antenna_lire`, `antenna_proposer`). Restent, dans
 rien ne s'écrit sans un clic, et le banc en éprouve la barrière (section 9 de
 `test/banc-interface.js`). Ce qui suit est ce qui reste ouvert.
 
-Faits le 02/10/2026, et décrits au README : la **relecture d'un balayage terminé** (l'optimum est-il au bord de la plage, cote par cote) et la règle qui relève **une couche déclarée masse sans cuivre** (le dipôle imprimé en géométrie libre).
+Faits les 02 et 03/10/2026, décrits au README (audit, balayage) : la relecture d'un balayage terminé, la couche déclarée masse sans cuivre, les formes ajoutées qui ne retirent plus les cotes du motif ; et la lecture du balayage en tableau, point par point (`antenna_lire`, balayage).
 
 **1. Les quatre autres motifs — mesurés le 03/10/2026, à 2,45 GHz sur FR-4
 1,53 mm, un cas chacun.** Un croisement « cote de résonance × cote
@@ -310,20 +309,6 @@ d'être. La bonne mesure est l'autre : à empreinte fixe, allonger le DÉVELOPP�
 visé (des dents plus hautes), et en tirer le facteur qui manque au couplage
 entre dents. Le monopôle, lui, gagnerait un croisement de la largeur du brin
 pour sa réactance.
-
-Faits le 03/10/2026 : le **contexte porte un balayage terminé en tableau**
-(une ligne par point, S₁₁ à la cible compris) ; et **des formes ajoutées
-par-dessus un motif ne retirent plus ses cotes du balayage** — chaque point
-repose le motif et recolle les ajouts aux mêmes coordonnées.
-
-**2. Une géométrie entièrement libre ne sait toujours rien d'elle-même.** Pas
-de fiche, pas de résonance estimée. Ses formes se balayent (largeur d'un
-rectangle, rayon d'un disque…), mais pas « la longueur de l'antenne » : il
-faudrait savoir *laquelle* des coordonnées est une cote, c'est-à-dire
-reconstruire ce qu'un gabarit sait par construction. Rien à faire de simple ;
-c'est l'argument qui fait préférer un motif dès qu'il en existe un — et,
-depuis qu'on peut lui ajouter des formes sans perdre ses cotes, de partir d'un
-motif même quand l'antenne voulue s'en écarte.
 
 ### Plans de mesure — arrêtés le 21/10/2026
 
@@ -366,30 +351,9 @@ réglages du croisement du patch.
      le MSLPort peut devenir le défaut.
    * Aucun des deux ne bouge : l'écart vient du port lui-même. Il reste alors
      une option.
-6. ~~**Affichage : la dernière graduation chevauche « GHz ».**~~ — **fait le
-   21/10/2026** : elle tombait toujours en x₁, sous l'unité ; sa ligne reste,
-   son texte non.
-7. **Géométrie libre** — **décidé le 21/10/2026 : elle reste une limite.**
-   Partir d'un motif et lui ajouter des formes couvre le besoin (voir plus
-   haut, « Une géométrie entièrement libre… »).
 
-### Pilotage par Claude (MCP de web_suite) — relevé du 19/10/2026
-
-- [x] **422 de `/api/openems` pendant le tutoriel** (21/10/2026) : la pose de l'exemple entre
-  en conception, qui revérifiait avant que le gabarit ait dessiné son cuivre. Un document sans
-  cuivre est refusé dans la page (`oePreparer`), avec le message du serveur, sans appel.
-- [x] **Essai réel des courbes** (21/10/2026) : l'exemple patch calculé pour de vrai (openEMS
-  0.0.37 compilé sous Linux, lancé depuis la page), puis lu par le MCP : `antenna_lire`
-  resultats (f0 2,45 GHz, S11 −23,4 dB, 43,8 − j1,6 Ω, bande −10 dB 2,421–2,479 GHz,
-  Dmax 5,84 dBi) et courbe ; `antenna_vue` S11 et impédance ; capture de la courbe juste.
-  Le détail d'affichage (la dernière graduation qui chevauchait « GHz ») est corrigé le 21/10/2026.
-- [x] **Banc** (21/10/2026) : les noms hérités de l'assistant sont renommés (`CARTE_*`,
-  `carteCourbe`, `carteMasseVide`…).
-- [x] **Vue de Claude et enregistrement** (21/10/2026) : l'étape montrée par `antenna_vue` n'est
-  pas celle qu'enregistre le projet, ni un panneau montré celui de la disposition, tant que
-  l'utilisateur n'y touche pas (`piloteAntennaEtape`, `piloteAntennaDisposition`).
-- [x] **Canal de pilotage** (21/10/2026) : `pilote.py` (copie de web_suite) laisse une commande
-  porter jusqu'à 8 Mo.
+Faits le 21/10/2026 (commit 0decae2) : la graduation qui chevauchait « GHz »,
+et le relevé du pilotage par Claude (MCP de web_suite) du 19/10/2026, tout coché.
 
 ---
 
@@ -404,7 +368,8 @@ Trois réponses possibles, et deux d'entre elles ferment le sujet.
 | limite | où |
 |---|---|
 | **Les motifs d'antenne sont analytiques**, pas optimisés : 2 à 5 % d'écart sur la résonance, davantage sur substrat épais ou εᵣ élevé. | La limite reste — c'est un point de départ que la simulation corrige, et c'est ce que le balayage rattrape. Le patch est désormais corrigé par mesure (quatre cas), le dipôle, le monopôle et l'IFA sur un cas chacun ; le MIFA reste à mesurer : § 1. |
-| **Un ruban n'est pas désembedé par le solveur** : l'impédance est mesurée au bord de la carte. | Elle est maintenant **ramenée au pied de l'antenne par le calcul**, quand la ligne est déclarée — avec ses deux réserves. Ce n'est PAS une cause de désadaptation, c'est démontré. Le désembedage par le solveur reste au § 1, « `AddMSLPort` ». |
+| **La correction du patch n'est mesurée que sur deux stratifiés** (FR-4, RO4350B) ; ailleurs, `patchCorrRbord` interpole en tan δ ou se borne. | § 1, « La correction du gabarit » : FR-4 haute fréquence et RO4003C 1,524 mm à mesurer ; les 15 Ω inductifs au pied, « Plans de mesure », point 4. |
+| **Un méandre serré sort du modèle** : le MIFA résonne au-dessus de 3,5 GHz pour 2,45 visés. La cote `kd` existe, à 100 par défaut. | § 1, « Plans de mesure », point 1 : le croisement `kd` × `n`, qui donnera le défaut de `kd`. |
 
 ### Ce qui est une limite du monde, pas de l'outil
 
@@ -433,6 +398,19 @@ Rien à faire ici tant que la brique en dessous ne bouge pas.
   tout le métal de sa couche à cet endroit, y compris une piste qui passerait
   dessous. *Se rouvre seulement si un cas réel échoue* — treize cas dégénérés
   passent aujourd'hui (`test/banc-polygones.js`).
+* **Une pièce importée est vue en marches d'escalier.** La grille FDTD est
+  cartésienne : une paroi alignée sur un axe tombe juste, un congé ou une
+  paroi inclinée est rendu par les cellules qui l'approchent. Le métal y est
+  un conducteur parfait. *Tient au solveur, ne se rouvre pas ici.*
+* **Le cuivre désigné à la main est rangé par son rang dans le document de la
+  carte**, et non par un identifiant : un fichier IPC-2581 n'en donne pas
+  pour une piste. Fidèle tant que `carte.json` est celle du projet.
+* **Un port court-circuité ne se voit que si la masse est connue.** Sur un
+  fichier sans connectivité, tout le cuivre est du même côté, et le contrôle
+  se tait plutôt que de crier au loup.
+* **Un modèle de langage se trompe, et il se trompe avec aplomb.** La liste
+  blanche borne ce qu'il propose, le clic décide ; aucune borne ne rattrape un
+  raisonnement faux. Ce qu'il dit se vérifie par une simulation.
 
 ### Ce qui ne se rouvre pas
 
@@ -516,3 +494,24 @@ chaque relecture.
   refuser d'emblée : ce sont ces refus qui font la valeur de l'outil. Le
   tableau S complet et le balayage croisé suivent la même règle : N documents
   ordinaires, normalisés un par un, refusés comme les autres.
+* **Une géométrie entièrement libre ne sait rien d'elle-même** — décidé le
+  21/10/2026. Pas de fiche, pas de résonance estimée. Ses formes se balayent
+  (largeur d'un rectangle, rayon d'un disque…), mais pas « la longueur de
+  l'antenne » : il faudrait savoir *laquelle* des coordonnées est une cote,
+  c'est-à-dire reconstruire ce qu'un gabarit sait par construction. Partir
+  d'un motif et lui ajouter des formes couvre le besoin : les ajouts ne
+  retirent plus ses cotes du balayage.
+* **La résonance annoncée par une fiche de motif n'est pas une mesure** : elle
+  sort de la même formule que les cotes, relue à l'envers. Elle dit dans quel
+  sens une cote retouchée déplace l'antenne. Où l'antenne résonne, c'est la
+  simulation qui le dit.
+* **L'audit ne vérifie pas la physique**, il vérifie des réglages. « Rien à
+  redire » veut dire « rien ne m'alerte », pas « c'est bon ».
+* **Un calque IPC-2581 sans fonction déclarée est gardé.** Le parseur filtre
+  les calques documentaires par `layerFunction` ; un calque muet reste, parce
+  qu'un cuivre perdu coûte plus cher qu'un calque de trop.
+* **La masse cachée est retirée par défaut**, et ce n'est pas sans perte : les
+  trous du plan laissent fuir un peu de champ. Le gain de maillage le vaut ;
+  la case « Garder toute la masse » sert à le vérifier.
+* **Le budget des pièces importées est de 400 000 triangles simulés.** Au-delà,
+  on marque « ignoré » ce qui ne compte pas.

@@ -2026,16 +2026,23 @@ découpes de versement l'ont toujours été.
   sur la résonance, davantage sur substrat épais ou εᵣ élevé. C'est un point
   de départ que la simulation corrige, jamais un résultat — et c'est
   exactement ce que le balayage sert à rattraper.
-* **L'encastrement d'un patch est franchement faux**, et c'est la seule cote
-  dont l'écart soit chiffré ici : mesuré sur FR-4 1,6 mm à 2,45 GHz, il est
-  trop profond d'un bon quart, et le patch s'en trouve désadapté (−2,5 dB au
-  lieu de −13). La résistance de bord du modèle de cavité en est la cause, et
-  la fiche du motif le dit. Ce n'est pas corrigé : un relevé sur un substrat
-  ne fait pas une loi.
-* **Un méandre serré sort du modèle** : le MIFA pose le développé exact, mais
-  deux brins repliés plus proches que deux largeurs de piste se couplent, et
-  la résonance remonte au-dessus du calcul. La fiche le signale ; elle ne le
-  corrige pas, parce que le corriger demanderait le solveur.
+* **La correction du patch n'est mesurée que sur deux stratifiés.** Le modèle
+  de cavité seul pose un encastrement trop profond de 40 % (FR-4 1,6 mm,
+  2,45 GHz : −2,5 dB au lieu de −40). Le gabarit corrige depuis le 03/10/2026
+  la longueur, par une loi qui tient quatre cas à 0,2 % de fréquence près
+  (`patchCorrLongueur`), et la résistance de bord, d'où sort l'encastrement,
+  par un rapport mesuré sur FR-4 et sur RO4350B (`patchCorrRbord`,
+  js/22-antennes.js). Entre les deux, ce rapport est interpolé en tan δ ; en
+  dehors, il est borné à l'un ou l'autre. Sur un autre stratifié, c'est une
+  hypothèse, pas une mesure : l'aide de la cote dit de balayer `y₀`.
+* **Un méandre serré sort du modèle** : le MIFA pose le développé du quart
+  d'onde, mais deux brins repliés plus proches que deux largeurs de piste se
+  couplent, et la résonance remonte au-dessus du calcul — mesuré : au-dessus
+  de 3,5 GHz pour 2,45 visés. La cote `kd` (développé visé, en % du quart
+  d'onde, 100 par défaut) allonge les dents à empreinte fixe. Ce qu'il faut y
+  mettre n'est pas encore mesuré : le croisement `kd` × `n` reste à mener
+  (A-FAIRE.md, « Plans de mesure »). Tant qu'il ne l'est pas, `kd` vaut 100 et
+  le décalage reste.
 * **La résonance annoncée par une fiche de motif n'est pas une mesure** : elle
   sort de la même formule que les cotes, relue à l'envers. Elle dit dans quel
   sens une cote retouchée déplace l'antenne, pas où l'antenne résonne.
@@ -2079,20 +2086,17 @@ découpes de versement l'ont toujours été.
   zone de composant ou un contour mécanique ne se transforme en plan de cuivre.
   Un calque sans fonction déclarée reste conservé par précaution — un cuivre perdu
   coûtant plus cher qu'un calque de trop.
-* **La masse cachée derrière le plan de référence** : sur une carte multicouche,
-  le cuivre de masse situé entièrement derrière le plan de masse continu principal
-  est retiré par défaut avec ses vias orphelins. Un plan plein étant opaque en FDTD,
-  l'écart sur le rayonnement lointain est infime (moins de 0,1 dB) pour un gain de
-  maillage appréciable. La case « Garder toute la masse » permet de forcer leur calcul
-  si nécessaire.
-* **Les ports court-circuités par le cuivre** : une pastille du net d'antenne
-  présente par erreur sur la couche de masse sous le port ou un port reliant la masse
-  à elle-même sont détectés et bloqués par une alerte grave avant tout lancement,
-  évitant de calculer une fausse antenne qui a l'air de résonner.
-* **Les valeurs fantômes restaurées par le navigateur** : au rechargement, le
-  navigateur pouvait réinjecter d'anciennes valeurs dans les champs sans événement
-  `change`. L'alignement strict (`antChampsFideles`) et `autocomplete="off"`
-  garantissent désormais que l'interface ne montre que ce que l'état porte réellement.
+* **Retirer la masse cachée n'est pas sans perte.** Le cuivre de masse caché
+  derrière le plan de référence est retiré par défaut (voir « Le nettoyage
+  géométrique transparent et la masse cachée »). Les trous du plan — les
+  dégagements des vias traversants — laissent pourtant fuir un peu de champ
+  vers ce qui est retiré. L'écart est petit, pas nul : la case « Garder toute
+  la masse » sert à le vérifier.
+* **Un port court-circuité ne se voit que si la masse est connue.** Le contrôle
+  (voir « Le port court-circuité par le cuivre lui-même ») lit le cuivre sous
+  le milieu du port et distingue l'antenne de la masse par le net marqué
+  masse. Sur un fichier sans connectivité, tout le cuivre est du même côté :
+  la question n'a pas de réponse, et l'outil se tait.
 
 ## Installation complète des prérequis
 
