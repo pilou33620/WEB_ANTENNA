@@ -90,14 +90,42 @@ function piloteAntennaToile(){
   return document.getElementById("carte");
 }
 
+/* Ce qu'antenna_vue a changé et que l'utilisateur n'a pas repris depuis : ni l'étape de
+   l'assistant ni un panneau montré ne partent avec un enregistrement (projet, disposition),
+   tant qu'ils sont tels que Claude les a laissés. L'écran, lui, garde ce que Claude a montré. */
+let PILOTE_ETAPE = null;                    // {posee, avant} : l'étape posée par Claude, celle d'avant
+const PILOTE_PANNEAUX = new Map();          // id → {cache, replie, place} : le panneau d'avant, et où Claude l'a mis
+function piloteAntennaEtape(){                // ce que prjAntenne enregistre (28-projet.js)
+  return PILOTE_ETAPE && ANT.etape === PILOTE_ETAPE.posee ? PILOTE_ETAPE.avant : ANT.etape;
+}
+function piloteAntennaEtapeOublier(){ PILOTE_ETAPE = null; }   // l'utilisateur a choisi son étape, ou ouvert un projet
+function piloteAntennaDisposition(ws){       // ce que wsSave enregistre (90-workspace.js)
+  // un panneau que l'utilisateur a depuis replié, fermé ou déplacé est le sien
+  for(const [id, p] of PILOTE_PANNEAUX) if(wsPlaceOf(id) !== p.place || ws.panels[id].collapsed) PILOTE_PANNEAUX.delete(id);
+  if(!PILOTE_PANNEAUX.size) return ws;
+  const copie = JSON.parse(JSON.stringify(ws));
+  for(const [id, p] of PILOTE_PANNEAUX){
+    copie.panels[id].collapsed = p.replie;
+    if(p.cache){
+      for(const k of WS_DOCKS){ const i = copie.order[k].indexOf(id); if(i >= 0) copie.order[k].splice(i, 1); }
+      copie.hidden.push(id);
+    }
+  }
+  return copie;
+}
+
 /* Un panneau montré et déplié, sans enregistrer la disposition (wsShow passerait par wsSave). */
 function piloteAntennaPanneau(id){
+  const avant = {cache:wsPlaceOf(id) === "hidden", replie:!!WS.panels[id].collapsed};
   if(wsPlaceOf(id) === "hidden"){
     const p = WS.panels[id], cible = WS_DOCKS.indexOf(p.last) >= 0 ? p.last : "dockR";
     wsPluck(id); WS.order[cible].push(id);
   }
   WS.panels[id].collapsed = false;
   wsApply(false);
+  const deja = PILOTE_PANNEAUX.get(id);
+  if(deja) deja.place = wsPlaceOf(id);
+  else if(avant.cache || avant.replie) PILOTE_PANNEAUX.set(id, Object.assign(avant, {place:wsPlaceOf(id)}));
 }
 
 function piloteAntennaVue(a){
@@ -141,7 +169,13 @@ function piloteAntennaVue(a){
   if(a.etape != null){
     if(!Number.isInteger(a.etape) || a.etape < 1 || a.etape > ANT_ETAPES.length)
       throw new Error("« etape » : de 1 à " + ANT_ETAPES.length + " (" + ANT_ETAPES.map(e => e.id).join(", ") + ").");
-    faire.push(() => { ANT.etape = a.etape - 1; antAssistantRendre(true); }); dit.push("étape " + ANT_ETAPES[a.etape - 1].id);
+    faire.push(() => {
+      const avant = piloteAntennaEtape();
+      ANT.etape = a.etape - 1;
+      PILOTE_ETAPE = {posee:ANT.etape, avant};
+      antAssistantRendre(true);
+    });
+    dit.push("étape " + ANT_ETAPES[a.etape - 1].id);
   }
   if(a.panneau != null){
     if(typeof a.panneau !== "string" || !Object.prototype.hasOwnProperty.call(WS.panels, a.panneau))

@@ -176,7 +176,8 @@ function prjFormesEnrouler(){
 
 function prjAntenne(){
   return {
-    etape:ANT.etape,
+    // l'étape montrée par Claude (antenna_vue) n'est pas celle de l'utilisateur : pilote-antenna.js
+    etape:typeof piloteAntennaEtape==="function"?piloteAntennaEtape():ANT.etape,
     nets:Array.from(ANT.nets),
     formes:prjFormesEnrouler(),
     netMasse:ANT.netMasse,
@@ -374,6 +375,7 @@ function prjAntAppliquer(a){
 
   if(isFinite(a.etape))ANT.etape=Math.min(Math.max(0,a.etape|0),
                                           ANT_ETAPES.length-1);
+  if(typeof piloteAntennaEtapeOublier==="function")piloteAntennaEtapeOublier();
 }
 
 function prjConAppliquer(d){

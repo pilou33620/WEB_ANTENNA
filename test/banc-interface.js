@@ -1283,12 +1283,12 @@ verifie("les chemins du mode conception sont refuses hors de ce mode",
 /* -- ce qui est accepte, et borne ---------------------------------------- */
 ANT.bande={f1:2.4e9, f2:2.5e9, n:401, fcible:2.45e9};
 ANT.balayage.actif=false;
-const IA_CIBLE=resoudreCarte("bande.f1");
+const CARTE_CIBLE=resoudreCarte("bande.f1");
 verifie("un chemin de la liste blanche se resout",
-        !IA_CIBLE.refus&&IA_CIBLE.obj===ANT.bande&&IA_CIBLE.cle==="f1");
+        !CARTE_CIBLE.refus&&CARTE_CIBLE.obj===ANT.bande&&CARTE_CIBLE.cle==="f1");
 verifie("une valeur hors bornes est refusee en disant laquelle",
-        validerCarte(IA_CIBLE.descr,1e15).ok===false&&
-        validerCarte(IA_CIBLE.descr,1e15).pourquoi.indexOf("borne haute")>=0);
+        validerCarte(CARTE_CIBLE.descr,1e15).ok===false&&
+        validerCarte(CARTE_CIBLE.descr,1e15).pourquoi.indexOf("borne haute")>=0);
 verifie("un nombre ecrit a la virgule passe quand meme",
         validerCarte(CHAMPS_CARTES["arret.energie"],"-45,5").v===-45.5);
 verifie("un entier reste entier",
@@ -1306,20 +1306,20 @@ ANT.portActif=0;
 antPortRetirer(1);
 
 /* -- une proposition : l'avant, l'apres, et l'aller-retour ---------------- */
-const IA_P=propositionCarte({type:"reglages", titre:"Recentrer",
+const CARTE_P=propositionCarte({type:"reglages", titre:"Recentrer",
                           valeurs:{"bande.f1":2.08e9, "bande.f2":2.82e9,
                                    "bande.f9":1, "boite.pml":99}});
 verifie("une proposition garde l'avant en face de l'apres",
-        IA_P.lignes.length===2&&IA_P.lignes[0].avant===2.4e9&&
-        IA_P.lignes[0].apres===2.08e9);
+        CARTE_P.lignes.length===2&&CARTE_P.lignes[0].avant===2.4e9&&
+        CARTE_P.lignes[0].apres===2.08e9);
 verifie("et elle dit ce qu'elle a refuse au lieu de le taire",
-        IA_P.refus.length===2);
+        CARTE_P.refus.length===2);
 verifie("preparer une proposition n'ecrit rien",
         ANT.bande.f1===2.4e9);
-appliquerCarte(IA_P);
+appliquerCarte(CARTE_P);
 verifie("l'appliquer ecrit, et seulement ce qui etait valide",
         ANT.bande.f1===2.08e9&&ANT.bande.f2===2.82e9&&ANT.boite.pml!==99);
-annulerCarte(IA_P);
+annulerCarte(CARTE_P);
 verifie("l'annuler remet exactement ce qui etait la",
         ANT.bande.f1===2.4e9&&ANT.bande.f2===2.5e9);
 
@@ -1327,13 +1327,13 @@ verifie("l'annuler remet exactement ce qui etait la",
 /* Elles doivent marcher sans reseau NI clef : c'est leur raison d'etre. */
 V.modele={};
 ANT.bande.fcible=5.8e9;
-const IA_C=controlesCarte();
-const IA_HORS=IA_C.find(a=>a.titre.indexOf("hors de la bande")>=0);
+const CARTE_C=controlesCarte();
+const CARTE_HORS=CARTE_C.find(a=>a.titre.indexOf("hors de la bande")>=0);
 verifie("une cible hors de la bande est relevee comme grave",
-        !!IA_HORS&&IA_HORS.rang==="grave");
+        !!CARTE_HORS&&CARTE_HORS.rang==="grave");
 verifie("et la remarque porte sa correction",
-        !!IA_HORS.prop&&IA_HORS.prop.valeurs["bande.f1"]>4.9e9);
-appliquerCarte(propositionCarte(IA_HORS.prop));
+        !!CARTE_HORS.prop&&CARTE_HORS.prop.valeurs["bande.f1"]>4.9e9);
+appliquerCarte(propositionCarte(CARTE_HORS.prop));
 verifie("appliquer la correction remet la cible dans la bande",
         ANT.bande.fcible>ANT.bande.f1&&ANT.bande.fcible<ANT.bande.f2);
 verifie("et la faute ne se releve plus",
@@ -1360,7 +1360,7 @@ CON.elements=[]; CON.sel=-1; CON.gabarit=null; CON.calcul=null;
 ANT.ports=[antPortNeuf(true)]; ANT.portActif=0;
 conHistRaz();
 
-const IA_F=propositionCarte({type:"formes", titre:"Essai",
+const CARTE_F=propositionCarte({type:"formes", titre:"Essai",
   elements:[
     {type:"rect",  couche:"bas",  net:"GND",     x1:0, y1:0, x2:40, y2:45},
     {type:"poly",  couche:"haut", net:"ANTENNE", pts:[[8,12],[30,12],[30,36],[8,36]]},
@@ -1375,24 +1375,24 @@ const IA_F=propositionCarte({type:"formes", titre:"Essai",
   port:{x:20, y:0.4, w:3.06, l:0.8}});
 
 verifie("une geometrie libre prepare ses formes une par une",
-        IA_F.els.length===5&&IA_F.refus.length===4,
-        IA_F.els.length+" posees, "+IA_F.refus.length+" refusees");
+        CARTE_F.els.length===5&&CARTE_F.refus.length===4,
+        CARTE_F.els.length+" posees, "+CARTE_F.refus.length+" refusees");
 verifie("un genre inconnu est refuse en le nommant",
-        IA_F.refus.some(r=>r.indexOf("cercle")>=0));
+        CARTE_F.refus.some(r=>r.indexOf("cercle")>=0));
 verifie("un polygone de deux sommets est refuse comme au dessin",
-        IA_F.refus.some(r=>r.indexOf("trois sommets")>=0));
+        CARTE_F.refus.some(r=>r.indexOf("trois sommets")>=0));
 verifie("une forme entierement hors de la carte est refusee",
-        IA_F.refus.some(r=>r.indexOf("hors de la carte")>=0));
+        CARTE_F.refus.some(r=>r.indexOf("hors de la carte")>=0));
 verifie("une couche qui n'existe pas est refusee",
-        IA_F.refus.some(r=>r.indexOf("imaginaire")>=0));
+        CARTE_F.refus.some(r=>r.indexOf("imaginaire")>=0));
 verifie("le nom exact d'une couche vaut le raccourci qui la designe",
-        IA_F.els[4].cu===IA_F.els[0].cu);
+        CARTE_F.els[4].cu===CARTE_F.els[0].cu);
 verifie("les nets proposes sont repris tels quels",
-        IA_F.els[0].net==="GND"&&IA_F.els[1].net==="ANTENNE");
+        CARTE_F.els[0].net==="GND"&&CARTE_F.els[1].net==="ANTENNE");
 verifie("preparer une geometrie n'ecrit rien",
         CON.elements.length===0&&ANT.port.pose===false);
 
-appliquerCarte(IA_F);
+appliquerCarte(CARTE_F);
 verifie("l'appliquer pose le cuivre ET le port",
         CON.elements.length===5&&ANT.port.pose===true&&
         Math.abs(ANT.port.x-20)<1e-9&&ANT.port.dir==="z",
@@ -1401,56 +1401,56 @@ verifie("l'appliquer pose le cuivre ET le port",
    a chaque reaffichage de la liste, et un dessin qui partagerait ses points
    avec elle changerait sous le doigt. */
 verifie("les formes posees sont des copies, pas les objets prepares",
-        CON.elements[1].pts!==IA_F.els[1].pts);
-annulerCarte(IA_F);
+        CON.elements[1].pts!==CARTE_F.els[1].pts);
+annulerCarte(CARTE_F);
 verifie("l'annuler rend le dessin et le port a ce qu'ils etaient",
         CON.elements.length===0&&ANT.port.pose===false);
 
 /* -- le garde-fou du nombre de formes ------------------------------------- */
-const IA_FN=[];
-for(let i=0;i<60;i++)IA_FN.push({type:"rect",couche:"haut",
+const CARTE_FN=[];
+for(let i=0;i<60;i++)CARTE_FN.push({type:"rect",couche:"haut",
                                  x1:0,y1:0,x2:1,y2:1});
 verifie("au-dela du garde-fou, aucune forme n'est preparee",
-        propositionCarte({type:"formes", elements:IA_FN}).els.length===0);
+        propositionCarte({type:"formes", elements:CARTE_FN}).els.length===0);
 
 /* -- la carte est jugee AVANT les formes qu'elle accueille ---------------- */
 /* Une forme mesuree contre l'ANCIENNE taille serait refusee alors que la
    proposition agrandit justement la carte pour elle. */
-const IA_FC=propositionCarte({type:"formes", carte:{L:60, W:50},
+const CARTE_FC=propositionCarte({type:"formes", carte:{L:60, W:50},
   elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:0,y1:0,x2:55,y2:48}]});
 verifie("une forme qui n'entre que dans la carte proposee est acceptee",
-        IA_FC.els.length===1&&IA_FC.refus.length===0,
-        (IA_FC.refus[0]||""));
+        CARTE_FC.els.length===1&&CARTE_FC.refus.length===0,
+        (CARTE_FC.refus[0]||""));
 
 /* -- ce qui deborde est pose, mais dit --------------------------------- */
-const IA_FD=propositionCarte({type:"formes",
+const CARTE_FD=propositionCarte({type:"formes",
   elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:-5,y1:5,x2:10,y2:15}]});
 verifie("une forme a cheval sur le bord est posee, et la carte le signale",
-        IA_FD.els.length===1&&IA_FD.avis.some(a=>a.indexOf("borde")>=0));
+        CARTE_FD.els.length===1&&CARTE_FD.avis.some(a=>a.indexOf("borde")>=0));
 
 /* UNE PISTE SE JUGE SUR SON AXE, ET C'EST MESURE. `conBoite` elargit une
    piste d'une demi-largeur : une ligne d'alimentation qui vient mourir au
    bord de la carte — ce que font les six motifs de l'outil — debordait donc
    toujours de w/2, et l'avis se serait allume sur presque chaque
    proposition. Un avis qui se declenche tout le temps ne se lit plus. */
-const IA_FL=propositionCarte({type:"formes",
+const CARTE_FL=propositionCarte({type:"formes",
   elements:[{type:"piste",couche:"haut",net:"ANTENNE",
              pts:[[20,0],[20,12]], w:3.06}]});
 verifie("une ligne qui meurt au bord de la carte ne passe pas pour un debord",
-        IA_FL.els.length===1&&!IA_FL.avis.some(a=>a.indexOf("borde")>=0),
-        IA_FL.avis.join(" | "));
+        CARTE_FL.els.length===1&&!CARTE_FL.avis.some(a=>a.indexOf("borde")>=0),
+        CARTE_FL.avis.join(" | "));
 
 /* -- « remplacer » efface, et l'annulation rend tout ---------------------- */
 CON.elements=[{type:"rect", cu:conPremierCuivre(), net:"ANTENNE", trou:false,
                x1:1, y1:1, x2:5, y2:5}];
 ANT.port.pose=true; ANT.port.x=9; ANT.port.y=9;
-const IA_FX=propositionCarte({type:"formes", remplacer:true,
+const CARTE_FX=propositionCarte({type:"formes", remplacer:true,
   elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:2,y1:2,x2:8,y2:8}]});
-appliquerCarte(IA_FX);
+appliquerCarte(CARTE_FX);
 verifie("« remplacer » efface le dessin et depose les ports",
         CON.elements.length===1&&CON.elements[0].x2===8&&
         ANT.port.pose===false);
-annulerCarte(IA_FX);
+annulerCarte(CARTE_FX);
 verifie("et l'annuler rend le dessin d'avant ET le port qui allait avec",
         CON.elements.length===1&&CON.elements[0].x2===5&&
         ANT.port.pose===true&&ANT.port.x===9);
@@ -1462,39 +1462,39 @@ verifie("et l'annuler rend le dessin d'avant ET le port qui allait avec",
    la moins chere des deux reponses d'A-FAIRE, et la seule qui n'ouvre pas de
    droit de plus dans la liste blanche. */
 CON.pile=conPileDefaut();
-const IA_CU=conCuivres();
-IA_CU[0].e.role="signal"; IA_CU[1].e.role="gnd";
+const CARTE_CU=conCuivres();
+CARTE_CU[0].e.role="signal"; CARTE_CU[1].e.role="gnd";
 CON.elements=[
-  {type:"rect", cu:IA_CU[0].e.uid, net:"ANTENNE", trou:false, x1:2, y1:20, x2:19, y2:22},
-  {type:"rect", cu:IA_CU[0].e.uid, net:"ANTENNE", trou:false, x1:21, y1:20, x2:38, y2:22},
+  {type:"rect", cu:CARTE_CU[0].e.uid, net:"ANTENNE", trou:false, x1:2, y1:20, x2:19, y2:22},
+  {type:"rect", cu:CARTE_CU[0].e.uid, net:"ANTENNE", trou:false, x1:21, y1:20, x2:38, y2:22},
   /* ni une decoupe ni un via ne font un plan : ils ne doivent pas faire
      taire l'avis */
-  {type:"rect", cu:IA_CU[1].e.uid, net:"", trou:true, x1:1, y1:1, x2:3, y2:3},
-  {type:"via",  cu:IA_CU[1].e.uid, net:"GND", trou:false, x:5, y:5, d:0.6}];
-const iaMasseVide=()=>controlesCarte().filter(a=>a.titre.indexOf("déclarée masse")>=0);
-let IA_MV=iaMasseVide();
+  {type:"rect", cu:CARTE_CU[1].e.uid, net:"", trou:true, x1:1, y1:1, x2:3, y2:3},
+  {type:"via",  cu:CARTE_CU[1].e.uid, net:"GND", trou:false, x:5, y:5, d:0.6}];
+const carteMasseVide=()=>controlesCarte().filter(a=>a.titre.indexOf("déclarée masse")>=0);
+let CARTE_MV=carteMasseVide();
 verifie("une couche declaree masse sans cuivre est relevee, en la nommant",
-        IA_MV.length===1&&IA_MV[0].titre.indexOf(IA_CU[1].e.nom)>=0&&
-        IA_MV[0].rang==="attention",
-        IA_MV.map(a=>a.titre).join(" | "));
+        CARTE_MV.length===1&&CARTE_MV[0].titre.indexOf(CARTE_CU[1].e.nom)>=0&&
+        CARTE_MV[0].rang==="attention",
+        CARTE_MV.map(a=>a.titre).join(" | "));
 verifie("et la remarque ne propose aucune ecriture : le role n'est pas dans la liste blanche",
-        IA_MV.length===1&&!IA_MV[0].prop&&
+        CARTE_MV.length===1&&!CARTE_MV[0].prop&&
         !Object.keys(CHAMPS_CARTES).some(c=>c.indexOf("role")>=0));
-IA_CU[1].e.role="signal";
+CARTE_CU[1].e.role="signal";
 verifie("declaree signal, la meme couche vide ne dit plus rien",
-        iaMasseVide().length===0);
-IA_CU[1].e.role="gnd";
-CON.elements.push({type:"rect", cu:IA_CU[1].e.uid, net:"GND", trou:false,
+        carteMasseVide().length===0);
+CARTE_CU[1].e.role="gnd";
+CON.elements.push({type:"rect", cu:CARTE_CU[1].e.uid, net:"GND", trou:false,
                    x1:0, y1:0, x2:40, y2:15});
 verifie("une masse qui porte un plan ne dit rien non plus",
-        iaMasseVide().length===0);
+        carteMasseVide().length===0);
 CON.elements=[];
 
 /* -- relire un balayage termine ------------------------------------------ */
 /* « Vos courbes disent que l'optimum est hors de la plage » : la regle que
    le croisement g × y0 aurait du ecrire tout seul. Elle LIT, et rien ne doit
    bouger dans les reglages quand elle a lu. */
-const iaBalSimple=function(s11){
+const carteBalSimple=function(s11){
   return {balayage:true, croise:false, nom:"Patch rectangulaire — longueur",
           unite:"mm", nom2:"", unite2:"",
           points:s11.map(function(s,i){
@@ -1505,34 +1505,34 @@ const iaBalSimple=function(s11){
           })};
 };
 const lectureBalayage=()=>controlesCarte().filter(a=>a.titre.indexOf("L'optimum du balayage")===0);
-const IA_AVANT=JSON.stringify([ANT.bande,ANT.balayage,ANT.maillage,ANT.boite]);
+const CARTE_AVANT=JSON.stringify([ANT.bande,ANT.balayage,ANT.maillage,ANT.boite]);
 ANT_BAL_POINT=0;
 
-ANT.resultat=iaBalSimple([-5,-9,-14,-10,-6]);
-let IA_L=lectureBalayage();
+ANT.resultat=carteBalSimple([-5,-9,-14,-10,-6]);
+let CARTE_L=lectureBalayage();
 verifie("un optimum interieur est dit DANS la plage, chiffres a l'appui",
-        IA_L.length===1&&IA_L[0].rang==="info"&&
-        IA_L[0].titre.indexOf("dans la plage")>=0&&
-        IA_L[0].texte.indexOf("-14 dB")>=0&&IA_L[0].texte.indexOf("« 32 »")>=0&&
-        IA_L[0].texte.indexOf("2.42 GHz")>=0,
-        IA_L.map(a=>a.texte).join(" | "));
+        CARTE_L.length===1&&CARTE_L[0].rang==="info"&&
+        CARTE_L[0].titre.indexOf("dans la plage")>=0&&
+        CARTE_L[0].texte.indexOf("-14 dB")>=0&&CARTE_L[0].texte.indexOf("« 32 »")>=0&&
+        CARTE_L[0].texte.indexOf("2.42 GHz")>=0,
+        CARTE_L.map(a=>a.texte).join(" | "));
 
-ANT.resultat=iaBalSimple([-15,-12,-9,-6,-4]);
-IA_L=lectureBalayage();
+ANT.resultat=carteBalSimple([-15,-12,-9,-6,-4]);
+CARTE_L=lectureBalayage();
 verifie("un optimum a la borne basse dit de prolonger vers les petites valeurs",
-        IA_L.length===1&&IA_L[0].rang==="attention"&&
-        IA_L[0].titre.indexOf("au bord")>=0&&
-        IA_L[0].texte.indexOf("borne basse")>=0&&
-        IA_L[0].texte.indexOf("petites valeurs")>=0&&
-        IA_L[0].texte.indexOf("COIN")<0,
-        IA_L.map(a=>a.texte).join(" | "));
-ANT.resultat=iaBalSimple([-4,-6,-9,-12,-15]);
-IA_L=lectureBalayage();
+        CARTE_L.length===1&&CARTE_L[0].rang==="attention"&&
+        CARTE_L[0].titre.indexOf("au bord")>=0&&
+        CARTE_L[0].texte.indexOf("borne basse")>=0&&
+        CARTE_L[0].texte.indexOf("petites valeurs")>=0&&
+        CARTE_L[0].texte.indexOf("COIN")<0,
+        CARTE_L.map(a=>a.texte).join(" | "));
+ANT.resultat=carteBalSimple([-4,-6,-9,-12,-15]);
+CARTE_L=lectureBalayage();
 verifie("et a la borne haute, vers les grandes",
-        IA_L.length===1&&IA_L[0].texte.indexOf("borne haute")>=0&&
-        IA_L[0].texte.indexOf("grandes valeurs")>=0);
+        CARTE_L.length===1&&CARTE_L[0].texte.indexOf("borne haute")>=0&&
+        CARTE_L[0].texte.indexOf("grandes valeurs")>=0);
 
-ANT.resultat=iaBalSimple([-1,-2,-1.5]);
+ANT.resultat=carteBalSimple([-1,-2,-1.5]);
 verifie("un balayage dont aucun point ne resonne ne designe pas d'optimum",
         lectureBalayage().length===0&&
         controlesCarte().some(a=>a.titre.indexOf("Aucun point du balayage")===0));
@@ -1540,32 +1540,32 @@ verifie("un balayage dont aucun point ne resonne ne designe pas d'optimum",
 /* LES NEUF POINTS DU CROISEMENT g × y0, tels que le serveur les a rendus
    (`croisement-g-y0.json`, a la racine) : le meilleur est g = 1,49 et
    y0 = 8,51 — le coin bas-bas. C'est le cas qui a fait ecrire la regle. */
-const IA_X=JSON.parse(fs.readFileSync(path.join(__dirname,"..","croisement-g-y0.json"),"utf8"));
+const CARTE_X=JSON.parse(fs.readFileSync(path.join(__dirname,"..","croisement-g-y0.json"),"utf8"));
 ANT.resultat=Object.assign({balayage:true, pente_hz_par_unite:null,
-                            lignes:IA_X.lignes,
-                            points:IA_X.points.map(p=>({etiquette:p.etiquette,
+                            lignes:CARTE_X.lignes,
+                            points:CARTE_X.points.map(p=>({etiquette:p.etiquette,
                               valeur:p.valeur, valeur2:p.valeur2, resultat:p}))},
-                           IA_X.balayage);
-IA_L=lectureBalayage();
+                           CARTE_X.balayage);
+CARTE_L=lectureBalayage();
 verifie("le croisement g × y0 : le meilleur point est nomme, avec son S11",
-        IA_L.length===1&&IA_L[0].texte.indexOf("1,4896 × 8,5112")>=0&&
-        IA_L[0].texte.indexOf("-16,02 dB")>=0&&
-        IA_L[0].texte.indexOf("Sur 9 points")>=0,
-        IA_L.map(a=>a.texte).join(" | "));
+        CARTE_L.length===1&&CARTE_L[0].texte.indexOf("1,4896 × 8,5112")>=0&&
+        CARTE_L[0].texte.indexOf("-16,02 dB")>=0&&
+        CARTE_L[0].texte.indexOf("Sur 9 points")>=0,
+        CARTE_L.map(a=>a.texte).join(" | "));
 verifie("et il est a la borne basse des DEUX cotes : c'est un coin",
-        IA_L.length===1&&
-        IA_L[0].texte.indexOf("borne basse de « "+IA_X.balayage.nom+" »")>=0&&
-        IA_L[0].texte.indexOf("borne basse de « "+IA_X.balayage.nom2+" »")>=0&&
-        IA_L[0].texte.indexOf("COIN")>=0);
+        CARTE_L.length===1&&
+        CARTE_L[0].texte.indexOf("borne basse de « "+CARTE_X.balayage.nom+" »")>=0&&
+        CARTE_L[0].texte.indexOf("borne basse de « "+CARTE_X.balayage.nom2+" »")>=0&&
+        CARTE_L[0].texte.indexOf("COIN")>=0);
 verifie("la lecture ne propose aucune carte et n'ecrit rien dans les reglages",
-        IA_L.every(a=>!a.prop)&&
-        JSON.stringify([ANT.bande,ANT.balayage,ANT.maillage,ANT.boite])===IA_AVANT);
+        CARTE_L.every(a=>!a.prop)&&
+        JSON.stringify([ANT.bande,ANT.balayage,ANT.maillage,ANT.boite])===CARTE_AVANT);
 
 /* LE CREUX LE PLUS PROFOND N'EST PAS LA BONNE ANTENNE s'il tombe a cote de
    la cible : avec les courbes, on juge le S11 A la frequence visee. */
-const IA_CIBLE_AVANT=ANT.bande.fcible;
+const CARTE_CIBLE_AVANT=ANT.bande.fcible;
 ANT.bande.fcible=2.45e9;
-const iaCourbe=function(f0,smin){
+const carteCourbe=function(f0,smin){
   const f=[], s=[];
   for(let k=0;k<=30;k++){
     const x=2.3e9+1e7*k;
@@ -1577,12 +1577,12 @@ ANT.resultat={balayage:true, croise:false, nom:"Patch rectangulaire — longueur
               unite:"mm", nom2:"", unite2:"",
               points:[[27,2.50e9,-18],[27.5,2.45e9,-22],[28,2.40e9,-34]].map(q=>
                 ({etiquette:String(q[0]), valeur:q[0], valeur2:null,
-                  resultat:iaCourbe(q[1],q[2])}))};
-IA_L=lectureBalayage();
+                  resultat:carteCourbe(q[1],q[2])}))};
+CARTE_L=lectureBalayage();
 verifie("avec les courbes, le meilleur point est celui qui s'adapte A la cible",
-        IA_L.length===1&&IA_L[0].texte.indexOf("à 2.45 GHz est -22 dB en « 27.5 »")>=0&&
-        IA_L[0].titre.indexOf("dans la plage")>=0,
-        IA_L.map(a=>a.texte).join(" | "));
+        CARTE_L.length===1&&CARTE_L[0].texte.indexOf("à 2.45 GHz est -22 dB en « 27.5 »")>=0&&
+        CARTE_L[0].titre.indexOf("dans la plage")>=0,
+        CARTE_L.map(a=>a.texte).join(" | "));
 /* LE CONTEXTE (antenna_lire conception) annonce le balayage ; son TABLEAU, une
    ligne par point avec la colonne du S11 a la cible, se lit a part (balayage). */
 /* les outils de lecture disponibles, comme l'assistant les offrait : ceux de la
@@ -1593,10 +1593,10 @@ const outilsLecture=()=>{
   if(LECTURE_ANTENNA.aides.balayageTermine())Object.assign(o,LECTURE_ANTENNA.balayage);
   return o;
 };
-const IA_MDL=ANT.modele; ANT.modele=null;   // le faux modele d'un essai plus haut
-const IA_CTX=LECTURE_ANTENNA.contexte();
-const IA_TAB=outilsLecture().balayage.fn({});
-ANT.modele=IA_MDL;
+const CARTE_MDL=ANT.modele; ANT.modele=null;   // le faux modele d'un essai plus haut
+const CARTE_CTX=LECTURE_ANTENNA.contexte();
+const CARTE_TAB=outilsLecture().balayage.fn({});
+ANT.modele=CARTE_MDL;
 /* LES LECTURES DU CANAL DE PILOTAGE (web_suite, registre-antenna) sont celles de
    l'ancien assistant, sorties de son fichier : leur texte doit rester le meme au caractere
    pres. Le releve a ete pris AVANT le deplacement (RELEVE=1 l'ecrit), sur ce
@@ -1620,7 +1620,7 @@ ANT.modele=IA_MDL;
                             ["composant_x","composant",{ref:"X9"}],["nets","nets",{}],["net","net",{nom:"gnd"}],["net_x","net",{nom:"Z"}],
                             ["balayage","balayage",{}]])
     vu[cle]=o[nom]?[].concat(o[nom].fn(a)).join("\n"):"(outil absent)";
-  global.V=window.V=garde.V; ANT.nets=garde.nets; ANT.modele=IA_MDL; CON.actif=garde.con;
+  global.V=window.V=garde.V; ANT.nets=garde.nets; ANT.modele=CARTE_MDL; CON.actif=garde.con;
   if(process.env.RELEVE==="1")fs.writeFileSync(FIX,JSON.stringify(vu,null,1)+"\n");
   const att=JSON.parse(fs.readFileSync(FIX,"utf8"));
   verifie("lectures de l'assistant : sorties identiques au releve pris avant le deplacement",
@@ -1628,28 +1628,28 @@ ANT.modele=IA_MDL;
           Object.keys(att).filter(k=>att[k]!==vu[k]).join(", "));
 }
 verifie("le contexte annonce le balayage et renvoie a l'outil, sans le tableau",
-        IA_CTX.indexOf("=== BALAYAGE TERMINE : 3 POINTS")>=0&&
-        IA_CTX.indexOf("outil « balayage »")>=0&&IA_CTX.indexOf("S11 a 2.45 GHz")<0,
-        IA_CTX);
+        CARTE_CTX.indexOf("=== BALAYAGE TERMINE : 3 POINTS")>=0&&
+        CARTE_CTX.indexOf("outil « balayage »")>=0&&CARTE_CTX.indexOf("S11 a 2.45 GHz")<0,
+        CARTE_CTX);
 verifie("l'outil « balayage » rend le tableau, S11 a la cible compris",
-        IA_TAB.length===4&&IA_TAB[0].split(";").length===7&&
-        IA_TAB[0].indexOf("S11 a 2.45 GHz")>=0&&
-        IA_TAB[2].split(";")[0]==="27.5"&&IA_TAB[2].split(";")[3]==="-22",
-        IA_TAB.join(" / "));
+        CARTE_TAB.length===4&&CARTE_TAB[0].split(";").length===7&&
+        CARTE_TAB[0].indexOf("S11 a 2.45 GHz")>=0&&
+        CARTE_TAB[2].split(";")[0]==="27.5"&&CARTE_TAB[2].split(";")[3]==="-22",
+        CARTE_TAB.join(" / "));
 /* LE CROISEMENT L × y0 DU 02/10 (`croisement-L-y0.json`), sans ses courbes :
    le S11 minimal designe 28,2 × 7 (-33,9 dB a 2,40 GHz), et la lecture doit
    dire que ce creux tombe 2 % sous la cible. */
-const IA_LY=JSON.parse(fs.readFileSync(path.join(__dirname,"..","croisement-L-y0.json"),"utf8"));
-ANT.resultat=Object.assign({balayage:true, lignes:IA_LY.lignes,
-                            points:IA_LY.points.map(p=>({etiquette:p.etiquette,
+const CARTE_LY=JSON.parse(fs.readFileSync(path.join(__dirname,"..","croisement-L-y0.json"),"utf8"));
+ANT.resultat=Object.assign({balayage:true, lignes:CARTE_LY.lignes,
+                            points:CARTE_LY.points.map(p=>({etiquette:p.etiquette,
                               valeur:p.valeur, valeur2:p.valeur2, resultat:p}))},
-                           IA_LY.balayage);
-IA_L=lectureBalayage();
+                           CARTE_LY.balayage);
+CARTE_L=lectureBalayage();
 verifie("sans courbes, le creux le plus profond est dit hors de la cible",
-        IA_L.length===1&&IA_L[0].texte.indexOf("28,2 × 7")>=0&&
-        IA_L[0].texte.indexOf("sous la cible")>=0,
-        IA_L.map(a=>a.texte).join(" | "));
-ANT.bande.fcible=IA_CIBLE_AVANT;
+        CARTE_L.length===1&&CARTE_L[0].texte.indexOf("28,2 × 7")>=0&&
+        CARTE_L[0].texte.indexOf("sous la cible")>=0,
+        CARTE_L.map(a=>a.texte).join(" | "));
+ANT.bande.fcible=CARTE_CIBLE_AVANT;
 ANT.resultat=null;
 
 CON.actif=false;
@@ -3293,10 +3293,10 @@ console.log("10. Le canal de pilotage");
       try{
         for(const n of noms) global[n]=(...x)=>{ appels.push([n].concat(x)); if(n==="antVuePoser")ANT.vue=x[0]; if(n==="wsPlaceOf")return "hidden"; };
         global.document=Object.assign({},docGarde,{getElementById:id=>toiles[id]||null});
-        global.WS={panels:{resultats:{last:"dockB", collapsed:true}, couches:{last:"dockL"}}, order:{dockL:[],dockR:[],dockB:[]}};
+        global.WS={panels:{resultats:{last:"dockB", collapsed:true}, couches:{last:"dockL"}}, order:{dockL:[],dockR:[],dockB:[]}, floats:[], hidden:["resultats"]};
         global.WS_DOCKS=["dockL","dockR","dockB"];
         const ecrits=[]; global.localStorage={setItem:(k)=>ecrits.push(k), getItem:()=>null, removeItem:()=>{}};
-        ANT.vue="2d";
+        ANT.vue="2d"; ANT.etape=0;
         const vue=async a=>{ try{ return await V2.executer(a); }catch(e){ return "REFUS "+e.message; } };
         for(const [a,motif] of [[{vue:"4d"},/2d ou 3d/],[{onglet:"phase"},/resultats « phase » inconnu/],[{vue:"3d",etape:99},/de 1 à \d+/],
                                 [{panneau:"cuisine"},/panneau « cuisine » inconnu : resultats, couches/],[{toile:"3d"},/passe d'abord en vue 3D/],
@@ -3307,6 +3307,19 @@ console.log("10. Le canal de pilotage");
                 ANT.vue==="3d"&&ANT_ONGLET==="s21"&&ANT.etape===1&&WS.order.dockB.includes("resultats")&&WS.panels.resultats.collapsed===false&&
                 /^Vue : vue 3D ; maillage montré ; onglet Couplage ; étape \w+ ; panneau resultats ; capture : vue 3D\.$/.test(t), t);
         verifie("le panneau s'ouvre sans enregistrer la disposition", appels.some(x=>x[0]==="wsApply"&&x[1]===false)&&!appels.some(x=>x[0]==="wsApply"&&x[1]!==false));
+        /* ce que Claude a seulement montré ne part pas avec un enregistrement */
+        verifie("l'etape montree par Claude n'est pas celle qu'on enregistre", piloteAntennaEtape()===0&&ANT.etape===1, piloteAntennaEtape());
+        await vue({etape:4});
+        verifie("deux etapes de Claude : on enregistre toujours celle d'avant", piloteAntennaEtape()===0&&ANT.etape===3);
+        ANT.etape=2;
+        verifie("l'utilisateur change d'etape : c'est la sienne qu'on enregistre", piloteAntennaEtape()===2);
+        ANT.etape=1;
+        const disp=piloteAntennaDisposition(WS);
+        verifie("la disposition enregistree garde le panneau ferme et replie, l'ecran le garde ouvert",
+                disp.hidden.includes("resultats")&&!disp.order.dockB.includes("resultats")&&disp.panels.resultats.collapsed===true&&
+                WS.order.dockB.includes("resultats")&&WS.panels.resultats.collapsed===false, JSON.stringify(disp));
+        WS.panels.resultats.collapsed=true;
+        verifie("l'utilisateur replie le panneau : il redevient le sien", piloteAntennaDisposition(WS)===WS);
         const cap=PIL.capture;
         verifie("capture : la vue 3D, apres un rendu force", cap()===toiles.vue3d&&appels.some(x=>x[0]==="ant3dDessiner"));
         await vue({toile:"courbe"});

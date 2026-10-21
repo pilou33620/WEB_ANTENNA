@@ -370,7 +370,11 @@ function antEtapesRendre(){
       '</button>';
   }).join("");
   box.querySelectorAll("[data-etape]").forEach(function(b){
-    b.onclick=function(){ ANT.etape=+b.dataset.etape; antAssistantRendre(true); };
+    b.onclick=function(){
+      ANT.etape=+b.dataset.etape;
+      if(typeof piloteAntennaEtapeOublier==="function")piloteAntennaEtapeOublier();
+      antAssistantRendre(true);
+    };
   });
 }
 

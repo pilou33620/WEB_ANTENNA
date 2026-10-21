@@ -42,7 +42,9 @@ NOM = re.compile(r"^[a-z_][a-z0-9_]{0,63}$")
 GARDE_COMMANDES = 3600      # s : une commande finie reste lisible par /suivre pendant une heure
 MAX_COMMANDES = 500         # au-delà, les plus vieilles commandes finies sont oubliées
 MAX_ONGLETS = 200           # tous navigateurs confondus : au-delà, un battement est refusé (429)
-GROS = ("reponse",)         # seule une réponse porte une capture : les autres corps restent petits
+# une réponse porte une capture, une commande un fichier (kicad_mod, Touchstone) ; les commandes ne viennent
+# que du MCP de ce poste (ORDRES). Battements et suivis restent petits.
+GROS = ("reponse", "commande")
 
 
 class Refus(Exception):
@@ -65,8 +67,8 @@ class Pilote:
         self.attente_poll = attente_poll      # s : un long-poll du relais
         self.oubli = oubli                    # s : un onglet sans nouvelles est oublié (> 90 s de pilote.js)
         self.redistribution = redistribution  # s : livrée mais pas accusée, la commande repart
-        self.max_corps = max_corps            # octets : une capture d'écran tient dedans
-        self.max_petit = max_petit            # octets : battement, commande
+        self.max_corps = max_corps            # octets : une capture d'écran, un fichier dans une commande
+        self.max_petit = max_petit            # octets : battement, suivi
         self.cond = threading.Condition()
         self.onglets = {}                     # id -> onglet
         self.commandes = {}                   # id -> commande
@@ -508,6 +510,10 @@ if __name__ == "__main__":
                b'"focus_il_y_a": NaN}]}')[0] == 400
     assert req("POST", "/api/pilote/battement", brut=b"{pas du json")[0] == 400
     assert req("POST", "/api/pilote/battement", brut=b"x" * 10000)[0] == 413
+    # une commande porte un fichier : au-delà du petit corps, jusqu'au gros
+    assert req("POST", "/api/pilote/commande", {"onglet": "absent", "page": "pcb", "nom": "x",
+                                                "args": {"texte": "k" * 2000}})[0] != 413
+    assert req("POST", "/api/pilote/commande", brut=b'{"args": {"t": "' + b"k" * 9000 + b'"}}')[0] == 413
     assert req("POST", "/api/pilote/battement", {"navigateur": "a b", "onglets": []})[0] == 400
     assert req("POST", "/api/pilote/battement", {"navigateur": "n", "onglets": [{"id": "x"}]})[0] == 400
     assert req("POST", "/api/pilote/reponse", {"navigateur": "nav1", "id": att["id"], "etat": "piratee"})[0] == 400

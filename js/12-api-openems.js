@@ -113,8 +113,19 @@ async function oePreparer(){
     ANT.refus=null;
     if(typeof antBilanRendre==="function")antBilanRendre();
   }
+  const doc=antDocument();
+  /* RIEN DE DÉSIGNÉ : le serveur refuserait en 422 (openems_modele.py). Le cas
+     est normal — entrer en conception, ou poser un exemple, revérifie avant
+     que le gabarit ait dessiné son cuivre — : on dit la même chose sans lui
+     écrire, et sans erreur réseau dans la console. */
+  if(!doc.cuivre.length){
+    ANT.modele=null;
+    ANT.refus={message:"Aucun cuivre dans la sélection.",
+               conseil:"Désignez l'antenne sur la carte : cliquez son net, ou Ctrl+clic pour en prendre plusieurs."};
+    throw new Error(ANT.refus.message+"\n"+ANT.refus.conseil);
+  }
   try{
-    const modele=await oePost(OE_ROUTE,antDocument());
+    const modele=await oePost(OE_ROUTE,doc);
     if(mien!==OE_SEQ)return ANT.modele;      // dépassée : on ne touche à rien
     ANT.modele=modele; ANT.refus=null;
     return modele;

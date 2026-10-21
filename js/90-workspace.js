@@ -79,8 +79,10 @@ let WS=wsDefault();
    retombe sur le stockage local nu, comme avant les profils. */
 const WS_SECTION="espace:"+WS_KEY;
 function wsSave(){
-  if(typeof profEcrire==="function"){profEcrire(WS_SECTION,WS);return;}
-  try{localStorage.setItem(WS_KEY,JSON.stringify(WS));}catch(e){}
+  // un panneau que Claude a seulement montré (pilote-antenna.js) s'enregistre tel qu'il était
+  const d=typeof piloteAntennaDisposition==="function"?piloteAntennaDisposition(WS):WS;
+  if(typeof profEcrire==="function"){profEcrire(WS_SECTION,d);return;}
+  try{localStorage.setItem(WS_KEY,JSON.stringify(d));}catch(e){}
 }
 function wsLoad(){
   let d=null;
