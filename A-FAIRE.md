@@ -327,12 +327,18 @@ motif même quand l'antenne voulue s'en écarte.
 
 ### Pilotage par Claude (MCP de web_suite) — relevé du 19/10/2026
 
-- [ ] **422 de `/api/openems` pendant le tutoriel** sur une page vide : une étape demande un
-  chiffrage sans modèle. Antérieur au retrait.
+- [x] **422 de `/api/openems` pendant le tutoriel** (21/10/2026) : la pose de l'exemple entre
+  en conception, qui revérifiait avant que le gabarit ait dessiné son cuivre. Un document sans
+  cuivre est refusé dans la page (`oePreparer`), avec le message du serveur, sans appel.
 - [ ] **Essai réel des courbes** : `antenna_lire` (courbe) et `antenna_vue` (courbes) n'ont été
   éprouvés que sur un résultat synthétique ; il manque un vrai calcul openEMS mené jusqu'au bout.
-- [ ] **Banc** : `test/banc-interface.js` garde des noms hérités de l'assistant (`IA_*`,
-  `iaCourbe`, `iaMasseVide`…) ; à renommer à l'occasion.
+- [x] **Banc** (21/10/2026) : les noms hérités de l'assistant sont renommés (`CARTE_*`,
+  `carteCourbe`, `carteMasseVide`…).
+- [x] **Vue de Claude et enregistrement** (21/10/2026) : l'étape montrée par `antenna_vue` n'est
+  pas celle qu'enregistre le projet, ni un panneau montré celui de la disposition, tant que
+  l'utilisateur n'y touche pas (`piloteAntennaEtape`, `piloteAntennaDisposition`).
+- [x] **Canal de pilotage** (21/10/2026) : `pilote.py` (copie de web_suite) laisse une commande
+  porter jusqu'à 8 Mo.
 
 ---
 
