@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 # ==========================================
 # VERSIONING
-# Version: 1.3.0
-# Date: 2026-10-15
+# Version: 1.4.0
+# Date: 2026-10-21
+# 1.4.0 : « nm »: 1 pour un composant non monte (populate="false" de la BOM,
+#         parseur 1.83) ; cle absente pour un monte.
 # 1.3.0 : « hauteur » et « corps » d'un composant, tires de son <Package>
 #         (parseur 1.82) pour le dossier mecanique ; absents si le fichier
 #         ne les porte pas. Coordonnees du boitier, comme « pins ».
@@ -499,6 +501,8 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
             "part": comp.part_number or "",
             "props": comp.properties or {},
         }
+        if not comp.populate:
+            item["nm"] = 1          # non monté (populate="false" dans la BOM)
         paquet = comp.package_obj
         if paquet:
             item["pads"] = [_pad_en_dict(p, nets) for p in paquet.pads]

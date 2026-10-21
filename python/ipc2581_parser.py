@@ -1,3 +1,4 @@
+# [2026-10-21] Version 1.83: populate="false" d'un <RefDes> de la BOM -> Component.populate
 # [2026-10-15] Version 1.82: corps et hauteur des boitiers (dossier mecanique)
 # Description:
 #              - <Package height> et le polygone de <Package><Outline> sont
@@ -1055,6 +1056,7 @@ class IPC2581Parser:
                 name = ref_des_elem.attrib.get('name', '')
                 if not name:
                     continue
+                pose = ref_des_elem.attrib.get('populate', 'true').strip().lower() != 'false'
 
                 comp = comps_by_refdes.get(name)
                 if comp is not None:
@@ -1065,6 +1067,8 @@ class IPC2581Parser:
                         comp.tolerance = tol
                     if not comp.part_number and part:
                         comp.part_number = part
+                    if not pose:
+                        comp.populate = False
                     for k, v in bom_props.items():
                         if k not in comp.properties:
                             comp.properties[k] = v
@@ -1076,7 +1080,8 @@ class IPC2581Parser:
                     ctype = self._qualifier_type_composant(name, val, bom_props)
                     new_comp = Component(ref_des=name, package_ref=pkg_ref, layer_ref=layer,
                                          location=Point(0, 0), value=val, tolerance=tol,
-                                         comp_type=ctype, part_number=part, properties=bom_props)
+                                         comp_type=ctype, part_number=part, properties=bom_props,
+                                         populate=pose)
                     self.design.components.append(new_comp)
                     comps_by_refdes[name] = new_comp
 

@@ -232,6 +232,8 @@ class Component:
     # fichier -- pas les <Pad> internes a un <Pin>, quasi toujours absents
     # d'un export reel. Cle : le numero de broche (Pin.number), tel quel.
     pin_nets: Dict[str, str] = field(default_factory=dict)
+    # <BomItem><RefDes populate="false"> : la variante ne monte pas ce composant
+    populate: bool = True
 
 
 @dataclass
