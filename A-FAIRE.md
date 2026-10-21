@@ -330,8 +330,11 @@ motif même quand l'antenne voulue s'en écarte.
 - [x] **422 de `/api/openems` pendant le tutoriel** (21/10/2026) : la pose de l'exemple entre
   en conception, qui revérifiait avant que le gabarit ait dessiné son cuivre. Un document sans
   cuivre est refusé dans la page (`oePreparer`), avec le message du serveur, sans appel.
-- [ ] **Essai réel des courbes** : `antenna_lire` (courbe) et `antenna_vue` (courbes) n'ont été
-  éprouvés que sur un résultat synthétique ; il manque un vrai calcul openEMS mené jusqu'au bout.
+- [x] **Essai réel des courbes** (21/10/2026) : l'exemple patch calculé pour de vrai (openEMS
+  0.0.37 compilé sous Linux, lancé depuis la page), puis lu par le MCP : `antenna_lire`
+  resultats (f0 2,45 GHz, S11 −23,4 dB, 43,8 − j1,6 Ω, bande −10 dB 2,421–2,479 GHz,
+  Dmax 5,84 dBi) et courbe ; `antenna_vue` S11 et impédance ; capture de la courbe juste.
+  Reste un détail d'affichage : la dernière graduation de fréquence chevauche « GHz ».
 - [x] **Banc** (21/10/2026) : les noms hérités de l'assistant sont renommés (`CARTE_*`,
   `carteCourbe`, `carteMasseVide`…).
 - [x] **Vue de Claude et enregistrement** (21/10/2026) : l'étape montrée par `antenna_vue` n'est
