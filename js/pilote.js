@@ -55,6 +55,7 @@
     let canal = null, actif = false, minuteurs = [], arretPoll = null, dernierEnvoi = "";
     const vus = new Map();          // id d'onglet -> {onglet, t}
     const traitees = new Set();     // ids de commandes déjà reçues : une redistribution ne rejoue rien
+    const originaux = new WeakMap(); // def d'écriture -> son « appliquer » d'origine, que seul le clic appelle
     const nav = idNavigateur(env.stockage, P.id);
 
     function visible() {
@@ -218,7 +219,7 @@
       dessinerCarte(carte);
       try {
         // La proposition affichée suit : l'adaptateur vérifie qu'elle n'a pas changé depuis
-        carte.jeton = await carte.def.appliquer(carte.args, carte.prop);
+        carte.jeton = await (originaux.get(carte.def) || carte.def.appliquer).call(carte.def, carte.args, carte.prop);
         if (carte.def.etat) carte.apres = texte(carte.def.etat());   // instantané : l'Annuler compare
         carte.etat = "appliquee";
         repondre(carte.id, "appliquee", { titre: texte(carte.prop.titre || carte.nom), avant: carte.prop.avant,
@@ -458,6 +459,19 @@
           throw new Error(nom + " : « annuler » exige « etat » (on n'annule que si rien n'a bougé)");
         if (typeof def.proposer !== "function" || typeof def.appliquer !== "function")
           throw new Error(nom + " : une écriture déclare « proposer » et « appliquer »");
+        /* Le clic n'est pas une barrière (un script de la page peut tout), c'est l'accord de
+           l'utilisateur : une écriture appliquée sans sa carte se voit dans le panneau. */
+        if (!originaux.has(def)) {
+          const original = def.appliquer;
+          originaux.set(def, original);
+          def.appliquer = function () {
+            const m = "« " + nom + " » appliquée sans carte ni clic (console ou script de la page).";
+            tracer(m);
+            ouvrir(true);
+            if (typeof console !== "undefined") console.warn("Pilote : " + m);
+            return original.apply(this, arguments);
+          };
+        }
       } else if (typeof def.executer !== "function") {
         throw new Error(nom + " : « executer » manquant");
       }
