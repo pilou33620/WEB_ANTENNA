@@ -548,12 +548,24 @@ class Garde:
     @staticmethod
     def internet(handler):
         """Le client a-t-il une adresse publique ? (IPv6 de la box ouverte, redirection de port)
-        Réseau local, lien local et Tailscale (100.64/10, fd7a::) ne sont pas publics."""
+        Réseau local, lien local et Tailscale (100.64/10, fd7a::) ne sont pas publics, ni une
+        IPv6 globale du /64 de l'IPv6 globale du poste où elle arrive : un appareil du réseau
+        local qui a trouvé pilou.local par mDNS (la box distribue ce /64 au seul réseau local)."""
         try:
             ip = ipaddress.ip_address(handler.client_address[0].split("%")[0])
         except (ValueError, IndexError, TypeError):
             return True
-        return (getattr(ip, "ipv4_mapped", None) or ip).is_global
+        ip = getattr(ip, "ipv4_mapped", None) or ip
+        if not ip.is_global:
+            return False
+        if ip.version != 6:
+            return True
+        try:
+            ici = ipaddress.ip_address(handler.connection.getsockname()[0].split("%")[0])
+        except (AttributeError, OSError, ValueError, IndexError, TypeError):
+            return True
+        return not (ici.version == 6 and ici.is_global and ici.ipv4_mapped is None
+                    and ip in ipaddress.ip_network((ici, 64), strict=False))
 
     @staticmethod
     def ce_poste(handler):
@@ -867,6 +879,23 @@ if __name__ == "__main__":
             assert not Garde.internet(C(ip)), ip
         for ip in ("8.8.8.8", "2a01:cb19:690:a100::1", "::ffff:8.8.8.8"):
             assert Garde.internet(C(ip)), ip
+        # IPv6 globale du /64 du poste (mDNS pilou.local) : réseau local ; ailleurs, Internet
+        class S:
+            def __init__(self, ici):
+                self.getsockname = lambda: (ici, 0, 0, 0)
+        class CS(C):
+            def __init__(self, ip, ici):
+                super().__init__(ip)
+                self.connection = S(ici)
+        assert not Garde.internet(CS("2a01:cb19:690:a100::1", "2a01:cb19:690:a100:abcd::2"))
+        assert not Garde.internet(CS("2a01:cb19:690:a100::1", "2a01:cb19:690:a100:abcd::2%eth0"))
+        for ip, ici in (("2a01:cb19:690:a101::1", "2a01:cb19:690:a100::2"),   # autre /64
+                        ("2a01:cb19:690:a100::1", "fd00::2"),                 # arrivée par une ULA
+                        ("2a01:cb19:690:a100::1", "::ffff:192.168.1.2"),
+                        ("2a01:cb19:690:a100::1", "pas une ip"),
+                        ("8.8.8.8", "8.8.8.1"),                               # IPv4 globale : toujours refusée
+                        ("::ffff:8.8.8.8", "::ffff:8.8.8.1")):
+            assert Garde.internet(CS(ip, ici)), (ip, ici)
         distant[0] = False                                        # ce poste : pas de code
         assert req("/").corps == b"ok"
         inactif = Garde("LOCAL", actif=False)
