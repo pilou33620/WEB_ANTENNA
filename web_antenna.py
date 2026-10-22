@@ -1459,6 +1459,7 @@ def main(argv=None):
     local_seul = lie in ("127.0.0.1", "::1")
     global GARDE
     GARDE = appairage.Garde("WEB_ANTENNA", actif=not local_seul)
+    GARDE.brancher(serveur)             # en mode reseau : HTTPS sur le meme port
     url = url_locale(lie, port)
 
     # LE DEBIT DU POSTE, RECOLLE AVANT LA PREMIERE PAGE. Sans lui, la premiere
@@ -1485,9 +1486,9 @@ def main(argv=None):
     print("  Dossier   %s" % ROOT)
     print("  Adresse   %s" % url)
     if not local_seul:
-        print("            http://%s:%d/   (reseau local)" % (ip_reseau(), port))
+        print("            %s   (reseau local)" % GARDE.adresse(ip_reseau(), port))
         if appairage.ip_tailscale():
-            print("            http://%s:%d/   (Tailscale)" % (appairage.ip_tailscale(), port))
+            print("            %s   (Tailscale)" % GARDE.adresse(appairage.ip_tailscale(), port))
         print("            l'autre appareil demande une fois le code d'appairage")
         GARDE.annoncer()
     if port != args.port:

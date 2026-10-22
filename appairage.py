@@ -17,6 +17,17 @@ dans ~/.web_tools/jeton-reseau.txt, et un navigateur envoie un cookie à tous
 les ports d'une même adresse. Une tablette appairée une fois (au lanceur ou à
 n'importe quel tool) est reconnue par tous les tools de ce poste.
 
+HTTPS EN MODE RÉSEAU : sur le Wi-Fi, le cookie du jeton circulait en clair ;
+qui écoutait le récupérait et devenait un appareil appairé. Une autorité (CA)
+propre à ce poste, créée une fois dans ~/.web_tools/tls/ par la commande
+openssl, signe le certificat du serveur (les adresses privées du poste). Un
+appareil l'installe une fois (/appairage/ca.pem) et fait confiance à tous les
+tools du poste. Le MÊME PORT sert HTTPS et HTTP : un premier octet 0x16 est une
+poignée de main TLS. La boucle locale garde HTTP (navigateur du poste, MCP,
+bancs) ; un autre appareil arrivé en HTTP est renvoyé vers https://. Sans
+openssl (Pyto, Windows sans Git), ou avec WEB_TOOLS_HTTP=1, tout reste en HTTP
+et le terminal le dit.
+
 Usage dans un serveur (http.server) :
 
     GARDE = appairage.Garde("WEB_3D", actif=ecoute_sur_le_reseau)
@@ -24,16 +35,22 @@ Usage dans un serveur (http.server) :
         def parse_request(self):
             return super().parse_request() and GARDE.filtrer(self)
     ...
-    GARDE.annoncer()     # au démarrage : affiche le code dans le terminal
+    GARDE.brancher(serveur)   # en mode réseau : HTTPS sur le port du serveur
+    GARDE.annoncer()          # au démarrage : affiche le code dans le terminal
 """
 
+import hashlib
 import hmac
 import ipaddress
 import json
 import os
 import re
 import secrets
+import shutil
 import socket
+import ssl
+import subprocess
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -44,6 +61,7 @@ PAGE = "/appairage"                 # la page du code (sa propre adresse : Safar
 ROUTE = "/api/appairer"             # la seule route ouverte sans jeton, en POST
 ENTETE = "X-Appairage"              # en-tête maison : un autre site ne peut pas l'ajouter sans pré-vol CORS
 MARQUE = "[connexion]"              # WEB·SUITE recopie ces lignes du journal d'un outil dans son terminal
+CA = PAGE + "/ca.pem"               # le certificat de la CA du poste, à installer sur la tablette
 
 
 def fichier_jeton():
@@ -133,6 +151,232 @@ def hote_permis(entete):
         return True
     except ValueError:
         return False
+
+
+# -- HTTPS ------------------------------------------------------------------
+# La CA ne peut signer QUE des adresses privées et des noms locaux (nameConstraints) :
+# installée sur une tablette, elle ne pourrait pas servir à imiter un site d'Internet,
+# même si sa clé quittait ce poste.
+PLAGES = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8")
+TLS_JOURS = 397                     # en dessous de la limite d'Apple (398) ; renouvelé à 30 jours
+
+
+def dossier_tls():
+    return os.path.join(os.path.dirname(fichier_jeton()), "tls")
+
+
+def _openssl():
+    o = shutil.which("openssl")
+    for p in (o, r"C:\Program Files\Git\usr\bin\openssl.exe",
+              r"C:\Program Files\Git\mingw64\bin\openssl.exe"):
+        if p and os.path.exists(p):
+            return p
+    return None
+
+
+def _nom_local():
+    nom = socket.gethostname().split(".")[0].lower()
+    return nom if re.fullmatch(r"[a-z0-9-]{1,63}", nom) else ""
+
+
+def adresses_poste():
+    """Les IPv4 privées de ce poste (réseau local, Tailscale, boucle locale)."""
+    ips = {"127.0.0.1"}
+    for cible in ("192.168.255.255", "10.255.255.255", "172.31.255.255"):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as so:
+                so.connect((cible, 1))           # aucun paquet n'est envoyé
+                ips.add(so.getsockname()[0])
+        except OSError:
+            pass
+    try:
+        ips.update(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        pass
+    t = ip_tailscale()
+    if t:
+        ips.add(t)
+    plages = [ipaddress.ip_network(p) for p in PLAGES]
+    return sorted(i for i in ips if any(ipaddress.ip_address(i) in p for p in plages))
+
+
+def _cnf(chemin, texte):
+    with open(chemin, "w", encoding="utf-8") as f:
+        f.write(texte)
+
+
+def _generer(dossier, openssl, adresses, ca_neuve):
+    """Crée la CA (si ca_neuve) puis le certificat du serveur, par la commande openssl
+    (fichiers de configuration : la même syntaxe pour OpenSSL et LibreSSL)."""
+    nom = _nom_local()
+    tmp = tempfile.mkdtemp(dir=dossier)
+    try:
+        def lancer(*args):
+            r = subprocess.run([openssl] + list(args), cwd=tmp, capture_output=True, text=True, timeout=60)
+            if r.returncode:
+                raise OSError("openssl %s : %s" % (args[0], (r.stderr or r.stdout).strip()[-300:]))
+        if ca_neuve:
+            masque = lambda p: "%s/%s" % (p.network_address, p.netmask)
+            contraintes = ",".join(["permitted;IP:" + masque(ipaddress.ip_network(p)) for p in PLAGES]
+                                   + ["permitted;DNS:localhost", "permitted;DNS:local"]
+                                   + (["permitted;DNS:" + nom] if nom else []))
+            _cnf(os.path.join(tmp, "ca.cnf"),
+                 "[req]\ndistinguished_name=dn\nprompt=no\nx509_extensions=v3\n"
+                 "[dn]\nCN=WEB tools %s (CA locale)\n[v3]\n"
+                 "basicConstraints=critical,CA:TRUE,pathlen:0\n"
+                 "keyUsage=critical,keyCertSign,cRLSign\nsubjectKeyIdentifier=hash\n"
+                 "nameConstraints=critical,%s\n" % (nom or "poste", contraintes))
+            lancer("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "3650",
+                   "-config", "ca.cnf", "-keyout", "ca.key", "-out", "ca.pem")
+        else:
+            for f in ("ca.key", "ca.pem"):
+                shutil.copy(os.path.join(dossier, f), tmp)
+        noms = ["localhost"] + ([nom, nom + ".local"] if nom else [])
+        _cnf(os.path.join(tmp, "req.cnf"),
+             "[req]\ndistinguished_name=dn\nprompt=no\n[dn]\nCN=%s\n" % (nom or "localhost"))
+        _cnf(os.path.join(tmp, "ext.cnf"),
+             "[v3]\nbasicConstraints=critical,CA:FALSE\n"
+             "keyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\n"
+             "subjectAltName=%s\n" % ",".join(["DNS:" + n for n in noms] + ["IP:" + i for i in adresses]))
+        lancer("req", "-new", "-newkey", "rsa:2048", "-nodes", "-config", "req.cnf",
+               "-keyout", "serveur.key", "-out", "serveur.csr")
+        lancer("x509", "-req", "-sha256", "-days", str(TLS_JOURS), "-in", "serveur.csr",
+               "-CA", "ca.pem", "-CAkey", "ca.key", "-set_serial", str(secrets.randbits(63)),
+               "-extfile", "ext.cnf", "-extensions", "v3", "-out", "serveur.pem")
+        _cnf(os.path.join(tmp, "serveur.json"),
+             json.dumps({"adresses": adresses, "noms": noms,
+                         "expire": time.time() + TLS_JOURS * 86400}))
+        for f in ("ca.key", "serveur.key"):
+            os.chmod(os.path.join(tmp, f), 0o600)
+        # la CA d'abord : un tool qui lit entre deux trouve au pire un certificat à refaire
+        for f in (["ca.key", "ca.pem"] if ca_neuve else []) + ["serveur.key", "serveur.pem", "serveur.json"]:
+            os.replace(os.path.join(tmp, f), os.path.join(dossier, f))
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _a_refaire(dossier, adresses):
+    try:
+        with open(os.path.join(dossier, "serveur.json"), encoding="utf-8") as f:
+            d = json.load(f)
+        return (not set(adresses) <= set(d["adresses"]) or d["expire"] - time.time() < 30 * 86400
+                or not os.path.exists(os.path.join(dossier, "serveur.pem")))
+    except (OSError, ValueError, KeyError, TypeError):
+        return True
+
+
+def empreinte_ca(dossier=None):
+    """SHA-256 du certificat de la CA, comme iOS l'affiche (« Plus de détails »)."""
+    with open(os.path.join(dossier or dossier_tls(), "ca.pem"), encoding="ascii") as f:
+        der = ssl.PEM_cert_to_DER_cert(f.read())
+    h = hashlib.sha256(der).hexdigest().upper()
+    return " ".join(h[i:i + 2] for i in range(0, len(h), 2))
+
+
+def contexte_tls():
+    """(contexte SSL du serveur, None) ou (None, raison de rester en HTTP)."""
+    if os.environ.get("WEB_TOOLS_HTTP") == "1":
+        return None, "WEB_TOOLS_HTTP=1"
+    openssl = _openssl()
+    dossier = dossier_tls()
+    adresses = adresses_poste()
+    verrou = os.path.join(dossier, "verrou")
+    try:
+        os.makedirs(dossier, exist_ok=True)
+        if _a_refaire(dossier, adresses):
+            if not openssl:
+                return None, "la commande openssl est introuvable"
+            # Deux tools qui démarrent ensemble : un seul crée la CA, l'autre attend.
+            for _ in range(300):
+                try:
+                    os.close(os.open(verrou, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+                    break
+                except FileExistsError:
+                    try:
+                        if time.time() - os.path.getmtime(verrou) > 120:
+                            os.remove(verrou)          # laissé par un tool tué en route
+                    except FileNotFoundError:
+                        pass                           # libéré entre-temps
+                    time.sleep(0.1)
+            else:
+                return None, "verrou %s tenu trop longtemps" % verrou
+            try:
+                if _a_refaire(dossier, adresses):
+                    ca = not (os.path.exists(os.path.join(dossier, "ca.pem"))
+                              and os.path.exists(os.path.join(dossier, "ca.key")))
+                    _generer(dossier, openssl, adresses, ca)
+            finally:
+                os.remove(verrou)
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.load_cert_chain(os.path.join(dossier, "serveur.pem"), os.path.join(dossier, "serveur.key"))
+        return ctx, None
+    except (OSError, ssl.SSLError, subprocess.SubprocessError) as exc:
+        return None, "certificat impossible : %s" % exc
+
+
+def brancher_tls(serveur, ctx):
+    """Le port du serveur sert aussi HTTPS : chaque connexion est lue sans être consommée
+    (MSG_PEEK) ; 0x16 ouvre une poignée de main TLS, le reste est du HTTP."""
+    serveur.tls_web_tools = ctx
+    origine = serveur.finish_request
+
+    def finir(requete, adresse):
+        attente = requete.gettimeout()
+        try:
+            requete.settimeout(15)               # un client muet ne garde pas le fil
+            premier = requete.recv(1, socket.MSG_PEEK)
+            if premier == b"\x16":
+                requete = ctx.wrap_socket(requete, server_side=True)
+            requete.settimeout(attente)
+        except (OSError, ssl.SSLError):
+            return                               # certificat refusé par le client, coupure…
+        try:
+            origine(requete, adresse)
+        finally:
+            if isinstance(requete, ssl.SSLSocket):
+                try:
+                    requete.close()
+                except OSError:
+                    pass
+    serveur.finish_request = finir
+
+
+def en_https(handler):
+    return isinstance(getattr(handler, "connection", None), ssl.SSLSocket)
+
+
+def filtrer_tls(handler, ce_poste=None):
+    """True : la requête suit son cours. Sert la CA du poste (sans jeton : elle est
+    publique), et renvoie vers https:// un autre appareil arrivé en HTTP."""
+    if not getattr(handler.server, "tls_web_tools", None):
+        return True
+    u = urllib.parse.urlsplit(handler.path)
+    if handler.command in ("GET", "HEAD") and u.path == CA:
+        try:
+            with open(os.path.join(dossier_tls(), "ca.pem"), "rb") as f:
+                corps = f.read()
+        except OSError:
+            Garde._repondre(handler, 404, "CA introuvable")
+            return False
+        # ce type-là : Safari propose d'installer le profil
+        Garde._repondre(handler, 200, corps, "application/x-x509-ca-cert",
+                        [("Content-Disposition", 'attachment; filename="web-tools-ca.pem"')])
+        return False
+    if en_https(handler) or (ce_poste or Garde.ce_poste)(handler):
+        return True
+    Garde._repondre(handler, 307, "HTTPS", entetes=[
+        ("Location", "https://%s%s" % (handler.headers.get("Host") or "", handler.path))])
+    return False
+
+
+def ligne_https(nom_ou_ip, port):
+    """Ce que le terminal affiche à côté de l'adresse réseau."""
+    return ("  HTTPS : la première fois, sur chaque appareil, installez la CA du poste :\n"
+            "          https://%s:%d%s\n"
+            "          (iPad : Réglages › Profil téléchargé › Installer, puis Général ›\n"
+            "           Informations › Réglages des certificats › activer)\n"
+            "          empreinte SHA-256 : %s" % (nom_ou_ip, port, CA, empreinte_ca()))
 
 
 class Appairage:
@@ -245,10 +489,34 @@ class Garde:
         self.jeton = jeton(ancien) if actif else None
         self.code = Appairage(afficher, nom) if actif else None
         self.visites = Visites(nom, afficher)
+        self.tls = None                     # en mode réseau, après brancher()
+        self.port = 0
+        self.sans_tls = ""                  # … ou pourquoi tout reste en HTTP
+
+    def brancher(self, serveur):
+        """En mode réseau : HTTPS sur le port du serveur. Rend le schéma des adresses."""
+        self.port = serveur.server_address[1]
+        if self.actif:
+            self.tls, self.sans_tls = contexte_tls()
+            if self.tls:
+                brancher_tls(serveur, self.tls)
+        return self.schema()
+
+    def schema(self):
+        return "https" if self.tls else "http"
+
+    def adresse(self, hote, port):
+        return "%s://%s:%d/" % (self.schema(), hote, port)
 
     def annoncer(self):
         """Au démarrage, en mode réseau : affiche le code dans le terminal."""
         if self.actif:
+            if self.tls:
+                hors = [i for i in adresses_poste() if not i.startswith(("127.", "100."))]
+                print(ligne_https(hors[0] if hors else "127.0.0.1", self.port), flush=True)
+            elif self.sans_tls:
+                print("  HTTP en clair sur le réseau (%s) : le jeton peut être lu sur le Wi-Fi."
+                      % self.sans_tls, flush=True)
             self.code.preparer()
 
     @staticmethod
@@ -283,8 +551,10 @@ class Garde:
     def autorise(self, handler):
         return not self.actif or self.ce_poste(handler) or self.jeton_recu(handler)
 
-    def biscuit(self):
-        return "%s=%s; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict" % (BISCUIT, self.jeton)
+    def biscuit(self, handler=None):
+        # Secure en HTTPS : le navigateur ne le renverra plus jamais en clair
+        return "%s=%s; Path=/; Max-Age=31536000; HttpOnly; SameSite=Strict%s" % (
+            BISCUIT, self.jeton, "; Secure" if handler is not None and en_https(handler) else "")
 
     # -- réponses ---------------------------------------------------------
     @staticmethod
@@ -314,6 +584,8 @@ class Garde:
         if self.internet(handler):
             self._repondre(handler, 403, "Accès depuis Internet refusé : passez par le réseau local ou Tailscale")
             return False
+        if not filtrer_tls(handler, self.ce_poste):
+            return False
         if not self.actif:
             self.visites.noter(handler.client_address[0])
             return True
@@ -326,7 +598,7 @@ class Garde:
                 # ni dans l'historique, ni dans un lien recopié.
                 reste = urllib.parse.urlencode([(k, v) for k, v in urllib.parse.parse_qsl(u.query)
                                                 if k != "jeton"])
-                self._repondre(handler, 303, entetes=[("Set-Cookie", self.biscuit()),
+                self._repondre(handler, 303, entetes=[("Set-Cookie", self.biscuit(handler)),
                                                       ("Location", u.path + ("?" + reste if reste else ""))])
                 return False
             if lecture and u.path == PAGE:
@@ -349,7 +621,7 @@ class Garde:
                 corps = {}
             ok, texte = self.code.essayer(corps.get("code") if isinstance(corps, dict) else "")
             self._json(handler, 200 if ok else 403, {"ok": ok, "message": texte},
-                       [("Set-Cookie", self.biscuit())] if ok else ())
+                       [("Set-Cookie", self.biscuit(handler))] if ok else ())
             return False
         accepte = handler.headers.get("Accept") or ""
         if lecture and (u.path in ("/", "/index.html") or "text/html" in accepte):
@@ -412,11 +684,16 @@ PAGE_HTML = """<!doctype html>
     <button id="ok" type="submit">Valider</button>
   </form>
   <div id="etat" role="status"></div>
+  <p id="ca" hidden>Connexion chiffrée. Le navigateur vous a averti ? Installez une fois
+     <a href="/appairage/ca.pem">le certificat de ce poste</a> (iPad : Réglages › Profil
+     téléchargé, puis Général › Informations › Réglages des certificats). Comparez son
+     empreinte SHA-256 avec celle du terminal.</p>
 </main>
 <script>
 const champ = document.getElementById('code'), etat = document.getElementById('etat');
 const bouton = document.getElementById('ok');
 let envoi = false;
+if (location.protocol === 'https:') document.getElementById('ca').hidden = false;
 function dire(t, c) { etat.textContent = t; etat.className = c || ''; }
 async function valider() {
   const code = champ.value.replace(/\\D/g, '');
@@ -581,4 +858,65 @@ if __name__ == "__main__":
         assert len(lignes) == 3 and "2 appareil(s)" in lignes[2]
         srv.shutdown()
         srv.server_close()
+
+        # HTTPS : la CA et le certificat créés une fois, gardés ensuite
+        os.environ["WEB_TOOLS_HTTP"] = "1"
+        assert contexte_tls() == (None, "WEB_TOOLS_HTTP=1")
+        del os.environ["WEB_TOOLS_HTTP"]
+        if _openssl():
+            ctx, raison = contexte_tls()
+            assert ctx and raison is None, raison
+            d = dossier_tls()
+            date_ca = os.path.getmtime(os.path.join(d, "ca.pem"))
+            assert not _a_refaire(d, adresses_poste()) and contexte_tls()[0]
+            assert os.path.getmtime(os.path.join(d, "ca.pem")) == date_ca
+            assert len(empreinte_ca().split()) == 32
+            if os.name == "posix":
+                assert os.stat(os.path.join(d, "ca.key")).st_mode & 0o077 == 0
+            # adresse nouvelle : le certificat est refait, la CA reste
+            with open(os.path.join(d, "serveur.json"), encoding="utf-8") as f:
+                info = json.load(f)
+            info["adresses"] = ["127.0.0.1"]
+            _cnf(os.path.join(d, "serveur.json"), json.dumps(info))
+            assert _a_refaire(d, adresses_poste() + ["10.9.9.9"])
+            g2 = Garde("TLS", afficher=lambda t: None)
+            g2.ce_poste = lambda h: not distant[0]
+            distant[0] = True
+
+            class H2(H):
+                def parse_request(self):
+                    return http.server.BaseHTTPRequestHandler.parse_request(self) and g2.filtrer(self)
+            srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H2)
+            assert g2.brancher(srv) == "https" and g2.adresse("h", 1) == "https://h:1/"
+            assert os.path.getmtime(os.path.join(d, "ca.pem")) == date_ca
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            port = srv.server_address[1]
+            client = ssl.create_default_context(cafile=os.path.join(d, "ca.pem"))
+
+            def reqs(chemin, methode="GET", entetes=None, corps=None):
+                c = http.client.HTTPSConnection("127.0.0.1", port, timeout=5, context=client)
+                c.request(methode, chemin, body=corps, headers=entetes or {})
+                r = c.getresponse()
+                r.corps = r.read()
+                c.close()
+                return r
+            r = req("/outil?a=1")                                 # autre appareil en HTTP
+            assert r.status == 307 and r.getheader("Location") == "https://127.0.0.1:%d/outil?a=1" % port
+            r = req(CA)                                           # la CA, même en HTTP, sans jeton
+            assert r.status == 200 and r.corps.startswith(b"-----BEGIN CERTIFICATE")
+            r = reqs("/")                                         # certificat vérifié par la CA
+            assert (r.status, r.getheader("Location")) == (303, PAGE)
+            assert b'id="ca"' in reqs(PAGE).corps
+            r = reqs("/?jeton=" + j)
+            assert "; Secure" in r.getheader("Set-Cookie")
+            assert reqs("/", entetes={"Cookie": BISCUIT + "=" + j}).corps == b"ok"
+            distant[0] = False                                    # ce poste : HTTP reste ouvert
+            assert req("/").corps == b"ok" and reqs("/").corps == b"ok"
+            c = socket.create_connection(("127.0.0.1", port), timeout=5)
+            c.close()                                             # client muet : rien ne casse
+            assert req("/").corps == b"ok"
+            srv.shutdown()
+            srv.server_close()
+        else:
+            print("(openssl absent : HTTPS non vérifié)")
     print("OK")
