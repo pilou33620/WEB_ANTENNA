@@ -1957,7 +1957,7 @@ def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu, boites=None):
         # de plan de reference, ramene a la surface de la carte, et empiler un
         # second desembedage par-dessus reviendrait a compter deux fois.
         ligne = _ligne_alim(p, ca, cb, dielectriques, k_mm, rang)
-        # Deux ESSAIS pour l'ecart de +1 % du MSLPort (A-FAIRE.md, § 1) :
+        # Deux ESSAIS pour l'ecart de +1 % du MSLPort (HISTORIQUE.md, § 1) :
         # « maillage » pose les lignes du MSLPort sous un port localise,
         # « grossier » garde le MSLPort sans son affinage le long du ruban.
         mode = p.get("msl")

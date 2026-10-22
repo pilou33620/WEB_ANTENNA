@@ -212,7 +212,7 @@ function conSymbole(ch){
    DANS le patch, à la profondeur où l'impédance vaut 50 Ω — elle varie en
    cos²(π·y/L), ce qui est la seule chose qu'il faut retenir.
    ========================================================================== */
-/* LES DEUX CORRECTIONS MESURÉES DU PATCH (A-FAIRE.md § 1, octobre 2026).
+/* LES DEUX CORRECTIONS MESURÉES DU PATCH (HISTORIQUE.md § 1, octobre 2026).
    Quatre cas réglés par croisement puis confirmés en simulation — FR-4
    1,6 mm à 868 MHz, 2,45 et 5,8 GHz, RO4350B 0,762 mm à 2,45 GHz :
 
@@ -412,7 +412,7 @@ const CON_MOTIF_MONOPOLE={
     const Lq=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
     const wr=conBorne(c,Math.max(2*c.wf,Lq/6));
     const marge=Math.max(3*c.h,2);
-    /* LA CORRECTION MESURÉE (A-FAIRE.md § 1, 03/10/2026). Le quart d'onde dans
+    /* LA CORRECTION MESURÉE (HISTORIQUE.md § 1, 03/10/2026). Le quart d'onde dans
        (εr+1)/2 rend un brin bien trop court : à 2,45 GHz sur FR-4 1,53 mm, la
        résonance sortait au-dessus de 2,82 GHz. Le croisement brin × masse
        donne Lm + 0,43·Lg ≈ constante, et avec la masse à 0,8 fois le brin,
@@ -610,7 +610,7 @@ function conIfaClassique(c){
   };
 }
 
-/* LA CORRECTION MESURÉE (A-FAIRE.md § 1, 03/10/2026). Une fois
+/* LA CORRECTION MESURÉE (HISTORIQUE.md § 1, 03/10/2026). Une fois
    l'alimentation sortie du court-circuit, l'IFA aux proportions classiques
    résonnait à 2,21 GHz pour 2,45 visés, sous −10 dB. L'écart court-circuit →
    alimentation déplace la résonance autant que le bras : à 1,8 fois λ₀/40 et
@@ -739,7 +739,7 @@ const CON_MOTIF_IFA={
       /* LE DÉCROCHÉ DESCEND SOUS LE BOUT DE LA LIGNE, de son dégagement : la
          piste finit en arrondi d'une demi-largeur, et un décroché arrêté à
          0,3 mm sous le port laissait ce bout mordre dans la masse du dessus —
-         l'alimentation était en court-circuit (A-FAIRE.md § 1, 03/10/2026). */
+         l'alimentation était en court-circuit (HISTORIQUE.md § 1, 03/10/2026). */
       formes.push(gRect("haut","",xg1,yd-wf/2-gd,xg2,yg,true));
     }
 
@@ -868,7 +868,7 @@ const CON_MOTIF_MIFA={
     {id:"marge", nom:"marge de carte", aide:"le substrat qui dépasse"},
     /* Le développé visé, en % du quart d'onde : à empreinte fixe, c'est la
        hauteur des dents qu'il fait varier. La cote à balayer pour chiffrer le
-       couplage entre dents (A-FAIRE.md § 1, « Plans de mesure »). */
+       couplage entre dents (HISTORIQUE.md § 1, « Plans de mesure »). */
     {id:"kd", nom:"développé visé", sym:"kd", unite:"%",
      aide:"en % du quart d'onde : au-dessus de 100, des dents plus hautes "+
           "pour la même empreinte — ce que le couplage entre brins réclame"}
@@ -1043,7 +1043,7 @@ const CON_MOTIF_DIPOLE={
   ],
   defauts:function(c){
     const Lq=CON_C0/(4*c.f*Math.sqrt(c.eeffAir));
-    /* LA CORRECTION MESURÉE (A-FAIRE.md § 1, 03/10/2026) : les bras sur deux
+    /* LA CORRECTION MESURÉE (HISTORIQUE.md § 1, 03/10/2026) : les bras sur deux
        faces voient moins de substrat que (εr+1)/2 ne le dit ; à 2,45 GHz sur
        FR-4 1,53 mm, il faut 1,165 fois le quart d'onde pour y résonner, à
        chevauchement h. L'adaptation, elle, était juste : 48 Ω partout.

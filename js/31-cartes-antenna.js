@@ -893,7 +893,7 @@ const CARTES_ANTENNA = (function(){
   /* RELIRE UN BALAYAGE TERMINÉ. Le meilleur point d'une famille de courbes
      n'est un optimum que s'il est ENCADRÉ : au bord de la plage, c'est
      seulement le meilleur des points essayés, et le vrai est au-delà. C'est
-     exactement ce que le croisement g × y₀ a montré (A-FAIRE.md § 1) — le
+     exactement ce que le croisement g × y₀ a montré (HISTORIQUE.md § 1) — le
      meilleur point était un coin du tableau, et personne ne l'aurait lu sans
      regarder les bornes une à une. La règle le fait, axe par axe.
 
@@ -907,7 +907,7 @@ const CARTES_ANTENNA = (function(){
      LE CRITÈRE EST LE S₁₁ À LA FRÉQUENCE VISÉE, quand une cible est posée et
      que les courbes sont là. Le S₁₁ minimal, celui du tableau, désigne le
      creux le plus profond OÙ QU'IL TOMBE : sur le croisement L × y₀, c'était
-     −33,9 dB… à 2,40 GHz pour 2,45 visés (A-FAIRE.md § 1). Sans courbes ou
+     −33,9 dB… à 2,40 GHz pour 2,45 visés (HISTORIQUE.md § 1). Sans courbes ou
      sans cible, on retombe sur le S₁₁ minimal, et l'on dit de combien le
      point désigné résonne à côté de la cible. */
 
@@ -1172,7 +1172,7 @@ const CARTES_ANTENNA = (function(){
     }
 
     /* -- 7. le motif patch : ce que la mesure a tranché ------------------ */
-    /* Voir A-FAIRE.md § 1 : le gabarit corrige désormais sa longueur et sa
+    /* Voir HISTORIQUE.md § 1 : le gabarit corrige désormais sa longueur et sa
        résistance de bord par la mesure (`patchCorrLongueur`,
        `patchCorrRbord`, 22-antennes.js). La seconde n'est mesurée que sur
        DEUX stratifiés, FR-4 et RO4350B ; entre eux et au-delà, c'est une

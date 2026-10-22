@@ -1,5 +1,5 @@
 {
- "_note": "Mesures du 02-03/10/2026 pour la correction du gabarit patch (A-FAIRE.md, section 1). Meme document que croisement-g-y0.json : gabarit patch, g = 0,48 x largeur de ligne, FR-4 1,6 mm d'ame ou RO4350B 0,762 mm.",
+ "_note": "Mesures du 02-03/10/2026 pour la correction du gabarit patch (HISTORIQUE.md, section 1). Meme document que croisement-g-y0.json : gabarit patch, g = 0,48 x largeur de ligne, FR-4 1,6 mm d'ame ou RO4350B 0,762 mm.",
  "cas": [
   {
    "cas": "FR-4 1,6 mm, 868 MHz",

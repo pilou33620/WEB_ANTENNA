@@ -318,7 +318,7 @@ const cx=conContexte();
    l'ont fait sans que rien ne le dise : le bout arrondi de la ligne de l'IFA
    mordait dans la masse du dessus, et le brin du MIFA, synthetise a 50 ohms,
    recouvrait le court-circuit. La simulation rendait 1 a 30 ohms et aucune
-   resonance (A-FAIRE.md, 03/10/2026). */
+   resonance (HISTORIQUE.md, 03/10/2026). */
 for(const f of [868e6,2.45e9,5.8e9]){
   const cf=Object.assign({},cx,{f:f});
   const gi=conGabarit("ifa"), qi=conGabaritCotes(gi,cf,conGabaritDefauts(gi,cf));
@@ -1465,7 +1465,7 @@ verifie("et l'annuler rend le dessin d'avant ET le port qui allait avec",
 /* LE DIPOLE IMPRIME EN GEOMETRIE LIBRE : ses deux bras sur le dessus, et la
    seconde couche restee « masse » d'usine — une carte « formes » ne touche
    pas aux roles, et c'est voulu. La regle le RELEVE sans rien ecrire : c'est
-   la moins chere des deux reponses d'A-FAIRE, et la seule qui n'ouvre pas de
+   la moins chere des deux reponses de HISTORIQUE.md, et la seule qui n'ouvre pas de
    droit de plus dans la liste blanche. */
 CON.pile=conPileDefaut();
 const CARTE_CU=conCuivres();

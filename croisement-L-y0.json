@@ -6,7 +6,7 @@
   "unite2": "mm",
   "croise": true
  },
- "_note": "Etape 2 du 02/10/2026 : L x y0 a g = 1,5 mm, meme document que croisement-g-y0.json (FR-4 1,6 mm, gabarit patch, ligne 6,4 mm), memes reglages. Voir A-FAIRE.md, section 1.",
+ "_note": "Etape 2 du 02/10/2026 : L x y0 a g = 1,5 mm, meme document que croisement-g-y0.json (FR-4 1,6 mm, gabarit patch, ligne 6,4 mm), memes reglages. Voir HISTORIQUE.md, section 1.",
  "lignes": [
   {
    "n": 1,
