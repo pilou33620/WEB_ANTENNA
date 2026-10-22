@@ -2041,7 +2041,7 @@ découpes de versement l'ont toujours été.
   de 3,5 GHz pour 2,45 visés. La cote `kd` (développé visé, en % du quart
   d'onde, 100 par défaut) allonge les dents à empreinte fixe. Ce qu'il faut y
   mettre n'est pas encore mesuré : le croisement `kd` × `n` reste à mener
-  ([TESTS-A-FAIRE.md](TESTS-A-FAIRE.md)). Tant qu'il ne l'est pas, `kd` vaut 100 et
+  (plan dans [HISTORIQUE.md](HISTORIQUE.md), « Plans de mesure »). Tant qu'il ne l'est pas, `kd` vaut 100 et
   le décalage reste.
 * **La résonance annoncée par une fiche de motif n'est pas une mesure** : elle
   sort de la même formule que les cotes, relue à l'envers. Elle dit dans quel

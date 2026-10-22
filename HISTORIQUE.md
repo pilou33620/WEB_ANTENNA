@@ -6,6 +6,10 @@
 > quel, numéros de section compris : c'est lui que visent les renvois « HISTORIQUE.md § 1 » du
 > code (anciennement « A-FAIRE.md § 1 »). Ses points encore ouverts ont été repris dans les deux
 > nouveaux fichiers.
+>
+> Le 22/10/2026, les essais à faire (`TESTS-A-FAIRE.md`) ont été retirés : on ne s'occupe pour
+> l'instant que des fonctionnalités, les essais se feront plus tard et autrement. Ils restent
+> dans l'historique git, au commit `368501d`.
 
 État relevé le **21/10/2026**. Le banc passe (relevé du 21/10/2026) :
 `python python/test/banc-openems.py` → **1053 vérifications, toutes passées**,
