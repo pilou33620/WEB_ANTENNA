@@ -20,7 +20,8 @@ n'importe quel tool) est reconnue par tous les tools de ce poste.
 HTTPS EN MODE RÉSEAU : sur le Wi-Fi, le cookie du jeton circulait en clair ;
 qui écoutait le récupérait et devenait un appareil appairé. Une autorité (CA)
 propre à ce poste, créée une fois dans ~/.web_tools/tls/ par la commande
-openssl, signe le certificat du serveur (les adresses privées du poste). Un
+openssl, signe le certificat du serveur (les adresses privées du poste, IPv4
+et IPv6 : Tailscale fd7a:115c:a1e0::, ULA fc00::/7 ; pas le lien local fe80::). Un
 appareil l'installe une fois (/appairage/ca.pem) et fait confiance à tous les
 tools du poste. Le MÊME PORT sert HTTPS et HTTP : un premier octet 0x16 est une
 poignée de main TLS. La boucle locale garde HTTP (navigateur du poste, MCP,
@@ -157,7 +158,10 @@ def hote_permis(entete):
 # La CA ne peut signer QUE des adresses privées et des noms locaux (nameConstraints) :
 # installée sur une tablette, elle ne pourrait pas servir à imiter un site d'Internet,
 # même si sa clé quittait ce poste.
-PLAGES = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8")
+# fc00::/7 (ULA) contient le fd7a:115c:a1e0::/48 de Tailscale. Changer PLAGES refait la CA
+# (ca.json) : chaque appareil doit alors la réinstaller.
+PLAGES = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "127.0.0.0/8",
+          "fc00::/7")
 TLS_JOURS = 397                     # en dessous de la limite d'Apple (398) ; renouvelé à 30 jours
 
 
@@ -180,24 +184,29 @@ def _nom_local():
 
 
 def adresses_poste():
-    """Les IPv4 privées de ce poste (réseau local, Tailscale, boucle locale)."""
+    """Les adresses privées de ce poste (réseau local, Tailscale, boucle locale), IPv4 d'abord."""
     ips = {"127.0.0.1"}
-    for cible in ("192.168.255.255", "10.255.255.255", "172.31.255.255"):
+    # fd7a:115c:a1e0::53 : le DNS de Tailscale ; fdff:… : une ULA du réseau local, s'il en a
+    for famille, cible in ((socket.AF_INET, "192.168.255.255"), (socket.AF_INET, "10.255.255.255"),
+                           (socket.AF_INET, "172.31.255.255"), (socket.AF_INET6, "fd7a:115c:a1e0::53"),
+                           (socket.AF_INET6, "fdff:ffff:ffff:ffff::1")):
         try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as so:
+            with socket.socket(famille, socket.SOCK_DGRAM) as so:
                 so.connect((cible, 1))           # aucun paquet n'est envoyé
                 ips.add(so.getsockname()[0])
         except OSError:
             pass
     try:
-        ips.update(socket.gethostbyname_ex(socket.gethostname())[2])
+        ips.update(a[4][0] for a in socket.getaddrinfo(socket.gethostname(), None))
     except OSError:
         pass
     t = ip_tailscale()
     if t:
         ips.add(t)
     plages = [ipaddress.ip_network(p) for p in PLAGES]
-    return sorted(i for i in ips if any(ipaddress.ip_address(i) in p for p in plages))
+    ips = {str(ipaddress.ip_address(i.split("%")[0])) for i in ips}
+    return sorted((i for i in ips if any(ipaddress.ip_address(i) in p for p in plages)),
+                  key=lambda i: (":" in i, i))
 
 
 def _cnf(chemin, texte):
@@ -228,6 +237,7 @@ def _generer(dossier, openssl, adresses, ca_neuve):
                  "nameConstraints=critical,%s\n" % (nom or "poste", contraintes))
             lancer("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "3650",
                    "-config", "ca.cnf", "-keyout", "ca.key", "-out", "ca.pem")
+            _cnf(os.path.join(tmp, "ca.json"), json.dumps({"plages": list(PLAGES)}))
         else:
             for f in ("ca.key", "ca.pem"):
                 shutil.copy(os.path.join(dossier, f), tmp)
@@ -249,17 +259,30 @@ def _generer(dossier, openssl, adresses, ca_neuve):
         for f in ("ca.key", "serveur.key"):
             os.chmod(os.path.join(tmp, f), 0o600)
         # la CA d'abord : un tool qui lit entre deux trouve au pire un certificat à refaire
-        for f in (["ca.key", "ca.pem"] if ca_neuve else []) + ["serveur.key", "serveur.pem", "serveur.json"]:
+        for f in (["ca.key", "ca.pem", "ca.json"] if ca_neuve else []) + ["serveur.key", "serveur.pem", "serveur.json"]:
             os.replace(os.path.join(tmp, f), os.path.join(dossier, f))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _ca_a_refaire(dossier):
+    """CA absente, ou faite pour d'autres PLAGES (une CA d'avant IPv6 n'a pas de ca.json) :
+    ses contraintes de nom refuseraient le certificat du serveur."""
+    try:
+        with open(os.path.join(dossier, "ca.json"), encoding="utf-8") as f:
+            return (json.load(f)["plages"] != list(PLAGES)
+                    or not os.path.exists(os.path.join(dossier, "ca.pem"))
+                    or not os.path.exists(os.path.join(dossier, "ca.key")))
+    except (OSError, ValueError, KeyError, TypeError):
+        return True
 
 
 def _a_refaire(dossier, adresses):
     try:
         with open(os.path.join(dossier, "serveur.json"), encoding="utf-8") as f:
             d = json.load(f)
-        return (not set(adresses) <= set(d["adresses"]) or d["expire"] - time.time() < 30 * 86400
+        return (_ca_a_refaire(dossier) or not set(adresses) <= set(d["adresses"])
+                or d["expire"] - time.time() < 30 * 86400
                 or not os.path.exists(os.path.join(dossier, "serveur.pem")))
     except (OSError, ValueError, KeyError, TypeError):
         return True
@@ -302,9 +325,7 @@ def contexte_tls():
                 return None, "verrou %s tenu trop longtemps" % verrou
             try:
                 if _a_refaire(dossier, adresses):
-                    ca = not (os.path.exists(os.path.join(dossier, "ca.pem"))
-                              and os.path.exists(os.path.join(dossier, "ca.key")))
-                    _generer(dossier, openssl, adresses, ca)
+                    _generer(dossier, openssl, adresses, _ca_a_refaire(dossier))
             finally:
                 os.remove(verrou)
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
@@ -370,13 +391,18 @@ def filtrer_tls(handler, ce_poste=None):
     return False
 
 
+def hote_url(h):
+    """Une IPv6 littérale va entre crochets dans une adresse : https://[fd7a::1]:8080/."""
+    return "[%s]" % h if ":" in h and not h.startswith("[") else h
+
+
 def ligne_https(nom_ou_ip, port):
     """Ce que le terminal affiche à côté de l'adresse réseau."""
     return ("  HTTPS : la première fois, sur chaque appareil, installez la CA du poste :\n"
             "          https://%s:%d%s\n"
             "          (iPad : Réglages › Profil téléchargé › Installer, puis Général ›\n"
             "           Informations › Réglages des certificats › activer)\n"
-            "          empreinte SHA-256 : %s" % (nom_ou_ip, port, CA, empreinte_ca()))
+            "          empreinte SHA-256 : %s" % (hote_url(nom_ou_ip), port, CA, empreinte_ca()))
 
 
 class Appairage:
@@ -506,13 +532,13 @@ class Garde:
         return "https" if self.tls else "http"
 
     def adresse(self, hote, port):
-        return "%s://%s:%d/" % (self.schema(), hote, port)
+        return "%s://%s:%d/" % (self.schema(), hote_url(hote), port)
 
     def annoncer(self):
         """Au démarrage, en mode réseau : affiche le code dans le terminal."""
         if self.actif:
             if self.tls:
-                hors = [i for i in adresses_poste() if not i.startswith(("127.", "100."))]
+                hors = [i for i in adresses_poste() if not i.startswith(("127.", "100.", "fd7a:115c:a1e0:"))]
                 print(ligne_https(hors[0] if hors else "127.0.0.1", self.port), flush=True)
             elif self.sans_tls:
                 print("  HTTP en clair sur le réseau (%s) : le jeton peut être lu sur le Wi-Fi."
@@ -917,6 +943,30 @@ if __name__ == "__main__":
             assert req("/").corps == b"ok"
             srv.shutdown()
             srv.server_close()
+            # IPv6 : les contraintes de la CA couvrent Tailscale et les ULA, pas Internet
+            assert g2.adresse("fd7a::1", 1) == "https://[fd7a::1]:1/"
+            assert "https://[fd7a::1]:8080" + CA in ligne_https("fd7a::1", 8080)
+
+            def signe(adresses):
+                """Le certificat du serveur pour ces adresses passe-t-il les contraintes de la CA ?"""
+                _generer(d, _openssl(), adresses, False)
+                return subprocess.run([_openssl(), "verify", "-CAfile", "ca.pem", "serveur.pem"],
+                                      cwd=d, capture_output=True).returncode == 0
+            r = subprocess.run([_openssl(), "x509", "-in", "ca.pem", "-noout", "-text"],
+                               cwd=d, capture_output=True, text=True)
+            assert "IP:FC00:0:0:0:0:0:0:0/FE00:0:0:0:0:0:0:0" in r.stdout.upper(), r.stdout
+            assert signe(["127.0.0.1", "fd7a:115c:a1e0::1", "fd12:3456::1"])
+            assert not signe(["2a01:cb19:690:a100::1"]) and not signe(["fe80::1"])
+            # une CA d'avant IPv6 (sans ca.json) refuse fd7a:… : elle est refaite, une fois
+            PLAGES, plages = PLAGES[:5], PLAGES
+            _generer(d, _openssl(), ["127.0.0.1"], True)
+            PLAGES = plages
+            os.remove(os.path.join(d, "ca.json"))
+            assert not signe(["fd7a:115c:a1e0::1"])
+            vieille = empreinte_ca()
+            assert _a_refaire(d, ["127.0.0.1"]) and contexte_tls()[0]
+            assert empreinte_ca() != vieille and not _a_refaire(d, adresses_poste())
+            assert signe(["fd7a:115c:a1e0::1"])
         else:
             print("(openssl absent : HTTPS non vérifié)")
     print("OK")
