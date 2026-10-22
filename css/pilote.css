@@ -38,6 +38,10 @@
 }
 .pilote-saisie:focus-visible { outline: 2px solid #9a9aff; outline-offset: 1px; }
 .pilote-bouton:disabled { opacity: .6; cursor: progress; }
+.pilote-pieces { display: flex; flex-wrap: wrap; gap: 4px; }
+.pilote-pieces:not(:empty) { margin-bottom: 6px; }
+.pilote-piece { padding: 2px 2px 2px 8px; border-radius: 10px; background: #2f2f4a; word-break: break-all; }
+.pilote-piece .pilote-bouton { margin: 0 0 0 4px; padding: 0 6px; border: none; }
 .pilote-moi { margin: 6px 0 2px 24px; padding: 6px 8px; border-radius: 6px; background: #2f2f4a; white-space: pre-wrap; word-break: break-word; }
 .pilote-reponse { margin: 2px 24px 6px 0; padding: 6px 8px; border-radius: 6px; background: #262633; white-space: pre-wrap; word-break: break-word; }
 .pilote-erreur { margin: 4px 0; padding: 6px 8px; border-radius: 6px; background: #3a2329; color: #f0b8b8; white-space: pre-wrap; word-break: break-word; }

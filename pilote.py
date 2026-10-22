@@ -27,6 +27,8 @@ web_suite, sur ce poste seulement, les prend (/demandes, long-poll), les passe
 à Claude Code et y écrit les réponses (/progres).
 """
 
+import base64
+import binascii
 import ipaddress
 import json
 import math
@@ -56,7 +58,14 @@ MAX_TEXTE = 8000            # caractères d'une demande écrite dans le panneau
 MAX_MESSAGE = 20000         # caractères d'un message de Claude rendu au panneau
 MAX_MESSAGES = 500          # messages gardés par demande
 PRISE = 20                  # s : une demande que personne ne prend échoue (aucun lanceur sur ce poste)
-GENRES = ("texte", "outil", "erreur")
+GENRES = ("texte", "outil", "erreur", "info")
+# Pièces jointes d'une demande (SPEC-claude-pages.md) : lues par Claude, jamais écrites sur disque
+TYPES_PIECE = ("image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf")
+MAX_PIECES = 10
+MAX_PIECES_OCTETS = 20 * 1024 * 1024       # au total, après réduction des images par la page
+MAX_IMAGE = 3932160                        # 3,75 Mo : 5 Mo en base64, la limite de l'API par image
+MAX_PIECES_TEXTE = 400000                  # caractères de texte joint : ≈ 100 000 jetons du contexte
+MAX_EN_ATTENTE = 64 * 1024 * 1024          # octets de pièces gardés en mémoire, toutes demandes confondues
 
 
 class Refus(Exception):
@@ -72,15 +81,53 @@ def _texte(v, nom, maxi, vide=False):
     return v
 
 
+def _pieces(v):
+    """Les pièces jointes d'une demande, vérifiées : (liste, octets). Une image ou un PDF porte
+    ses octets en base64 (« donnees »), un fichier texte son contenu (« texte »)."""
+    if v is None:
+        return [], 0
+    if not isinstance(v, list) or len(v) > MAX_PIECES:
+        raise Refus(400, "Au plus %d pièces jointes." % MAX_PIECES)
+    rendu, octets, texte = [], 0, 0
+    for p in v:
+        if not isinstance(p, dict):
+            raise Refus(400, "Pièce jointe invalide.")
+        nom = _texte(p.get("nom"), "nom", 200)
+        if any(ord(c) < 32 for c in nom):
+            raise Refus(400, "Nom de pièce jointe invalide.")
+        if "texte" in p:
+            contenu = _texte(p["texte"], "texte", MAX_PIECES_TEXTE, vide=True)
+            texte += len(contenu)
+            octets += len(contenu.encode("utf-8", "surrogatepass"))
+            rendu.append({"nom": nom, "texte": contenu})
+            continue
+        if p.get("type") not in TYPES_PIECE or not isinstance(p.get("donnees"), str):
+            raise Refus(400, "« %s » : type de fichier non lu par Claude." % nom)
+        try:
+            taille = len(base64.b64decode(p["donnees"], validate=True))
+        except (binascii.Error, ValueError):
+            raise Refus(400, "« %s » : contenu illisible." % nom)
+        if p["type"] != "application/pdf" and taille > MAX_IMAGE:
+            raise Refus(413, "« %s » : image de plus de 3,75 Mo." % nom)
+        octets += taille
+        rendu.append({"nom": nom, "type": p["type"], "donnees": p["donnees"]})
+    if octets > MAX_PIECES_OCTETS:
+        raise Refus(413, "Pièces jointes de plus de 20 Mo au total.")
+    if texte > MAX_PIECES_TEXTE:
+        raise Refus(413, "Plus de %d caractères de texte joint." % MAX_PIECES_TEXTE)
+    return rendu, octets
+
+
 class Pilote:
     def __init__(self, attente=120.0, attente_poll=25.0, oubli=120.0, redistribution=10.0,
-                 max_corps=8 * 1024 * 1024, max_petit=64 * 1024, prise=PRISE):
+                 max_corps=8 * 1024 * 1024, max_petit=64 * 1024, max_demande=28 * 1024 * 1024, prise=PRISE):
         self.attente = attente                # s : un appel du MCP attend la réponse de la page
         self.attente_poll = attente_poll      # s : un long-poll du relais
         self.oubli = oubli                    # s : un onglet sans nouvelles est oublié (> 90 s de pilote.js)
         self.redistribution = redistribution  # s : livrée mais pas accusée, la commande repart
         self.max_corps = max_corps            # octets : une capture d'écran, un fichier dans une commande
-        self.max_petit = max_petit            # octets : battement, suivi, demande, progrès
+        self.max_petit = max_petit            # octets : battement, suivi, progrès
+        self.max_demande = max_demande        # octets : une demande et ses pièces jointes (20 Mo en base64)
         self.prise = prise                    # s : une demande écrite attend le lanceur
         self.cond = threading.Condition()
         self.onglets = {}                     # id -> onglet
@@ -121,8 +168,8 @@ class Pilote:
                                     or handler.headers.get("Sec-Fetch-Site")):
                 raise Refus(403, "Seul le MCP de ce poste donne des ordres aux pages.")
             params = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
-            corps = (self._corps(handler, self.max_corps if route in GROS else self.max_petit)
-                     if handler.command == "POST" else None)
+            maxi = self.max_corps if route in GROS else self.max_demande if route == "demande" else self.max_petit
+            corps = self._corps(handler, maxi) if handler.command == "POST" else None
             rendu = getattr(self, "_" + route)(handler, params, corps)
             self._json(handler, 200, rendu)
         except Refus as exc:
@@ -175,7 +222,7 @@ class Pilote:
             if d["etat"] == "en_attente" and maintenant - d["cree"] > self.prise:
                 d["messages"].append({"genre": "erreur", "texte": "Aucun lanceur WEB·SUITE ne répond sur ce poste : "
                                       "démarre l'outil depuis WEB·SUITE pour écrire à Claude."})
-                d.update(etat="echouee", fin=maintenant)
+                d.update(etat="echouee", fin=maintenant, pieces=[], poids=0)
                 self.cond.notify_all()
             elif d["etat"] == "prise" and maintenant - d["vu"] > GARDE_COMMANDES:
                 d.update(etat="echouee", fin=maintenant)
@@ -288,6 +335,7 @@ class Pilote:
         texte = _texte(corps.get("texte"), "texte", MAX_TEXTE).strip()
         if not texte:
             raise Refus(400, "Champ « texte » vide.")
+        pieces, poids = _pieces(corps.get("pieces"))
         with self.cond:
             self._menage()
             o = self.onglets.get(onglet)
@@ -295,8 +343,10 @@ class Pilote:
                 raise Refus(404, "Onglet pas encore connu du serveur : réessaie dans quelques secondes.")
             if any(d["navigateur"] == nav and d["etat"] not in FINAUX for d in self.demandes.values()):
                 raise Refus(409, "Claude travaille déjà sur ta demande précédente.")
+            if poids and sum(d["poids"] for d in self.demandes.values()) + poids > MAX_EN_ATTENTE:
+                raise Refus(429, "Trop de fichiers en attente sur le poste : réessaie dans un instant.")
             d = {"id": secrets.token_hex(16), "navigateur": nav, "onglet": onglet, "texte": texte,
-                 "nouvelle": corps.get("nouvelle") is True, "etat": "en_attente", "messages": [],
+                 "pieces": pieces, "poids": poids, "nouvelle": corps.get("nouvelle") is True, "etat": "en_attente", "messages": [],
                  "cree": time.monotonic(), "vu": time.monotonic(), "fin": 0.0,
                  "cible": {k: o[k] for k in ("page", "projet", "appareil")}}
             self.demandes[d["id"]] = d
@@ -393,10 +443,11 @@ class Pilote:
             if not prets:
                 return {"demande": None}
             d = prets[0]
-            d.update(etat="prise", vu=time.monotonic())
+            pieces = d["pieces"]
+            d.update(etat="prise", vu=time.monotonic(), pieces=[], poids=0)      # le lanceur les a : oubliées ici
             self.cond.notify_all()
             return {"demande": {"id": d["id"], "navigateur": d["navigateur"], "onglet": d["onglet"],
-                                "texte": d["texte"], "nouvelle": d["nouvelle"], **d["cible"]}}
+                                "texte": d["texte"], "pieces": pieces, "nouvelle": d["nouvelle"], **d["cible"]}}
 
     def _progres(self, _handler, _params, corps):
         etat, d = corps.get("etat"), None
@@ -681,6 +732,34 @@ if __name__ == "__main__":
         assert req("POST", "/api/pilote/demande", corps)[0] == 404, corps
     for texte in ("   ", "t" * 9000):
         assert req("POST", "/api/pilote/demande", {"navigateur": "ipad", "onglet": "I", "texte": texte})[0] in (400, 413)
+    # Pièces jointes : image, PDF et texte passent au lanceur, puis le serveur les oublie
+    b64 = lambda o: base64.b64encode(o).decode()
+    pieces = [{"nom": "capture.png", "type": "image/png", "donnees": b64(b"\x89PNG\r\n\x1a\n" + b"x" * 100)},
+              {"nom": "datasheet.pdf", "type": "application/pdf", "donnees": b64(b"%PDF-1.4")},
+              {"nom": "notes.md", "texte": "# Note\n"}]
+    demander = lambda nav, p: req("POST", "/api/pilote/demande", {"navigateur": nav, "onglet": "I", "texte": "x",
+                                                                   "pieces": p})
+    distant[0] = True
+    for mauvaises in ([{"nom": "a.zip", "type": "application/zip", "donnees": b64(b"PK")}],
+                      [{"nom": "a.png", "type": "image/png", "donnees": "pas du base64 !"}],
+                      [{"nom": "a\nb.md", "texte": "x"}], [{"nom": "x.md", "texte": "x"}] * 11, "pas une liste",
+                      [{"nom": "gros.png", "type": "image/png", "donnees": b64(b"x" * (MAX_IMAGE + 1))}],
+                      [{"nom": "long.md", "texte": "x" * (MAX_PIECES_TEXTE + 1)}]):
+        assert demander("ipad", mauvaises)[0] in (400, 413), mauvaises
+    MAX_PIECES_OCTETS = 100                                    # le total, mesuré sur les octets décodés
+    assert demander("ipad", pieces)[0] == 413
+    MAX_PIECES_OCTETS, MAX_EN_ATTENTE = 20 * 1024 * 1024, 150  # mémoire du poste : une seule demande tient
+    code, dem = demander("ipad", pieces)
+    assert code == 200, dem
+    battement("nav2", [onglet("J", "pcb", 0)])
+    assert req("POST", "/api/pilote/demande", {"navigateur": "nav2", "onglet": "J", "texte": "x", "pieces": pieces})[0] == 429
+    MAX_EN_ATTENTE = 64 * 1024 * 1024
+    distant[0] = False
+    prise = req("GET", "/api/pilote/demandes")[1]["demande"]
+    assert prise["pieces"] == pieces, prise
+    assert (P.demandes[dem["id"]]["pieces"], P.demandes[dem["id"]]["poids"]) == ([], 0)
+    assert req("POST", "/api/pilote/progres", {"id": dem["id"], "etat": "finie"})[0] == 200
+    distant[0] = True
     # Personne ne prend la demande (pas de lanceur sur ce poste) : elle échoue en le disant
     P.prise = 0.2
     code, dem = req("POST", "/api/pilote/demande", {"navigateur": "ipad", "onglet": "I", "texte": "bonjour"})

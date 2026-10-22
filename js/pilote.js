@@ -27,6 +27,11 @@
   const LARGEUR_MAX = 1600;        // px, en largeur comme en hauteur
   const MAX_PANNEAU = 30;          // entrées gardées dans le panneau
   const MAX_TEXTE = 8000;          // caractères d'une demande (pilote.py)
+  // Pièces jointes (pilote.py, SPEC-claude-pages.md) : la page prévient, le serveur fait foi
+  const MAX_PIECES = 10, MAX_PIECES_OCTETS = 20 * 1024 * 1024, MAX_PIECES_TEXTE = 400000;
+  const MAX_IMAGE = 3932160;       // octets : 5 Mo en base64, la limite de l'API par image
+  const COTE_IMAGE = 2000;         // px : au-delà, l'image est réduite ici
+  const IMAGES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
   const FINAUX = ["appliquee", "refusee", "finie", "echouee"];
   const NOM = /^[a-z_][a-z0-9_]{0,63}$/;
 
@@ -272,10 +277,98 @@
 
     // -- demandes écrites à Claude ------------------------------------------
     let saisie = null, envoi = null, enCours = false, nouvelle = false, dernierOutil = null;
+    let pieces = [], puces = null, vueBouton = null;     // pièces jointes de la prochaine demande
+    let lectures = 0;                                    // fichiers en cours de lecture
+
+    function base64(octets) {
+      let s = "";
+      for (let i = 0; i < octets.length; i += 0x8000) s += String.fromCharCode.apply(null, octets.subarray(i, i + 0x8000));
+      return btoa(s);
+    }
+
+    const poids = c => (c.texte !== undefined ? c.texte.length : Math.floor(c.donnees.length * 3 / 4));
+    const taille = o => (o < 1048576 ? Math.max(1, Math.round(o / 1024)) + " Ko" : (o / 1048576).toFixed(1) + " Mo");
+
+    /* Une image passe telle quelle si l'API la prend ; sinon (trop grande, HEIC de l'iPad…) elle est
+       redessinée en JPEG d'au plus 2000 px. */
+    async function image(f, nom) {
+      let bmp = null;
+      try { if (env.decoderImage) bmp = await env.decoderImage(f); } catch (_) { /* format illisible ici */ }
+      if (IMAGES.includes(f.type) && f.size <= MAX_IMAGE && (!bmp || Math.max(bmp.width, bmp.height) <= COTE_IMAGE))
+        return { nom, type: f.type, donnees: base64(new Uint8Array(await f.arrayBuffer())) };
+      if (!bmp) throw new Error("« " + nom + " » : image que ce navigateur ne sait pas lire.");
+      const k = Math.min(1, COTE_IMAGE / bmp.width, COTE_IMAGE / bmp.height);
+      const toile = env.document.createElement("canvas");
+      toile.width = Math.max(1, Math.round(bmp.width * k));
+      toile.height = Math.max(1, Math.round(bmp.height * k));
+      const ctx = toile.getContext("2d");
+      ctx.fillStyle = "#fff";                        // le JPEG n'a pas de transparence
+      ctx.fillRect(0, 0, toile.width, toile.height);
+      ctx.drawImage(bmp, 0, 0, toile.width, toile.height);
+      const url = toile.toDataURL("image/jpeg", 0.9);
+      return { nom, type: "image/jpeg", donnees: url.slice(url.indexOf(",") + 1) };
+    }
+
+    /* Image ou PDF en base64, tout autre fichier lisible en UTF-8 en texte ; un binaire est refusé :
+       Claude ne le lirait pas. */
+    async function lirePiece(f) {
+      const nom = String(f.name || "fichier").replace(/[\u0000-\u001f]/g, " ").slice(0, 200);
+      if (/^image\//.test(f.type) && f.type !== "image/svg+xml") return image(f, nom);   // un SVG est du texte
+      const octets = new Uint8Array(await f.arrayBuffer());
+      if (f.type === "application/pdf" || /\.pdf$/i.test(nom)) return { nom, type: "application/pdf", donnees: base64(octets) };
+      let texte = null;
+      try { texte = new TextDecoder("utf-8", { fatal: true }).decode(octets); } catch (_) { /* pas de l'UTF-8 */ }
+      if (texte === null || texte.includes("\u0000")) throw new Error("« " + nom + " » : fichier binaire, Claude ne peut pas le lire.");
+      return { nom, texte };
+    }
+
+    function ajouter(c) {
+      if (pieces.length >= MAX_PIECES) throw new Error("au plus " + MAX_PIECES + " pièces jointes par demande.");
+      const toutes = pieces.concat(c);
+      if (toutes.reduce((t, p) => t + poids(p), 0) > MAX_PIECES_OCTETS)
+        throw new Error("« " + c.nom + " » dépasse les 20 Mo joints par demande.");
+      if (toutes.reduce((t, p) => t + (p.texte || "").length, 0) > MAX_PIECES_TEXTE)
+        throw new Error("« " + c.nom + " » dépasse les " + MAX_PIECES_TEXTE + " caractères de texte joint.");
+      pieces.push(c);
+    }
+
+    function refuserPiece(e) { afficher({ genre: "erreur", texte: "Pièce jointe refusée : " + ((e && e.message) || e) }); }
+
+    async function joindre(fichiers) {
+      if (!construire()) return;
+      ouvrir(true);
+      lectures++;
+      try {
+        for (const f of Array.from(fichiers || [])) {
+          try { ajouter(await lirePiece(f)); } catch (e) { refuserPiece(e); }
+        }
+      } finally { lectures--; }
+      dessinerPieces();
+    }
+
+    function joindreVue() {
+      try {
+        const url = capturer().image;
+        ajouter({ nom: "vue-" + (P.page || "page") + ".png", type: "image/png", donnees: url.slice(url.indexOf(",") + 1) });
+      } catch (e) { refuserPiece(e); }
+      dessinerPieces();
+    }
+
+    function dessinerPieces() {
+      puces.replaceChildren(...pieces.map(p => {
+        const puce = el("span", "pilote-piece", p.nom + " (" + taille(poids(p)) + ")");
+        const retirer = bouton("×", () => { pieces = pieces.filter(x => x !== p); dessinerPieces(); });
+        retirer.title = "Retirer " + p.nom;
+        retirer.setAttribute("aria-label", "Retirer " + p.nom);
+        puce.appendChild(retirer);
+        return puce;
+      }));
+    }
 
     function afficher(m) {
       dernierOutil = m.genre === "outil" ? m.texte : null;
       if (m.genre === "outil") tracer("→ " + m.texte);
+      else if (m.genre === "info") tracer(m.texte);
       else garder(liste.appendChild(el("div", m.genre === "erreur" ? "pilote-erreur" : "pilote-reponse", m.texte)));
       liste.scrollTop = liste.scrollHeight;
     }
@@ -296,16 +389,22 @@
       const texteSaisi = (saisie.value || "").trim();
       if (!texteSaisi || enCours || !construire()) return;
       saisie.value = "";
-      garder(liste.appendChild(el("div", "pilote-moi", texteSaisi)));
+      occupe(true);
+      while (lectures > 0) await new Promise(f => setTimeout(f, 100));   // un fichier déposé à l'instant part aussi
+      const envoyees = pieces.slice();
+      garder(liste.appendChild(el("div", "pilote-moi", texteSaisi +
+        (envoyees.length ? "\nJoint : " + envoyees.map(p => p.nom).join(", ") : ""))));
       ouvrir(true);
       occupe(true);
       try {
         const r = await env.fetch("/api/pilote/demande", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ navigateur: nav, onglet: P.id, texte: texteSaisi, nouvelle }) });
+          body: JSON.stringify({ navigateur: nav, onglet: P.id, texte: texteSaisi, nouvelle, pieces: envoyees }) });
         const d = await lireJson(r);
         if (!r.ok) throw new Error(d.detail || "le serveur a répondu " + r.status);
         nouvelle = false;
+        pieces = pieces.filter(p => !envoyees.includes(p));   // refusée, la demande garde ses pièces
+        dessinerPieces();
         let depuis = 0, coupures = 0;
         for (;;) {
           let c;
@@ -425,13 +524,44 @@
       saisie.addEventListener("keydown", e => {
         if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); demander(); }
       });
+      // Une image collée devient une pièce jointe ; un texte collé reste du texte
+      saisie.addEventListener("paste", e => {
+        const f = e.clipboardData && e.clipboardData.files;
+        if (f && f.length) { e.preventDefault(); joindre(f); }
+      });
+      // Déposé sur le panneau, un fichier est pour Claude : la page (qui ouvre ce qu'on lui dépose) ne le voit pas
+      ["dragenter", "dragover"].forEach(t => panneau.addEventListener(t, e => {
+        if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) { e.preventDefault(); e.stopPropagation(); }
+      }));
+      panneau.addEventListener("drop", e => {
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          e.preventDefault();
+          e.stopPropagation();
+          joindre(e.dataTransfer.files);
+        }
+      });
+      puces = el("div", "pilote-pieces");
+      const choix = el("input");
+      choix.type = "file";
+      choix.multiple = true;
+      choix.hidden = true;
+      choix.addEventListener("change", () => { joindre(choix.files); choix.value = ""; });
+      const trombone = bouton("Joindre", () => choix.click());
+      trombone.title = "Joindre des fichiers : images, PDF, texte (glisser-déposer et coller marchent aussi)";
+      vueBouton = bouton("Vue", joindreVue);
+      vueBouton.title = "Joindre l'image de cet onglet";
+      vueBouton.hidden = !P.capturer;
       envoi = bouton("Envoyer", demander);
       const neuve = bouton("Nouvelle conversation", () => {
         nouvelle = true;
         tracer("La prochaine demande ouvre une nouvelle conversation.");
       });
+      demande.appendChild(puces);
       demande.appendChild(saisie);
       demande.appendChild(envoi);
+      demande.appendChild(trombone);
+      demande.appendChild(vueBouton);
+      demande.appendChild(choix);
       demande.appendChild(neuve);
       panneau.appendChild(barre);
       panneau.appendChild(liste);
@@ -454,7 +584,7 @@
       clearTimeout(minuteurRepli);
       // ni carte qui attend un clic, ni conversation en cours ou demande en train de s'écrire
       const enAttente = [...cartesDom.values()].some(d => d.carte.etat === "proposee") ||
-                        enCours || !!(saisie && saisie.value);
+                        enCours || !!(saisie && saisie.value) || pieces.length > 0;
       if (!enAttente) minuteurRepli = setTimeout(() => panneau.classList.remove("ouvert"), 4000);
     }
 
@@ -565,7 +695,7 @@
       return P;
     };
 
-    P.capture = function (fn) { P.capturer = fn; return P; };
+    P.capture = function (fn) { P.capturer = fn; if (vueBouton) vueBouton.hidden = !fn; return P; };
     P.demander = function (texteDemande) { if (construire()) { saisie.value = String(texteDemande); return demander(); } };
     P.replier = function () { ouvrir(false); };
     P.focaliser = function () { P.focus = Date.now(); annoncer(); if (P.relais) battre(false); };
@@ -602,6 +732,7 @@
     const servie = /^https?:$/.test(window.location.protocol);
     const balise = (url, corps) => navigator.sendBeacon(url, new Blob([corps], { type: "application/json" }));
     window.Pilote = creer({ fetch: (u, o) => window.fetch(u, o), BroadcastChannel: servie ? window.BroadcastChannel : null,
-                            stockage, document, fenetre: window, balise: navigator.sendBeacon ? balise : null });
+                            stockage, document, fenetre: window, balise: navigator.sendBeacon ? balise : null,
+                            decoderImage: window.createImageBitmap ? f => window.createImageBitmap(f) : null });
   }
 })();

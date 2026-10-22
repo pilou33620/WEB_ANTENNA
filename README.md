@@ -1596,7 +1596,8 @@ l'interrupteur de l'onglet. Il remplace l'ancien assistant IA intégré, retiré
 
 On peut aussi lui écrire **depuis la page**, sur n'importe quel appareil : la zone
 « Demander à Claude » du panneau passe la demande, par WEB·SUITE, à Claude Code du
-poste des outils (`lanceur/docs/SPEC-claude-pages.md` de web_suite).
+poste des outils, avec ses pièces jointes éventuelles : images, captures, PDF, fichiers texte
+(`lanceur/docs/SPEC-claude-pages.md` de web_suite).
 
 ### L'audit des réglages, exécuté par l'outil
 
