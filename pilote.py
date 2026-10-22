@@ -20,6 +20,11 @@ Les pages d'un même navigateur élisent un onglet relais : lui seul bat
 (/battement), attend les commandes (/attendre, long-poll) et les transmet aux
 autres onglets. La page visée répond (/reponse). Le MCP, sur ce poste
 seulement, liste les onglets, dépose une commande et en suit l'état.
+
+Dans l'autre sens, le panneau « Claude » d'une page envoie une demande écrite
+(/demande) et en lit la conversation (/conversation, long-poll). Le lanceur de
+web_suite, sur ce poste seulement, les prend (/demandes, long-poll), les passe
+à Claude Code et y écrit les réponses (/progres).
 """
 
 import ipaddress
@@ -33,8 +38,10 @@ import urllib.parse
 
 PREFIXE = "/api/pilote/"
 METHODES = {"battement": "POST", "attendre": "GET", "reponse": "POST",
-            "commande": "POST", "onglets": "GET", "suivre": "GET"}
-ORDRES = ("commande", "onglets", "suivre")      # le MCP, sur ce poste seulement
+            "commande": "POST", "onglets": "GET", "suivre": "GET",
+            "demande": "POST", "conversation": "GET", "demandes": "GET", "progres": "POST"}
+# le MCP et le lanceur, sur ce poste seulement
+ORDRES = ("commande", "onglets", "suivre", "demandes", "progres")
 ETATS_PAGE = ("recue", "proposee", "appliquee", "refusee", "finie", "echouee")
 FINAUX = ("appliquee", "refusee", "finie", "echouee", "expiree")
 ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -45,6 +52,11 @@ MAX_ONGLETS = 200           # tous navigateurs confondus : au-delà, un battemen
 # une réponse porte une capture, une commande un fichier (kicad_mod, Touchstone) ; les commandes ne viennent
 # que du MCP de ce poste (ORDRES). Battements et suivis restent petits.
 GROS = ("reponse", "commande")
+MAX_TEXTE = 8000            # caractères d'une demande écrite dans le panneau
+MAX_MESSAGE = 20000         # caractères d'un message de Claude rendu au panneau
+MAX_MESSAGES = 500          # messages gardés par demande
+PRISE = 20                  # s : une demande que personne ne prend échoue (aucun lanceur sur ce poste)
+GENRES = ("texte", "outil", "erreur")
 
 
 class Refus(Exception):
@@ -62,17 +74,19 @@ def _texte(v, nom, maxi, vide=False):
 
 class Pilote:
     def __init__(self, attente=120.0, attente_poll=25.0, oubli=120.0, redistribution=10.0,
-                 max_corps=8 * 1024 * 1024, max_petit=64 * 1024):
+                 max_corps=8 * 1024 * 1024, max_petit=64 * 1024, prise=PRISE):
         self.attente = attente                # s : un appel du MCP attend la réponse de la page
         self.attente_poll = attente_poll      # s : un long-poll du relais
         self.oubli = oubli                    # s : un onglet sans nouvelles est oublié (> 90 s de pilote.js)
         self.redistribution = redistribution  # s : livrée mais pas accusée, la commande repart
         self.max_corps = max_corps            # octets : une capture d'écran, un fichier dans une commande
-        self.max_petit = max_petit            # octets : battement, suivi
+        self.max_petit = max_petit            # octets : battement, suivi, demande, progrès
+        self.prise = prise                    # s : une demande écrite attend le lanceur
         self.cond = threading.Condition()
         self.onglets = {}                     # id -> onglet
         self.commandes = {}                   # id -> commande
         self.polls = {}                       # navigateur -> jeton du long-poll en cours
+        self.demandes = {}                    # id -> demande écrite dans un panneau « Claude »
 
     @staticmethod
     def ce_poste(handler):
@@ -95,7 +109,9 @@ class Pilote:
             if handler.command != METHODES[route]:
                 raise Refus(405, "Méthode %s refusée sur %s." % (handler.command, route))
             origine = handler.headers.get("Origin")
-            if handler.command == "POST" and origine and origine != "http://" + (handler.headers.get("Host") or ""):
+            hote = (handler.headers.get("Host") or "").lower()
+            # HTTP ou HTTPS : le mode réseau sert HTTPS sur le même port (appairage.py)
+            if handler.command == "POST" and origine and origine.lower() not in ("http://" + hote, "https://" + hote):
                 # Un autre site ouvert dans le navigateur : refusé ici, même si le serveur hôte
                 # ne contrôle pas l'Origin (WEB_3D n'a pas de garde CSRF)
                 raise Refus(403, "Origine refusée.")
@@ -155,6 +171,16 @@ class Pilote:
         finies = sorted((c for c in self.commandes.values() if c["etat"] in FINAUX), key=lambda c: c["fin"])
         for c in finies[:max(0, len(self.commandes) - MAX_COMMANDES)]:
             del self.commandes[c["id"]]
+        for d in list(self.demandes.values()):
+            if d["etat"] == "en_attente" and maintenant - d["cree"] > self.prise:
+                d["messages"].append({"genre": "erreur", "texte": "Aucun lanceur WEB·SUITE ne répond sur ce poste : "
+                                      "démarre l'outil depuis WEB·SUITE pour écrire à Claude."})
+                d.update(etat="echouee", fin=maintenant)
+                self.cond.notify_all()
+            elif d["etat"] == "prise" and maintenant - d["vu"] > GARDE_COMMANDES:
+                d.update(etat="echouee", fin=maintenant)
+            elif d["etat"] in FINAUX and maintenant - d["fin"] > GARDE_COMMANDES:
+                del self.demandes[d["id"]]
 
     def _finir(self, c, etat, resultat):
         c.update(etat=etat, resultat=resultat, fin=time.monotonic())
@@ -255,7 +281,43 @@ class Pilote:
                     self.cond.notify_all()
         return {"ok": True}
 
-    # -- routes du MCP (ce poste) -------------------------------------------
+    def _demande(self, _handler, _params, corps):
+        nav, onglet = corps.get("navigateur"), corps.get("onglet")
+        if not isinstance(nav, str) or not ID.match(nav) or not isinstance(onglet, str) or not ID.match(onglet):
+            raise Refus(400, "Champ « navigateur » ou « onglet » invalide.")
+        texte = _texte(corps.get("texte"), "texte", MAX_TEXTE).strip()
+        if not texte:
+            raise Refus(400, "Champ « texte » vide.")
+        with self.cond:
+            self._menage()
+            o = self.onglets.get(onglet)
+            if o is None or o["navigateur"] != nav:
+                raise Refus(404, "Onglet pas encore connu du serveur : réessaie dans quelques secondes.")
+            if any(d["navigateur"] == nav and d["etat"] not in FINAUX for d in self.demandes.values()):
+                raise Refus(409, "Claude travaille déjà sur ta demande précédente.")
+            d = {"id": secrets.token_hex(16), "navigateur": nav, "onglet": onglet, "texte": texte,
+                 "nouvelle": corps.get("nouvelle") is True, "etat": "en_attente", "messages": [],
+                 "cree": time.monotonic(), "vu": time.monotonic(), "fin": 0.0,
+                 "cible": {k: o[k] for k in ("page", "projet", "appareil")}}
+            self.demandes[d["id"]] = d
+            self.cond.notify_all()
+            return {"id": d["id"]}
+
+    def _conversation(self, _handler, params, _corps):
+        depuis = params.get("depuis", "0")
+        depuis = int(depuis) if depuis.isdigit() else 0
+        fin = time.monotonic() + self.attente_poll
+        with self.cond:
+            d = self.demandes.get(params.get("id", ""))
+            # Seul le navigateur de la demande la lit : la conversation peut citer le projet
+            if d is None or params.get("navigateur") != d["navigateur"]:
+                raise Refus(404, "Demande inconnue.")
+            while len(d["messages"]) <= depuis and d["etat"] not in FINAUX and time.monotonic() < fin:
+                self.cond.wait(fin - time.monotonic())
+                self._menage()
+            return {"etat": d["etat"], "messages": d["messages"][depuis:], "total": len(d["messages"])}
+
+    # -- routes du MCP et du lanceur (ce poste) -------------------------------
     def _commande(self, _handler, _params, corps):
         pages = corps.get("page")
         pages = [pages] if isinstance(pages, str) else pages
@@ -317,6 +379,45 @@ class Pilote:
             if c is None:
                 raise Refus(404, "Commande inconnue (ou finie depuis plus d'une heure).")
             return self._vue(c)
+
+    def _demandes(self, _handler, _params, _corps):
+        """Le lanceur prend la plus ancienne demande en attente (long-poll)."""
+        fin = time.monotonic() + self.attente_poll
+        with self.cond:
+            while True:
+                self._menage()
+                prets = sorted((d for d in self.demandes.values() if d["etat"] == "en_attente"), key=lambda d: d["cree"])
+                if prets or time.monotonic() >= fin:
+                    break
+                self.cond.wait(fin - time.monotonic())
+            if not prets:
+                return {"demande": None}
+            d = prets[0]
+            d.update(etat="prise", vu=time.monotonic())
+            self.cond.notify_all()
+            return {"demande": {"id": d["id"], "navigateur": d["navigateur"], "onglet": d["onglet"],
+                                "texte": d["texte"], "nouvelle": d["nouvelle"], **d["cible"]}}
+
+    def _progres(self, _handler, _params, corps):
+        etat, d = corps.get("etat"), None
+        if etat is not None and etat not in ("finie", "echouee"):
+            raise Refus(400, "Champ « etat » invalide.")
+        message = corps.get("message")
+        if message is not None and (not isinstance(message, dict) or message.get("genre") not in GENRES):
+            raise Refus(400, "Champ « message » invalide.")
+        if message is not None:
+            message = {"genre": message["genre"], "texte": _texte(message.get("texte"), "texte", MAX_MESSAGE)}
+        with self.cond:
+            d = self.demandes.get(corps.get("id") if isinstance(corps.get("id"), str) else "")
+            if d is None or d["etat"] != "prise":
+                raise Refus(404, "Demande inconnue ou déjà finie.")
+            d["vu"] = time.monotonic()
+            if message is not None and len(d["messages"]) < MAX_MESSAGES:
+                d["messages"].append(message)
+            if etat is not None:
+                d.update(etat=etat, fin=time.monotonic())
+            self.cond.notify_all()
+        return {"ok": True}
 
 
 if __name__ == "__main__":
@@ -533,6 +634,59 @@ if __name__ == "__main__":
     # L'expiration n'était qu'une supposition du serveur : la page qui répond quand même a raison
     req("POST", "/api/pilote/reponse", {"navigateur": "nav1", "id": att["id"], "etat": "appliquee"})
     assert req("GET", "/api/pilote/suivre?id=" + att["id"])[1]["etat"] == "appliquee"
+
+    # Le mode réseau sert HTTPS sur le même port : une page en https:// parle au pilote
+    assert req("POST", "/api/pilote/battement", {"navigateur": "n", "onglets": []},
+               entetes={"Origin": "https://" + hote})[0] == 200
+
+    # Une demande écrite dans le panneau : la page l'envoie, le lanceur la prend, y répond,
+    # la page lit la conversation au fil de l'eau
+    distant[0] = True
+    battement("ipad", [onglet("I", "pcb", 0, projet="carte-usb")])
+    code, dem = req("POST", "/api/pilote/demande", {"navigateur": "ipad", "onglet": "I", "texte": " route USB_DP "},
+                    entetes={"Origin": "https://" + hote})
+    assert code == 200 and len(dem["id"]) == 32, dem
+    # une seule demande à la fois par navigateur
+    assert req("POST", "/api/pilote/demande", {"navigateur": "ipad", "onglet": "I", "texte": "x"})[0] == 409
+    # l'appareil distant ne prend ni n'écrit les réponses de Claude
+    assert req("GET", "/api/pilote/demandes")[0] == 403
+    assert req("POST", "/api/pilote/progres", {"id": dem["id"], "message": {"genre": "texte", "texte": "faux"}})[0] == 403
+    distant[0] = False
+    code, prise = req("GET", "/api/pilote/demandes")
+    assert code == 200 and prise["demande"]["texte"] == "route USB_DP" and prise["demande"]["page"] == "pcb", prise
+    assert (prise["demande"]["onglet"], prise["demande"]["projet"], prise["demande"]["appareil"]) == ("I", "carte-usb", "127.0.0.1")
+    assert req("GET", "/api/pilote/demandes")[1]["demande"] is None                     # déjà prise
+    assert req("POST", "/api/pilote/progres", {"id": dem["id"], "message": {"genre": "texte", "texte": "Je regarde."}})[0] == 200
+    distant[0] = True
+    lire = "/api/pilote/conversation?navigateur=ipad&id=" + dem["id"]
+    code, conv = req("GET", lire + "&depuis=0")
+    assert code == 200 and conv["etat"] == "prise" and conv["messages"] == [{"genre": "texte", "texte": "Je regarde."}], conv
+    assert req("GET", "/api/pilote/conversation?navigateur=nav1&id=" + dem["id"])[0] == 404   # pas son navigateur
+    suite = {}
+    t = threading.Thread(target=lambda: suite.update(r=req("GET", lire + "&depuis=1")))
+    t.start()
+    time.sleep(0.1)
+    distant[0] = False
+    assert req("POST", "/api/pilote/progres", {"id": dem["id"], "message": {"genre": "outil", "texte": "cao_router"},
+                                                "etat": "finie"})[0] == 200
+    t.join(5)
+    assert suite["r"][1]["etat"] == "finie" and suite["r"][1]["messages"][0]["texte"] == "cao_router", suite
+    assert req("POST", "/api/pilote/progres", {"id": dem["id"], "etat": "finie"})[0] == 404        # finie : plus rien
+    for corps in ({"id": dem["id"], "etat": "piratee"}, {"id": dem["id"], "message": {"genre": "systeme", "texte": "x"}},
+                  {"id": dem["id"], "message": "texte nu"}):
+        assert req("POST", "/api/pilote/progres", corps)[0] == 400, corps
+    # Refus côté page : onglet inconnu ou d'un autre navigateur, texte vide ou trop long
+    battement("ipad", [onglet("I", "pcb", 0)])
+    for corps in ({"navigateur": "ipad", "onglet": "Z", "texte": "x"}, {"navigateur": "nav1", "onglet": "I", "texte": "x"}):
+        assert req("POST", "/api/pilote/demande", corps)[0] == 404, corps
+    for texte in ("   ", "t" * 9000):
+        assert req("POST", "/api/pilote/demande", {"navigateur": "ipad", "onglet": "I", "texte": texte})[0] in (400, 413)
+    # Personne ne prend la demande (pas de lanceur sur ce poste) : elle échoue en le disant
+    P.prise = 0.2
+    code, dem = req("POST", "/api/pilote/demande", {"navigateur": "ipad", "onglet": "I", "texte": "bonjour"})
+    time.sleep(0.3)
+    conv = req("GET", "/api/pilote/conversation?navigateur=ipad&id=%s&depuis=0" % dem["id"])[1]
+    assert conv["etat"] == "echouee" and "WEB·SUITE" in conv["messages"][0]["texte"], conv
 
     srv.shutdown()
     print("OK")

@@ -11,6 +11,10 @@
        Pilote.commande("cao_valeur_composant", {ecriture: true, historique: true,
                                                 proposer: args => ({...}), appliquer: args => {...}});
 
+   DANS L'AUTRE SENS : la zone de texte du panneau envoie une demande à Claude Code du poste
+   (/api/pilote/demande, que le lanceur de web_suite lui passe : claude_pages.py) et affiche
+   la conversation au fil de l'eau (/api/pilote/conversation).
+
    UN SEUL ONGLET RELAIS PAR NAVIGATEUR : les onglets d'un même outil s'annoncent
    sur un BroadcastChannel ; le plus petit id parmi ceux entendus récemment tient
    seul le long-poll (le navigateur limite les connexions par origine) et
@@ -22,6 +26,7 @@
   const CLE_NAVIGATEUR = "websuite.pilote.navigateur";
   const LARGEUR_MAX = 1600;        // px, en largeur comme en hauteur
   const MAX_PANNEAU = 30;          // entrées gardées dans le panneau
+  const MAX_TEXTE = 8000;          // caractères d'une demande (pilote.py)
   const FINAUX = ["appliquee", "refusee", "finie", "echouee"];
   const NOM = /^[a-z_][a-z0-9_]{0,63}$/;
 
@@ -173,7 +178,9 @@
         const def = P.commandes[c.nom];
         if (!def) throw new Error("Commande « " + c.nom + " » inconnue de cette page (" + P.page + ").");
         if (def.ecriture) return await ecrire(c, def, args);
-        tracer("Claude a lancé : " + c.nom);
+        // déjà annoncée par la conversation du panneau (« → nom ») : pas deux lignes pour un geste
+        if (dernierOutil !== c.nom) tracer("Claude a lancé : " + c.nom);
+        dernierOutil = null;
         repondre(c.id, "finie", await def.executer(args));
       } catch (e) {
         repondre(c.id, "echouee", String((e && e.message) || e));
@@ -263,6 +270,65 @@
       dessinerCarte(carte);
     }
 
+    // -- demandes écrites à Claude ------------------------------------------
+    let saisie = null, envoi = null, enCours = false, nouvelle = false, dernierOutil = null;
+
+    function afficher(m) {
+      dernierOutil = m.genre === "outil" ? m.texte : null;
+      if (m.genre === "outil") tracer("→ " + m.texte);
+      else garder(liste.appendChild(el("div", m.genre === "erreur" ? "pilote-erreur" : "pilote-reponse", m.texte)));
+      liste.scrollTop = liste.scrollHeight;
+    }
+
+    function occupe(oui) {
+      enCours = oui;
+      envoi.disabled = oui;
+      envoi.textContent = oui ? "Claude travaille…" : "Envoyer";
+    }
+
+    async function lireJson(r) {
+      try { return await r.json(); } catch (_) { return {}; }
+    }
+
+    /* La demande part au serveur de l'outil, qui la garde pour le lanceur ; la conversation se
+       lit ensuite par long-poll. Une coupure réseau (iPad en veille) se retente quelques fois. */
+    async function demander() {
+      const texteSaisi = (saisie.value || "").trim();
+      if (!texteSaisi || enCours || !construire()) return;
+      saisie.value = "";
+      garder(liste.appendChild(el("div", "pilote-moi", texteSaisi)));
+      ouvrir(true);
+      occupe(true);
+      try {
+        const r = await env.fetch("/api/pilote/demande", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ navigateur: nav, onglet: P.id, texte: texteSaisi, nouvelle }) });
+        const d = await lireJson(r);
+        if (!r.ok) throw new Error(d.detail || "le serveur a répondu " + r.status);
+        nouvelle = false;
+        let depuis = 0, coupures = 0;
+        for (;;) {
+          let c;
+          try {
+            const rc = await env.fetch("/api/pilote/conversation?navigateur=" + nav + "&id=" + d.id + "&depuis=" + depuis);
+            c = await lireJson(rc);
+            if (!rc.ok) throw Object.assign(new Error(c.detail || "le serveur a répondu " + rc.status), { definitif: true });
+          } catch (e) {
+            if (e.definitif || ++coupures > 5) throw e;
+            await new Promise(f => setTimeout(f, R.repos));
+            continue;
+          }
+          coupures = 0;
+          (c.messages || []).forEach(afficher);
+          depuis += (c.messages || []).length;
+          if (c.etat === "finie" || c.etat === "echouee") break;
+        }
+      } catch (e) {
+        afficher({ genre: "erreur", texte: "Demande non aboutie : " + ((e && e.message) || e) });
+      }
+      occupe(false);
+    }
+
     // -- panneau « Claude » (texte par textContent seulement : jamais d'innerHTML) --
     let panneau = null, liste = null, minuteurRepli = null;
     const cartesDom = new Map(), entrees = [];
@@ -350,8 +416,26 @@
       inter.addEventListener("change", () => { P.interrupteur = !!inter.checked; if (P.relais) battre(false); });
       pied.appendChild(inter);
       pied.appendChild(el("span", "", "Appliquer directement (cet onglet)"));
+      const demande = el("div", "pilote-demande");
+      saisie = el("textarea", "pilote-saisie");
+      saisie.rows = 2;
+      saisie.maxLength = MAX_TEXTE;
+      saisie.placeholder = "Demander à Claude… (Entrée pour envoyer)";
+      saisie.setAttribute("aria-label", "Demande à Claude");
+      saisie.addEventListener("keydown", e => {
+        if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); demander(); }
+      });
+      envoi = bouton("Envoyer", demander);
+      const neuve = bouton("Nouvelle conversation", () => {
+        nouvelle = true;
+        tracer("La prochaine demande ouvre une nouvelle conversation.");
+      });
+      demande.appendChild(saisie);
+      demande.appendChild(envoi);
+      demande.appendChild(neuve);
       panneau.appendChild(barre);
       panneau.appendChild(liste);
+      panneau.appendChild(demande);
       panneau.appendChild(pied);
       env.document.body.appendChild(panneau);
       return panneau;
@@ -368,7 +452,9 @@
     function replierPlusTard() {
       if (!panneau) return;
       clearTimeout(minuteurRepli);
-      const enAttente = [...cartesDom.values()].some(d => d.carte.etat === "proposee");
+      // ni carte qui attend un clic, ni conversation en cours ou demande en train de s'écrire
+      const enAttente = [...cartesDom.values()].some(d => d.carte.etat === "proposee") ||
+                        enCours || !!(saisie && saisie.value);
       if (!enAttente) minuteurRepli = setTimeout(() => panneau.classList.remove("ouvert"), 4000);
     }
 
@@ -480,6 +566,7 @@
     };
 
     P.capture = function (fn) { P.capturer = fn; return P; };
+    P.demander = function (texteDemande) { if (construire()) { saisie.value = String(texteDemande); return demander(); } };
     P.replier = function () { ouvrir(false); };
     P.focaliser = function () { P.focus = Date.now(); annoncer(); if (P.relais) battre(false); };
 

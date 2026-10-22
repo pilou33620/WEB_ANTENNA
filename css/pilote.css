@@ -1,7 +1,7 @@
 /* Panneau « Claude » du canal de pilotage (pilote.js).
    COPIE IDENTIQUE dans WEB_CAO, WEB_ANTENNA et WEB_3D ; l'original est
    web_suite/lanceur/pilote.css. Replié : un bouton dans un coin ; ouvert : les
-   cartes de Claude et l'interrupteur de l'onglet. */
+   cartes de Claude, la zone pour lui écrire et l'interrupteur de l'onglet. */
 .pilote {
   position: fixed; right: 12px; bottom: 12px; z-index: 2147483000;
   max-width: min(360px, calc(100vw - 24px));
@@ -20,7 +20,7 @@
   background: #1b1b24; color: #9a9aac; cursor: pointer; font: inherit; line-height: 20px;
 }
 .pilote-masquer:hover { color: #e8e8ea; border-color: #5b5bd6; }
-.pilote-liste, .pilote-pied { display: none; }
+.pilote-liste, .pilote-pied, .pilote-demande { display: none; }
 .pilote.ouvert .pilote-liste {
   display: block; max-height: 50vh; overflow: auto; margin-top: 6px; padding: 6px;
   background: #1b1b24; border: 1px solid #3a3a4a; border-radius: 8px;
@@ -29,6 +29,18 @@
   display: flex; gap: 6px; align-items: center; margin-top: 6px; padding: 6px 8px;
   background: #1b1b24; border: 1px solid #3a3a4a; border-radius: 8px; cursor: pointer;
 }
+.pilote.ouvert .pilote-demande {
+  display: block; margin-top: 6px; padding: 6px; background: #1b1b24; border: 1px solid #3a3a4a; border-radius: 8px;
+}
+.pilote-saisie {
+  box-sizing: border-box; width: 100%; min-height: 3em; max-height: 30vh; resize: vertical; padding: 6px;
+  border: 1px solid #3a3a4a; border-radius: 4px; background: #262633; color: #e8e8ea; font: inherit;
+}
+.pilote-saisie:focus-visible { outline: 2px solid #9a9aff; outline-offset: 1px; }
+.pilote-bouton:disabled { opacity: .6; cursor: progress; }
+.pilote-moi { margin: 6px 0 2px 24px; padding: 6px 8px; border-radius: 6px; background: #2f2f4a; white-space: pre-wrap; word-break: break-word; }
+.pilote-reponse { margin: 2px 24px 6px 0; padding: 6px 8px; border-radius: 6px; background: #262633; white-space: pre-wrap; word-break: break-word; }
+.pilote-erreur { margin: 4px 0; padding: 6px 8px; border-radius: 6px; background: #3a2329; color: #f0b8b8; white-space: pre-wrap; word-break: break-word; }
 .pilote-trace { color: #9a9aac; padding: 2px 4px; }
 .pilote-carte { margin: 6px 0; padding: 8px; border-radius: 6px; background: #262633; border-left: 3px solid #5b5bd6; }
 .pilote-carte.appliquee { border-left-color: #3fb37f; }

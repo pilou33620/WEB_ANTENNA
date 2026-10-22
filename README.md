@@ -1594,6 +1594,10 @@ il propose une carte (`antenna_proposer`) qui s'affiche dans le panneau
 « Claude » — et **aucune valeur ne s'écrit sans un clic**, sauf si l'on allume
 l'interrupteur de l'onglet. Il remplace l'ancien assistant IA intégré, retiré.
 
+On peut aussi lui écrire **depuis la page**, sur n'importe quel appareil : la zone
+« Demander à Claude » du panneau passe la demande, par WEB·SUITE, à Claude Code du
+poste des outils (`lanceur/docs/SPEC-claude-pages.md` de web_suite).
+
 ### L'audit des réglages, exécuté par l'outil
 
 Il tourne dans la page (`js/31-cartes-antenna.js`, `controles`) : **zéro
