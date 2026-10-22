@@ -1814,6 +1814,7 @@ antBasculerVueMaillage();
 verifie("antBasculerVueMaillage() inverse l'etat",
         ANT.vueMaillage === false);
 
+
 console.log("");
 console.log("21. Le cuivre retenu, et pourquoi il est garde en cache");
 /* CE QUI S'EPROUVE ICI N'EST PAS LA GEOMETRIE, C'EST LA DISCIPLINE DU CACHE.
@@ -3366,6 +3367,59 @@ console.log("10. Le canal de pilotage");
   })();
   }catch(e){ Object.assign(global, vrais); throw e; }
 })().then(()=>{
+
+console.log("");
+console.log("Campagne de mesures");
+/* LA CAMPAGNE DE MESURES (js/39-campagne.js) : chaque etape des plans
+   d'HISTORIQUE.md se pose par les gestes de l'exemple, et balaie la cote que
+   son plan nomme. Le deroule lui-meme (lancer, suivre, reprendre) demande le
+   serveur : il s'eprouve dans un navigateur, pas ici. */
+charger("39-campagne.js");
+{
+  // la page n'est pas la : on ne la redessine pas
+  global.antMaj=global.conPanneauRendre=global.conBoutonEtat=global.conBarreRendre=function(){};
+  global.conEntrer=function(){ CON.actif=true; };
+  const poses=[];
+  for(const pl of CAMP_PLANS)for(const e of pl.etapes){
+    let err="";
+    try{ campPoser(e); }catch(x){ err=x.message; }
+    poses.push({pl:pl.id, e, err, motif:CON.gabarit, p:Object.assign({},CON.gabaritP),
+                n:e.bal?antBalayageSpec().points.length:1,
+                s:e.bal?[balSource().id,(balSource2()||{}).id]:[],
+                ep:CON.pile.filter(c=>c.er!=null).map(c=>c.ep), msl:ANT.ports[0].msl,
+                f:CON.fcible, bal:Object.assign({},ANT.balayage)});
+  }
+  verifie("campagne : chaque etape se pose, sur son motif",
+          poses.every(q=>!q.err&&q.motif===q.e.motif), poses.filter(q=>q.err).map(q=>q.pl+" : "+q.err).join(" ; "));
+  const n=id=>poses.filter(q=>q.pl===id).reduce((a,q)=>a+q.n,0);
+  verifie("campagne : 12 + 12 + 6 + 7 + 30 + 2 calculs, comme les plans le disent",
+          n("mifa-kd-n")===12&&n("monopole-wr-Lm")===12&&n("validation-facteurs")===6&&
+          n("balayage-patch-y0-fin")===7&&n("croisement-patch-strates")===30&&n("mslport-ecart")===2,
+          CAMP_PLANS.map(p=>p.id+"="+n(p.id)).join(" "));
+  const mifa=poses[0];
+  verifie("campagne : le MIFA croise kd et n", mifa.s.join()==="m.kd,m.n");
+  const wr=poses.filter(q=>q.pl==="monopole-wr-Lm");
+  verifie("campagne : le monopole balaie Lm a wr x 0,6 / 1 / 1,5 / 2 du defaut",
+          wr.every(q=>q.s[0]==="m.Lm")&&
+          wr.map(q=>+(q.p.wr/wr[1].p.wr).toFixed(3)).join()==="0.6,1,1.5,2");
+  const fac=poses.filter(q=>q.pl==="validation-facteurs");
+  verifie("campagne : facteurs a 5,8 GHz sur FR-4 1,53 mm et a 2,45 GHz sur RO4003C 0,813 mm",
+          fac.length===6&&fac.every(q=>q.f===5.8e9?q.ep.every(e=>e===1.53):(q.f===2.45e9&&q.ep.every(e=>e===0.813))));
+  const y0=poses.find(q=>q.pl==="balayage-patch-y0-fin");
+  verifie("campagne : y0 de -1,5 a 0 mm sous le defaut, par 0,25",
+          y0.s[0]==="m.y0"&&Math.abs(y0.bal.max-y0.p.y0)<1e-6&&
+          Math.abs(y0.bal.max-y0.bal.min-1.5)<1e-6&&y0.bal.pas===0.25, JSON.stringify(y0.bal));
+  verifie("campagne : le MSLPort essaie « maillage » puis « grossier »",
+          poses.filter(q=>q.pl==="mslport-ecart").map(q=>q.msl).join()==="maillage,grossier");
+  let refus="";
+  try{ campPoser({motif:"dipole", bal:{source:"m.kd", min:1, max:2, pas:1}}); }catch(x){ refus=x.message; }
+  verifie("campagne : une cote que le motif n'a pas est refusee, pas remplacee par une autre",
+          /non balayable/.test(refus), refus);
+  const r=campReleve({balayage:true, nom:"kd", unite:"%", croise:false,
+                      points:[{etiquette:"100", valeur:100, resultat:{f0:2.4e9, s11_min_db:-12, freqs:[1], z0_re:40}}]});
+  verifie("campagne : le releve garde les colonnes des croisement-*.json, pas les courbes",
+          r.points[0].f0===2.4e9&&r.points[0].z0_re===40&&!("freqs" in r.points[0])&&r.balayage.nom==="kd");
+}
 
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")

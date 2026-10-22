@@ -944,3 +944,15 @@ input.oeil{accent-color:var(--cyan);cursor:pointer;margin:0}
 .piece-corps tr.masque td.nom{opacity:.45}
 .piece-etat.repare{color:var(--green)}
 .piece-corps td .tb.mini{margin-left:4px;padding:1px 6px;font-size:10px}
+
+/* La campagne de mesures (js/39-campagne.js) : un panneau flottant, au-dessus du reste. */
+#campagne{position:fixed;right:16px;top:64px;z-index:50;width:min(460px,calc(100vw - 32px));
+  max-height:calc(100vh - 96px);overflow:auto;padding:12px 14px;background:var(--panel);
+  border:1px solid var(--border2);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.45)}
+#campagne h3{margin:0 0 6px;font-size:14px}
+#campagne .campNote,#campagne .campAvance{font-size:12px;opacity:.8;margin:0 0 8px}
+#campagne .campAvance{opacity:1}
+#campagne .campPlan{display:block;font-size:12px;margin:4px 0}
+#campagne .campPlan .tb.mini{margin-left:6px;padding:1px 6px;font-size:10px}
+#campagne .campDevis{font-size:11px;white-space:pre-wrap;background:var(--panel2);padding:6px;border-radius:4px}
+#campagne .campBoutons{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}

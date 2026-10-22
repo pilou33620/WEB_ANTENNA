@@ -13,7 +13,9 @@ vérifications passées ; aucun `TODO` ni `FIXME` dans le code).
 
 Presque tout ce qui reste attend une mesure openEMS (plans dans [HISTORIQUE.md](HISTORIQUE.md),
 « Plans de mesure ») : le code suit son résultat. Ces mesures sont repoussées avec les autres
-essais : ces lignes restent bloquées d'ici là.
+essais : ces lignes restent bloquées d'ici là. Elles se lancent toutes par le bouton
+**📋 Campagne** (README, « La campagne de mesures ») ; chaque fichier téléchargé, posé à la
+racine et poussé, débloque sa ligne.
 
 - [ ] **MIFA, défaut de `kd`** : le développé visé vaut 100 % du quart d'onde, et le MIFA
   résonne au-dessus de 3,5 GHz pour 2,45 visés. Remplacer ce 100 par la loi que donnera le

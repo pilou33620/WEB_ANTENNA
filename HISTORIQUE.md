@@ -323,6 +323,10 @@ pour sa réactance.
 
 ### Plans de mesure — arrêtés le 21/10/2026
 
+> Le 22/10/2026 : ces plans se lancent tous d'un coup, par le bouton **📋 Campagne**
+> (`js/39-campagne.js`, README « La campagne de mesures »), le patch « deux strates »
+> en premier passage seulement. Environ 13 h au débit supposé de 25 Mcellules/s.
+
 Ce qui reste ouvert sur la physique des antennes se tranche au solveur. Les
 plans sont arrêtés ; les calculs se lancent depuis la page (le balayage d'une
 cote de motif, croisé au besoin), et chaque relevé s'enregistre à la racine
