@@ -35,6 +35,10 @@ racine et poussé, débloque sa ligne.
 - [ ] **`AddMSLPort`, défaut ou option** : il déplace la résonance de +1 % (2,476 contre
   2,450 GHz). Si l'écart vient du maillage, le MSLPort devient le défaut ; sinon il reste une
   option. *Bloqué, attend la mesure « MSLPort, maillage ou port ».*
+- [ ] **Retirer la campagne de mesures** une fois ses fichiers rendus : le bouton
+  « 📋 Campagne » (`index.html`), `js/39-campagne.js`, son style (`css/antenne.css`), sa
+  section du banc (`test/banc-interface.js`, « Campagne de mesures ») et du README. Outil
+  provisoire, décidé le 22/10/2026.
 - [ ] **`AddMSLPort`, prolongement hors carte** (piste, non commencée) : prolonger ruban,
   substrat et plan de masse jusqu'à la paroi du domaine, comme le veut le port d'openEMS. Touche
   `openems_modele.py`, `openems_script.py`, le panneau des ports, la vue 3D et le banc (détail
