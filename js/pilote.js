@@ -593,7 +593,11 @@
       etatLigne.setAttribute("aria-live", "polite");
       const neuve = bouton("Nouvelle conversation", () => {
         nouvelle = true;
-        tracer("La prochaine demande ouvre une nouvelle conversation.");
+        // Le panneau se vide ; une carte qui attend un clic, ou qu'on peut encore annuler, reste
+        const gardees = entrees.filter(n => n.aGarder);
+        entrees.filter(n => !n.aGarder).forEach(n => { n.remove(); if (n.idCarte) cartesDom.delete(n.idCarte); });
+        entrees.splice(0, entrees.length, ...gardees);
+        tracer("Nouvelle conversation : Claude repart de zéro à ta prochaine demande.");
       });
       demande.appendChild(puces);
       demande.appendChild(saisie);
