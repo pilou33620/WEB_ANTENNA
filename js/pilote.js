@@ -32,6 +32,7 @@
   const MAX_IMAGE = 3932160;       // octets : 5 Mo en base64, la limite de l'API par image
   const COTE_IMAGE = 2000;         // px : au-delà, l'image est réduite ici
   const IMAGES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+  const MODELES = [["opus", "Opus"], ["sonnet", "Sonnet"], ["haiku", "Haiku"]];   // pilote.py, le premier par défaut
   const FINAUX = ["appliquee", "refusee", "finie", "echouee"];
   const NOM = /^[a-z_][a-z0-9_]{0,63}$/;
 
@@ -279,6 +280,29 @@
     let saisie = null, envoi = null, enCours = false, nouvelle = false, dernierOutil = null;
     let pieces = [], puces = null, vueBouton = null;     // pièces jointes de la prochaine demande
     let lectures = 0;                                    // fichiers en cours de lecture
+    let pret = true, etatLigne = null, choixModele = null; // pret : faux si le test de connexion a échoué
+
+    /* À chaque ouverture du panneau : le lanceur écoute-t-il, Claude Code est-il installé et connecté ?
+       Sans requête au modèle (pilote.py : statut). En rouge, « Envoyer » est désactivé. */
+    async function tester() {
+      montrerEtat("attente", "Test de la connexion à Claude…");
+      let s = null;
+      try {
+        const r = await env.fetch("/api/pilote/statut");
+        if (r.ok) s = await lireJson(r);
+      } catch (_) { /* réseau coupé : s reste vide */ }
+      if (!s) montrerEtat("ko", "Le serveur de l'outil ne répond pas.");
+      else if (!s.lanceur) montrerEtat("ko", "Le lanceur WEB·SUITE ne répond pas : lance l'outil depuis WEB·SUITE pour écrire à Claude.");
+      else if (!s.claude) montrerEtat("ko", "Le lanceur n'a pas répondu au test : rouvre le panneau pour réessayer.");
+      else montrerEtat(s.claude.pret ? "ok" : "ko", String(s.claude.message || ""));
+    }
+
+    function montrerEtat(classe, texte) {
+      etatLigne.className = "pilote-etat " + classe;
+      etatLigne.textContent = texte;
+      pret = classe !== "ko";
+      occupe(enCours);
+    }
 
     function base64(octets) {
       let s = "";
@@ -375,7 +399,7 @@
 
     function occupe(oui) {
       enCours = oui;
-      envoi.disabled = oui;
+      envoi.disabled = oui || !pret;
       envoi.textContent = oui ? "Claude travaille…" : "Envoyer";
     }
 
@@ -399,7 +423,8 @@
       try {
         const r = await env.fetch("/api/pilote/demande", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ navigateur: nav, onglet: P.id, texte: texteSaisi, nouvelle, pieces: envoyees }) });
+          body: JSON.stringify({ navigateur: nav, onglet: P.id, texte: texteSaisi, nouvelle, pieces: envoyees,
+                                 modele: choixModele.value }) });
         const d = await lireJson(r);
         if (!r.ok) throw new Error(d.detail || "le serveur a répondu " + r.status);
         nouvelle = false;
@@ -495,7 +520,9 @@
       tete.addEventListener("click", () => {
         if (glisse && glisse.bouge) { glisse = null; return; }   // fin d'un glisser, pas un clic
         glisse = null;
-        ouvrir(!panneau.classList.contains("ouvert"));
+        const ouvrant = !panneau.classList.contains("ouvert");
+        ouvrir(ouvrant);
+        if (ouvrant) tester();
       });
       const masquer = el("button", "pilote-masquer", "×");
       masquer.type = "button";
@@ -552,6 +579,14 @@
       vueBouton.title = "Joindre l'image de cet onglet";
       vueBouton.hidden = !P.capturer;
       envoi = bouton("Envoyer", demander);
+      choixModele = el("select", "pilote-modele");
+      choixModele.title = "Modèle de Claude (gardé sur cet appareil)";
+      choixModele.setAttribute("aria-label", "Modèle de Claude");
+      MODELES.forEach(([valeur, nom]) => { const o = el("option", "", nom); o.value = valeur; choixModele.appendChild(o); });
+      choixModele.value = MODELES.some(m => m[0] === pref("modele")) ? pref("modele") : MODELES[0][0];
+      choixModele.addEventListener("change", () => pref("modele", choixModele.value));
+      etatLigne = el("div", "pilote-etat");
+      etatLigne.setAttribute("aria-live", "polite");
       const neuve = bouton("Nouvelle conversation", () => {
         nouvelle = true;
         tracer("La prochaine demande ouvre une nouvelle conversation.");
@@ -561,9 +596,11 @@
       demande.appendChild(envoi);
       demande.appendChild(trombone);
       demande.appendChild(vueBouton);
+      demande.appendChild(choixModele);
       demande.appendChild(choix);
       demande.appendChild(neuve);
       panneau.appendChild(barre);
+      panneau.appendChild(etatLigne);
       panneau.appendChild(liste);
       panneau.appendChild(demande);
       panneau.appendChild(pied);

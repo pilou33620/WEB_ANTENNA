@@ -41,7 +41,7 @@ import urllib.parse
 PREFIXE = "/api/pilote/"
 METHODES = {"battement": "POST", "attendre": "GET", "reponse": "POST",
             "commande": "POST", "onglets": "GET", "suivre": "GET",
-            "demande": "POST", "conversation": "GET", "demandes": "GET", "progres": "POST"}
+            "demande": "POST", "conversation": "GET", "demandes": "GET", "progres": "POST", "statut": "GET"}
 # le MCP et le lanceur, sur ce poste seulement
 ORDRES = ("commande", "onglets", "suivre", "demandes", "progres")
 ETATS_PAGE = ("recue", "proposee", "appliquee", "refusee", "finie", "echouee")
@@ -59,6 +59,9 @@ MAX_MESSAGE = 20000         # caractères d'un message de Claude rendu au pannea
 MAX_MESSAGES = 500          # messages gardés par demande
 PRISE = 20                  # s : une demande que personne ne prend échoue (aucun lanceur sur ce poste)
 GENRES = ("texte", "outil", "erreur", "info")
+MODELES = ("opus", "sonnet", "haiku")      # alias de Claude Code (--model) : le dernier modèle de chaque famille
+LANCEUR_VIVANT = 35                        # s : sans long-poll /demandes depuis, le lanceur est absent (poll : 25 s)
+TEST_PERIME = 30                           # s : au-delà, l'ouverture d'un panneau fait retester Claude Code
 # Pièces jointes d'une demande (SPEC-claude-pages.md) : lues par Claude, jamais écrites sur disque
 TYPES_PIECE = ("image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf")
 MAX_PIECES = 10
@@ -120,7 +123,8 @@ def _pieces(v):
 
 class Pilote:
     def __init__(self, attente=120.0, attente_poll=25.0, oubli=120.0, redistribution=10.0,
-                 max_corps=8 * 1024 * 1024, max_petit=64 * 1024, max_demande=28 * 1024 * 1024, prise=PRISE):
+                 max_corps=8 * 1024 * 1024, max_petit=64 * 1024, max_demande=28 * 1024 * 1024, prise=PRISE,
+                 attente_test=8.0):
         self.attente = attente                # s : un appel du MCP attend la réponse de la page
         self.attente_poll = attente_poll      # s : un long-poll du relais
         self.oubli = oubli                    # s : un onglet sans nouvelles est oublié (> 90 s de pilote.js)
@@ -134,6 +138,11 @@ class Pilote:
         self.commandes = {}                   # id -> commande
         self.polls = {}                       # navigateur -> jeton du long-poll en cours
         self.demandes = {}                    # id -> demande écrite dans un panneau « Claude »
+        self.attente_test = attente_test      # s : la page attend le test de Claude Code par le lanceur
+        self.lanceur_vu = -math.inf           # dernier long-poll /demandes du lanceur
+        self.claude = None                    # état de Claude Code au dernier test du lanceur
+        self.claude_t = -math.inf
+        self.tester = False                   # une page attend un nouveau test
 
     @staticmethod
     def ce_poste(handler):
@@ -335,6 +344,9 @@ class Pilote:
         texte = _texte(corps.get("texte"), "texte", MAX_TEXTE).strip()
         if not texte:
             raise Refus(400, "Champ « texte » vide.")
+        modele = corps.get("modele", MODELES[0])
+        if modele not in MODELES:
+            raise Refus(400, "Champ « modele » invalide.")
         pieces, poids = _pieces(corps.get("pieces"))
         with self.cond:
             self._menage()
@@ -346,7 +358,7 @@ class Pilote:
             if poids and sum(d["poids"] for d in self.demandes.values()) + poids > MAX_EN_ATTENTE:
                 raise Refus(429, "Trop de fichiers en attente sur le poste : réessaie dans un instant.")
             d = {"id": secrets.token_hex(16), "navigateur": nav, "onglet": onglet, "texte": texte,
-                 "pieces": pieces, "poids": poids, "nouvelle": corps.get("nouvelle") is True, "etat": "en_attente", "messages": [],
+                 "pieces": pieces, "poids": poids, "modele": modele, "nouvelle": corps.get("nouvelle") is True, "etat": "en_attente", "messages": [],
                  "cree": time.monotonic(), "vu": time.monotonic(), "fin": 0.0,
                  "cible": {k: o[k] for k in ("page", "projet", "appareil")}}
             self.demandes[d["id"]] = d
@@ -430,24 +442,55 @@ class Pilote:
                 raise Refus(404, "Commande inconnue (ou finie depuis plus d'une heure).")
             return self._vue(c)
 
-    def _demandes(self, _handler, _params, _corps):
-        """Le lanceur prend la plus ancienne demande en attente (long-poll)."""
+    def _demandes(self, _handler, params, _corps):
+        """Le lanceur prend la plus ancienne demande en attente (long-poll). Il y joint, juste après
+        un test, l'état de Claude Code (?claude=) ; il rend {"tester": true} quand une page en attend un."""
+        etat = None
+        if "claude" in params:
+            try:
+                etat = json.loads(params["claude"])
+            except ValueError:
+                etat = None
+            if not isinstance(etat, dict) or not isinstance(etat.get("pret"), bool):
+                raise Refus(400, "Champ « claude » invalide.")
+            etat = {"pret": etat["pret"], "message": _texte(etat.get("message"), "message", 500),
+                    "version": _texte(etat.get("version", ""), "version", 40, vide=True)}
         fin = time.monotonic() + self.attente_poll
         with self.cond:
+            self.lanceur_vu = time.monotonic()
+            if etat is not None:
+                self.claude, self.claude_t = etat, time.monotonic()
+                self.cond.notify_all()
             while True:
                 self._menage()
                 prets = sorted((d for d in self.demandes.values() if d["etat"] == "en_attente"), key=lambda d: d["cree"])
-                if prets or time.monotonic() >= fin:
+                if prets or self.tester or time.monotonic() >= fin:
                     break
                 self.cond.wait(fin - time.monotonic())
             if not prets:
-                return {"demande": None}
+                # Rendu une seule fois : un lanceur d'avant le test reviendrait sans fin
+                tester, self.tester = self.tester, False
+                return {"demande": None, "tester": True} if tester else {"demande": None}
             d = prets[0]
             pieces = d["pieces"]
             d.update(etat="prise", vu=time.monotonic(), pieces=[], poids=0)      # le lanceur les a : oubliées ici
             self.cond.notify_all()
             return {"demande": {"id": d["id"], "navigateur": d["navigateur"], "onglet": d["onglet"],
-                                "texte": d["texte"], "pieces": pieces, "nouvelle": d["nouvelle"], **d["cible"]}}
+                                "texte": d["texte"], "pieces": pieces, "modele": d["modele"], "nouvelle": d["nouvelle"],
+                                **d["cible"]}}
+
+    def _statut(self, _handler, _params, _corps):
+        """Le panneau s'ouvre : le lanceur écoute-t-il, et Claude Code est-il prêt ? Un état trop
+        vieux fait retester (sans requête au modèle) ; on attend le nouveau quelques secondes."""
+        fin = time.monotonic() + self.attente_test
+        with self.cond:
+            lanceur = time.monotonic() - self.lanceur_vu < LANCEUR_VIVANT
+            if lanceur and time.monotonic() - self.claude_t > TEST_PERIME:
+                self.tester, avant = True, self.claude_t
+                self.cond.notify_all()
+                while self.claude_t == avant and time.monotonic() < fin:
+                    self.cond.wait(fin - time.monotonic())
+            return {"lanceur": lanceur, "claude": self.claude}
 
     def _progres(self, _handler, _params, corps):
         etat, d = corps.get("etat"), None
@@ -756,9 +799,41 @@ if __name__ == "__main__":
     MAX_EN_ATTENTE = 64 * 1024 * 1024
     distant[0] = False
     prise = req("GET", "/api/pilote/demandes")[1]["demande"]
-    assert prise["pieces"] == pieces, prise
+    assert prise["pieces"] == pieces and prise["modele"] == "opus", prise
     assert (P.demandes[dem["id"]]["pieces"], P.demandes[dem["id"]]["poids"]) == ([], 0)
     assert req("POST", "/api/pilote/progres", {"id": dem["id"], "etat": "finie"})[0] == 200
+    distant[0] = True
+    # Modèle : opus, sonnet ou haiku, rien d'autre
+    assert req("POST", "/api/pilote/demande", {"navigateur": "ipad", "onglet": "I", "texte": "x", "modele": "gpt"})[0] == 400
+
+    # Test de connexion : sans lanceur (ses long-polls plus haut sont vieux), la page le sait tout de suite
+    P.lanceur_vu -= 1000
+    assert req("GET", "/api/pilote/statut")[1] == {"lanceur": False, "claude": None}
+    # Le lanceur écoute : l'ouverture d'un panneau lui fait tester Claude Code, la page attend l'état
+    P.attente_test = 3.0
+    distant[0] = False
+    poll, st = {}, {}
+    tp = threading.Thread(target=lambda: poll.update(r=req("GET", "/api/pilote/demandes")))
+    tp.start()
+    time.sleep(0.1)
+    distant[0] = True
+    ts = threading.Thread(target=lambda: st.update(r=req("GET", "/api/pilote/statut")))
+    ts.start()
+    time.sleep(0.1)
+    distant[0] = False
+    tp.join(5)
+    assert poll["r"][1] == {"demande": None, "tester": True}, poll
+    etat = {"pret": True, "message": "Claude Code 2.1.301 connecté.", "version": "2.1.301", "email": "a@b"}
+    assert req("GET", "/api/pilote/demandes?claude=" + urllib.parse.quote(json.dumps(etat)))[0] == 200
+    ts.join(5)
+    assert st["r"][1] == {"lanceur": True, "claude": {"pret": True, "message": "Claude Code 2.1.301 connecté.",
+                                                      "version": "2.1.301"}}, st          # ni e-mail ni rien d'autre
+    # Un état frais ne fait pas retester ; un lanceur muet depuis 35 s est absent
+    assert req("GET", "/api/pilote/statut")[1]["claude"]["pret"] is True and P.tester is False
+    P.lanceur_vu -= 40
+    assert req("GET", "/api/pilote/statut")[1]["lanceur"] is False
+    for mauvais in ('{"pret": "oui", "message": "x"}', "pas du json", '{"pret": true}'):
+        assert req("GET", "/api/pilote/demandes?claude=" + urllib.parse.quote(mauvais))[0] == 400, mauvais
     distant[0] = True
     # Personne ne prend la demande (pas de lanceur sur ce poste) : elle échoue en le disant
     P.prise = 0.2

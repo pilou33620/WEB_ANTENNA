@@ -20,7 +20,18 @@
   background: #1b1b24; color: #9a9aac; cursor: pointer; font: inherit; line-height: 20px;
 }
 .pilote-masquer:hover { color: #e8e8ea; border-color: #5b5bd6; }
-.pilote-liste, .pilote-pied, .pilote-demande { display: none; }
+.pilote-liste, .pilote-pied, .pilote-demande, .pilote-etat { display: none; }
+.pilote.ouvert .pilote-etat {
+  display: block; margin-top: 6px; padding: 4px 8px; background: #1b1b24; border: 1px solid #3a3a4a; border-radius: 8px;
+}
+.pilote-etat::before { content: "●"; margin-right: 6px; color: #9a9aac; }
+.pilote-etat.ok::before { color: #3fb37f; }
+.pilote-etat.ko::before { color: #d65b5b; }
+.pilote-etat.ko { color: #f0b8b8; }
+.pilote-modele {
+  margin: 6px 6px 0 0; padding: 3px 6px; border: 1px solid #5b5bd6; border-radius: 4px;
+  background: #2f2f4a; color: #e8e8ea; font: inherit;
+}
 .pilote.ouvert .pilote-liste {
   display: block; max-height: 50vh; overflow: auto; margin-top: 6px; padding: 6px;
   background: #1b1b24; border: 1px solid #3a3a4a; border-radius: 8px;
