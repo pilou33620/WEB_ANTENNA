@@ -7,8 +7,10 @@
   max-width: min(360px, calc(100vw - 24px));
   font: 13px/1.4 system-ui, sans-serif; color: #e8e8ea;
 }
-.pilote.masque { display: none; }
-/* La tête se glisse pour déplacer le panneau ; × le masque */
+/* La tête se glisse pour déplacer le panneau ; × la réduit en pastille, qu'un clic rouvre */
+.pilote.masque .pilote-masquer { display: none; }
+.pilote.masque .pilote-tete { padding: 2px 8px; opacity: .5; font-size: 11px; }
+.pilote.masque .pilote-tete:hover, .pilote.masque .pilote-tete:focus-visible { opacity: 1; }
 .pilote-barre { display: flex; justify-content: flex-end; align-items: center; gap: 4px; }
 .pilote-tete {
   display: block; padding: 6px 12px; border: 1px solid #5b5bd6; border-radius: 16px;

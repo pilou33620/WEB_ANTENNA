@@ -526,8 +526,12 @@
       });
       const masquer = el("button", "pilote-masquer", "×");
       masquer.type = "button";
-      masquer.title = "Masquer — revient quand Claude propose une modification";
-      masquer.addEventListener("click", () => { panneau.classList.add("masque"); pref("masque", "1"); });
+      masquer.title = "Réduire en pastille — un clic sur « Claude » le rouvre";
+      masquer.addEventListener("click", () => {
+        panneau.classList.remove("ouvert");
+        panneau.classList.add("masque");
+        pref("masque", "1");
+      });
       barre.appendChild(tete);
       barre.appendChild(masquer);
       const place = /^(\d+(?:\.\d+)?px) (\d+(?:\.\d+)?px)$/.exec(pref("place") || "");
