@@ -342,10 +342,16 @@ verifie("la longueur du patch est raccourcie des bords, puis de la correction me
         Math.abs(patchCorrLongueur(cx.h,cx.f)-(1-0.466*Math.sqrt(cx.h/(CON_C0/cx.f))))<1e-12,
         (100*raccourci).toFixed(2)+" % (L="+pPatch.L.toFixed(3)+
         " pour "+demi.toFixed(3)+" mm)");
-verifie("la resistance de bord suit les deux strates mesurees, et s'y borne",
-        Math.abs(patchCorrRbord(0.02)-0.173)<1e-9&&Math.abs(patchCorrRbord(0.0037)-0.722)<1e-9&&
-        patchCorrRbord(0.0009)===patchCorrRbord(0.0037)&&patchCorrRbord(0.05)===patchCorrRbord(0.02)&&
-        patchCorrRbord(0.012)<0.722&&patchCorrRbord(0.012)>0.173);
+/* Les quatre strates mesurees (k a 8 % pres : la loi est une droite en 1/k), et
+   les bornes : en tan δ comme en epaisseur, rien n'est extrapole. */
+const kR=(t,h)=>patchCorrRbord(t,h);
+verifie("la resistance de bord suit les quatre strates mesurees, et s'y borne",
+        [[0.02,1.53,0.173],[0.012,1.53,0.246],[0.0027,1.524,0.310],[0.0037,0.762,0.722]]
+          .every(m=>Math.abs(kR(m[0],m[1])/m[2]-1)<0.09)&&
+        kR(0.0009,1.53)===kR(0.0027,1.53)&&kR(0.05,1.53)===kR(0.02,1.53)&&
+        kR(0.01,0.3)===kR(0.01,0.762)&&kR(0.01,3.2)===kR(0.01,1.53)&&
+        kR(0.0037,0.762)>kR(0.0037,1.53),
+        [[0.02,1.53],[0.012,1.53],[0.0027,1.524],[0.0037,0.762]].map(m=>kR(m[0],m[1]).toFixed(3)).join(" "));
 verifie("la largeur du patch tombe entre le demi et le plein demi-onde libre",
         pPatch.W>demi&&pPatch.W<CON_C0/(2*cx.f),
         pPatch.W.toFixed(3)+" mm");
@@ -3391,26 +3397,14 @@ charger("39-campagne.js");
   }
   verifie("campagne : chaque etape se pose, sur son motif",
           poses.every(q=>!q.err&&q.motif===q.e.motif), poses.filter(q=>q.err).map(q=>q.pl+" : "+q.err).join(" ; "));
-  const n=id=>poses.filter(q=>q.pl===id).reduce((a,q)=>a+q.n,0);
-  verifie("campagne : 12 + 12 + 6 + 7 + 30 + 2 calculs, comme les plans le disent",
-          n("mifa-kd-n")===12&&n("monopole-wr-Lm")===12&&n("validation-facteurs")===6&&
-          n("balayage-patch-y0-fin")===7&&n("croisement-patch-strates")===30&&n("mslport-ecart")===2,
-          CAMP_PLANS.map(p=>p.id+"="+n(p.id)).join(" "));
-  const mifa=poses[0];
-  verifie("campagne : le MIFA croise kd et n", mifa.s.join()==="m.kd,m.n");
-  const wr=poses.filter(q=>q.pl==="monopole-wr-Lm");
-  verifie("campagne : le monopole balaie Lm a wr x 0,6 / 1 / 1,5 / 2 du defaut",
-          wr.every(q=>q.s[0]==="m.Lm")&&
-          wr.map(q=>+(q.p.wr/wr[1].p.wr).toFixed(3)).join()==="0.6,1,1.5,2");
-  const fac=poses.filter(q=>q.pl==="validation-facteurs");
-  verifie("campagne : facteurs a 5,8 GHz sur FR-4 1,53 mm et a 2,45 GHz sur RO4003C 0,813 mm",
-          fac.length===6&&fac.every(q=>q.f===5.8e9?q.ep.every(e=>e===1.53):(q.f===2.45e9&&q.ep.every(e=>e===0.813))));
-  const y0=poses.find(q=>q.pl==="balayage-patch-y0-fin");
-  verifie("campagne : y0 de -1,5 a 0 mm sous le defaut, par 0,25",
-          y0.s[0]==="m.y0"&&Math.abs(y0.bal.max-y0.p.y0)<1e-6&&
-          Math.abs(y0.bal.max-y0.bal.min-1.5)<1e-6&&y0.bal.pas===0.25, JSON.stringify(y0.bal));
-  verifie("campagne : le MSLPort essaie « maillage » puis « grossier »",
-          poses.filter(q=>q.pl==="mslport-ecart").map(q=>q.msl).join()==="maillage,grossier");
+  verifie("campagne : le recalage du patch croise L et y0 sur cinq cas, 15 points chacun",
+          poses.length===5&&poses.every(q=>q.n===15&&q.s.join()==="m.L,m.y0"&&q.msl===false),
+          poses.map(q=>q.e.nom+" "+q.n+" "+q.s).join(" | "));
+  verifie("campagne : L de 0 a +2 %, y0 a +/-20 % de la loi",
+          poses.every(q=>Math.abs(q.bal.min-q.p.L)<1e-4&&Math.abs(q.bal.max/q.p.L-1.02)<1e-4&&
+                         Math.abs(q.bal.min2/q.p.y0-0.8)<1e-4&&Math.abs(q.bal.max2/q.p.y0-1.2)<1e-4));
+  verifie("campagne : les quatre strates a 2,45 GHz, et le FR-4 a 5,8 GHz",
+          poses.map(q=>q.e.modele+"@"+q.f/1e9).join()==="fr4-2c-16@2.45,fr4-2c-16-hf@2.45,ro4003-2c-1524@2.45,ro4350-2c-0762@2.45,fr4-2c-16@5.8");
   let refus="";
   try{ campPoser({motif:"dipole", bal:{source:"m.kd", min:1, max:2, pas:1}}); }catch(x){ refus=x.message; }
   verifie("campagne : une cote que le motif n'a pas est refusee, pas remplacee par une autre",

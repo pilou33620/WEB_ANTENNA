@@ -11,35 +11,34 @@ vérifications passées ; aucun `TODO` ni `FIXME` dans le code).
 
 ## Fonctionnalités
 
-Presque tout ce qui reste attend une mesure openEMS (plans dans [HISTORIQUE.md](HISTORIQUE.md),
-« Plans de mesure ») : le code suit son résultat. Ces mesures sont repoussées avec les autres
-essais : ces lignes restent bloquées d'ici là. Elles se lancent toutes par le bouton
-**📋 Campagne** (README, « La campagne de mesures ») ; chaque fichier téléchargé, posé à la
-racine et poussé, débloque sa ligne.
+La campagne de mesures du 22/10/2026 (six plans, relevés à la racine, bilan dans
+[HISTORIQUE.md](HISTORIQUE.md), « Campagne du 22/10/2026 ») a tranché quatre lignes. Les
+décisions du 23/10/2026 : ruban maillé fin par défaut, une petite campagne pour recaler le
+patch, pas de seconde campagne pour le MIFA ni pour les facteurs.
 
-- [ ] **MIFA, défaut de `kd`** : le développé visé vaut 100 % du quart d'onde, et le MIFA
-  résonne au-dessus de 3,5 GHz pour 2,45 visés. Remplacer ce 100 par la loi que donnera le
-  croisement `kd` × `n` (en fonction de l'écartement / largeur de bras). *Bloqué, attend la mesure « MIFA,
-  `kd` × `n` ».*
-- [ ] **Monopôle, défaut de `wr`** : il reste une réactance de +16j à la résonance. Passer le
-  défaut de `wr` au rapport où Im Z ≈ 0. *Bloqué, attend la mesure « Monopôle, `wr` × `Lm` ».*
-- [ ] **Facteurs du dipôle, du monopôle et de l'IFA** (bras × 1,165, brin × 1,29, bras ×
-  1,018) : mesurés sur un cas chacun. Si un écart de résonance dépasse 2 % hors de ce cas,
-  corriger le facteur de ce motif (croisement à mener à cette fréquence). *Bloqué, attend la mesure «
-  Facteurs hors de leur cas ».*
-- [ ] **Patch, les 15 Ω inductifs au pied** : reporter sur la strate de `patchCorrRbord` le recul
-  de `y₀` où Im Z s'annule. *Bloqué, attend la mesure « Patch, balayage fin de `y₀` ».*
-- [ ] **Patch, deux strates de plus dans `patchCorrRbord`** : la correction n'est mesurée que sur
-  FR-4 et RO4350B ; ajouter le FR-4 haute fréquence (tan δ 0,012) et le RO4003C 1,524 mm. *Bloqué, attend
-  la mesure « Patch, deux strates de plus ».*
-- [ ] **`AddMSLPort`, défaut ou option** : il déplace la résonance de +1 % (2,476 contre
-  2,450 GHz). Si l'écart vient du maillage, le MSLPort devient le défaut ; sinon il reste une
-  option. *Bloqué, attend la mesure « MSLPort, maillage ou port ».*
-- [ ] **Retirer la campagne de mesures** une fois ses fichiers rendus : le bouton
+- [ ] **Recaler le patch sur le maillage fin** : lancer la campagne « Recalage du patch »
+  (bouton **📋 Campagne**, environ 11 h annoncées, la première a tenu en 2 h 30), poser
+  `recalage-patch-maillage-fin.json` à la racine, puis recaler `PATCH_K_LONGUEUR` et
+  `PATCH_RBORD` (`js/22-antennes.js`) sur ses cinq cas. D'ici là, sur ce maillage, un patch
+  tombe environ 0,7 % au-dessus de sa cible.
+- [ ] **Retirer la campagne de mesures** une fois ce recalage rendu : le bouton
   « 📋 Campagne » (`index.html`), `js/39-campagne.js`, son style (`css/antenne.css`), sa
-  section du banc (`test/banc-interface.js`, « Campagne de mesures ») et du README. Outil
-  provisoire, décidé le 22/10/2026.
-- [ ] **`AddMSLPort`, prolongement hors carte** (piste, non commencée) : prolonger ruban,
-  substrat et plan de masse jusqu'à la paroi du domaine, comme le veut le port d'openEMS. Touche
-  `openems_modele.py`, `openems_script.py`, le panneau des ports, la vue 3D et le banc (détail
-  dans l'historique, *Le port microruban désembedé*). Seulement si le MSLPort devient le défaut.
+  section du banc (`test/banc-interface.js`, « Campagne de mesures ») et du README.
+- [ ] **MIFA, défaut de `kd`** : avec un repli, `kd` ≈ 137 % donne 2,45 GHz (mal adapté,
+  −5 dB) ; avec deux ou trois, la résonance reste au-dessus de 2,82 GHz jusqu'à `kd` = 160 %.
+  *Bloqué : il faudrait `kd` au-delà de 160 % et une bande jusqu'à 4 GHz, campagne non lancée
+  (23/10/2026).*
+- [ ] **Facteurs du dipôle, du monopôle et de l'IFA** : ils ne tiennent pas hors de leur cas
+  (dipôle −8,3 % à 5,8 GHz et +3,5 % sur RO4003C 0,813 mm, monopôle −15 % ou plus à 5,8 GHz,
+  IFA −10,5 % et +14 % ; seul le monopôle sur RO4003C tient, −0,3 %). *Bloqué : il faudrait
+  un balayage de longueur par cas pour en tirer une loi, campagne non lancée (23/10/2026).*
+- [x] **Patch, deux strates de plus dans `patchCorrRbord`** (23/10/2026) : FR-4 haute
+  fréquence k = 0,246, RO4003C 1,524 mm k = 0,310. La loi devient 1/k = a(h) + b·tan δ : c'est
+  l'épaisseur, pas les pertes, qui sépare RO4003C et RO4350B. Provisoire jusqu'au recalage.
+- [x] **Patch, les 15 Ω inductifs au pied** (23/10/2026) : disparus. Au `y₀` du gabarit,
+  −23,5 dB à 2,4496 GHz ; rien à reporter.
+- [x] **Monopôle, la réactance de +16j** (23/10/2026) : `wr` n'en est pas le levier (+12j à
+  × 0,6, +23j à × 2) ; le S₁₁ est déjà de −16 dB. Point fermé, `wr` inchangé.
+- [x] **`AddMSLPort`, défaut ou option** (23/10/2026) : l'écart venait du maillage (le port
+  localisé maillé fin monte à 2,468 GHz). Le ruban déclaré se maille désormais fin sous le port
+  localisé ; le MSLPort reste une option, et son prolongement hors carte n'est plus à faire.

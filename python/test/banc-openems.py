@@ -2286,6 +2286,17 @@ _ly_gr = [v for v in _m_gr["maillage"]["y"] if _qg and _qg["debut"] <= v <= _qg[
 verifie("« grossier » : le MSLPort reste, avec ses cinq lignes au moins",
         "AddMSLPort" in openems_script.generer(_m_gr, chemin_openems="") and
         5 <= len(_ly_gr) <= len(_ly), "%d lignes contre %d" % (len(_ly_gr), len(_ly)))
+# Le DEFAUT, depuis la campagne du 22/10/2026 : un port localise sur une ligne
+# declaree prend les lignes du MSLPort ; loin du bord, il garde l'ancien maillage.
+_d_def = dict(_d_msl, port={k: v for k, v in _d_msl["port"].items() if k != "msl"})
+_m_def = openems_modele.normaliser(_d_def)
+_ly_def = [v for v in _m_def["maillage"]["y"] if _q["debut"] <= v <= _q["fin"]]
+verifie("par defaut, le ruban declare se maille comme sous le MSLPort",
+        _ly_def == _ly and "AddMSLPort" not in openems_script.generer(_m_def, chemin_openems=""),
+        "%d lignes contre %d" % (len(_ly_def), len(_ly)))
+verifie("loin du bord, le port localise garde l'ancien maillage, sans refus",
+        "msl_maillage" not in openems_modele.normaliser(
+            dict(_d_def, port=dict(_d_def["port"], y=35.0)))["port"])
 refuse("un port microruban loin du bord du cuivre",
        dict(_d_msl, port=dict(_d_msl["port"], y=35.0)), "bord")
 refuse("un port microruban sans ligne declaree",

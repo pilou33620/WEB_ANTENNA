@@ -318,7 +318,8 @@ function antPortDoc(p,i){
        de référence, ramené à la surface de la carte, et en empiler un second
        reviendrait à compter deux fois. */
     d.ligne={longueur:p.ligne_d, largeur:p.ligne_w};
-    if(p.msl)d.msl=p.msl;   // true, ou l'essai « maillage » / « grossier »
+    // le MSLPort seul : l'essai « maillage » est devenu le défaut, « grossier » n'a servi qu'à la campagne
+    if(p.msl===true)d.msl=true;
   }
   return d;
 }

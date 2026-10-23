@@ -1958,8 +1958,8 @@ def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu, boites=None):
         # second desembedage par-dessus reviendrait a compter deux fois.
         ligne = _ligne_alim(p, ca, cb, dielectriques, k_mm, rang)
         # Deux ESSAIS pour l'ecart de +1 % du MSLPort (HISTORIQUE.md, § 1) :
-        # « maillage » pose les lignes du MSLPort sous un port localise,
-        # « grossier » garde le MSLPort sans son affinage le long du ruban.
+        # « maillage » pose les lignes du MSLPort sous un port localise (c'est
+        # devenu le defaut), « grossier » garde le MSLPort sans son affinage.
         mode = p.get("msl")
         if not (mode is True or mode in ("maillage", "grossier")):
             mode = None
@@ -1973,6 +1973,17 @@ def _un_port(p, rang, conducteurs, dielectriques, k_mm, boite_cu, boites=None):
                     out["msl"] = q
                     if mode == "grossier":
                         q["grossier"] = True
+            else:
+                # LE RUBAN DECLARE SE MAILLE FIN PAR DEFAUT (campagne du
+                # 22/10/2026) : sous ses lignes, le port localise remontait la
+                # resonance du patch de 0,74 % -- il etait sous-maille. Un port
+                # que le MSLPort ne sait pas suivre (loin du bord, de travers)
+                # garde le maillage d'avant, sans refus : ce n'est pas un choix.
+                try:
+                    out["msl_maillage"] = _port_msl(out, ligne, ca, cb, boite_cu,
+                                                    rang, boites)
+                except ErreurModele:
+                    pass
         elif mode:
             raise ErreurModele(
                 "Le port %d est un port microruban sans ligne declaree." % rang,

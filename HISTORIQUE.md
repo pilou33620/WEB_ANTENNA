@@ -323,9 +323,8 @@ pour sa réactance.
 
 ### Plans de mesure — arrêtés le 21/10/2026
 
-> Le 22/10/2026 : ces plans se lancent tous d'un coup, par le bouton **📋 Campagne**
-> (`js/39-campagne.js`, README « La campagne de mesures »), le patch « deux strates »
-> en premier passage seulement. Environ 13 h au débit supposé de 25 Mcellules/s.
+> Faits le 22/10/2026 par le bouton **📋 Campagne** : bilan plus bas, « Campagne du
+> 22/10/2026 ».
 
 Ce qui reste ouvert sur la physique des antennes se tranche au solveur. Les
 plans sont arrêtés ; les calculs se lancent depuis la page (le balayage d'une
@@ -371,6 +370,44 @@ Faits le 21/10/2026 (commit 0decae2) : la graduation qui chevauchait « GHz »,
 et le relevé du pilotage par Claude (MCP de web_suite) du 19/10/2026, tout coché.
 
 ---
+
+### Campagne du 22/10/2026 — ce que les six plans ont tranché
+
+Lancée par le bouton **📋 Campagne** sur le poste de simulation, 2 h 30 pour 13 h
+annoncées (le débit supposé était pessimiste). Les six relevés sont à la racine.
+Décisions du 23/10/2026 à la fin de chaque point.
+
+1. **MIFA, `kd` × `n`** (`croisement-mifa-kd-n.json`). Avec un repli, la résonance
+   suit `kd` : 2,67 GHz à 120 %, 2,41 à 140 %, 2,19 à 160 % — 2,45 GHz vers
+   `kd` ≈ 137 %, mais mal adapté (−5 à −6 dB, Z ≈ 63 − 70j). Avec deux ou trois
+   replis, rien ne résonne sous 2,82 GHz (le haut de la bande) jusqu'à 160 % : le
+   couplage entre dents est plus fort que prévu. *Pas de seconde campagne (`kd`
+   au-delà de 160 %, bande jusqu'à 4 GHz) : le défaut reste 100.*
+2. **Monopôle, `wr` × `Lm`** (`croisement-monopole-wr-Lm.json`). La réactance à la
+   résonance vaut +12,5j à `wr` × 0,6, +16j à × 1, +21j à × 1,5, +23j à × 2 : elle
+   ne s'annule pour aucune largeur. Le S₁₁ va de −17,7 dB (× 0,6) à −12,4 dB (× 2),
+   −16 dB au défaut. *Fermé : `wr` n'est pas le levier, le défaut ne bouge pas.*
+3. **Facteurs hors de leur cas** (`validation-facteurs.json`). Écart de résonance :
+   dipôle −8,3 % (5,8 GHz, FR-4) et +3,5 % (2,45 GHz, RO4003C 0,813 mm) ; monopôle
+   −15 % ou plus à 5,8 GHz (au bord bas de la bande) et −0,3 % sur RO4003C ; IFA
+   −10,5 % et +14 %. Cinq cas sur six dépassent 2 %. *Pas de seconde campagne : les
+   facteurs restent ceux d'un cas, et l'assistant les donne pour ce qu'ils sont.*
+4. **Patch, `y₀` fin** (`balayage-patch-y0-fin.json`). Les 15 Ω inductifs au pied
+   ont disparu : au `y₀` du gabarit (5,97 mm), −23,5 dB à 2,4496 GHz, Z = 44 − 1,9j,
+   et le S₁₁ s'améliore encore en allant vers lui. *Fermé.*
+5. **Patch, deux strates** (`croisement-patch-strates.json`). Au `y₀` réglé (Re Z = 50 Ω
+   au port) : FR-4 haute fréquence 7,6 mm au lieu de 9,4 calculés, k = 0,246 ;
+   RO4003C 1,524 mm 8,7 mm au lieu de 11,1, k = 0,310, et L trop court de 1,2 % (30,77
+   contre 30,39 mm). L'interpolation en tan δ prédisait 0,442 et 0,722 : à épaisseur
+   égale, c'est 1/k qui suit les pertes en droite (à 8 % près), et le substrat mince
+   double k. *Loi refaite : 1/k = a(h) + b·tan δ (`PATCH_RBORD`).*
+6. **MSLPort, maillage ou port** (`mslport-ecart.json`). Localisé 2,4496 GHz, localisé
+   sous les lignes du MSLPort 2,4678 (+0,74 %), MSLPort sans affinage 2,4739 : l'écart
+   vient du maillage, le port localisé était sous-maillé. *Le ruban déclaré se maille
+   fin par défaut ; le MSLPort reste une option, sans prolongement hors carte. Les deux
+   lois du patch, calées sur l'ancien maillage, se recalent par la campagne « Recalage
+   du patch » (L de 0 à +2 % × `y₀` ± 20 %, quatre strates à 2,45 GHz et le FR-4 à
+   5,8 GHz).*
 
 ## 2. Les limites connues, et ce qu'on en fait
 

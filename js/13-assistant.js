@@ -1091,10 +1091,8 @@ ${(p.ligne_d>0&&p.ligne_w>0)?(function(){
       :'<span>le serveur calculera Z₀ et l’ε<sub>r</sub> effectif du ruban</span>'}
 </div>
 <label>Port <select id="antPmsl">
-  <option value=""${p.msl?"":" selected"}>localisé</option>
+  <option value=""${p.msl===true?"":" selected"}>localisé (ruban maillé fin)</option>
   <option value="1"${p.msl===true?" selected":""}>microruban (MSLPort)</option>
-  <option value="maillage"${p.msl==="maillage"?" selected":""}>essai : localisé + maillage du MSLPort</option>
-  <option value="grossier"${p.msl==="grossier"?" selected":""}>essai : MSLPort sans affinage</option>
   </select>
   Microruban (openEMS <code>MSLPort</code>), <b>expérimental</b> : le solveur
   <b>mesure</b> le Z₀ et la propagation de la ligne maillée, et ramène lui-même

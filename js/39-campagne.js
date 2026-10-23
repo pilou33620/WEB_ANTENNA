@@ -2,7 +2,8 @@
 /* =============================================================================
    Antenne openEMS — 39-campagne.js
    La campagne de mesures : les « Plans de mesure » d'HISTORIQUE.md, enchaînés
-   seuls, une nuit durant s'il le faut.
+   seuls, une nuit durant s'il le faut. Outil provisoire : à retirer une fois
+   le recalage du patch rendu (A-FAIRE.md).
 
    CE FICHIER N'INVENTE AUCUN GESTE. Chaque étape refait ce que ferait la main,
    par les mêmes fonctions : le motif comme le bouton « Exemple » (exPoser,
@@ -15,7 +16,7 @@
    tourne dans son propre processus : rouvrir la page le reprend au suivi.
 
    Chaque plan fini se TÉLÉCHARGE sous le nom que lui donne HISTORIQUE.md
-   (croisement-mifa-kd-n.json…) : à poser à la racine de WEB_ANTENNA, puis à
+   (recalage-patch-maillage-fin.json) : à poser à la racine de WEB_ANTENNA, puis à
    pousser, pour que les corrections de A-FAIRE.md soient écrites d'après eux.
    ============================================================================= */
 
@@ -27,34 +28,19 @@ const CAMP_BASE={modele:"fr4-2c-16", f:2.45e9};
    balayage (`bal`, croisé si `source2`) ou une simulation seule. `rel` donne
    une plage en fraction de la cote posée : [min, max, pas]. */
 const CAMP_PLANS=[
-  {id:"mifa-kd-n", fichier:"croisement-mifa-kd-n.json",
-   titre:"1. MIFA — kd × n (12 points)",
-   etapes:[{motif:"mifa",
-            bal:{source:"m.kd", min:100, max:160, pas:20,
-                 source2:"m.n", min2:1, max2:3, pas2:1}}]},
-  {id:"monopole-wr-Lm", fichier:"croisement-monopole-wr-Lm.json",
-   titre:"2. Monopôle — wr × Lm (12 points)",
-   // wr × 0,6 / 1 / 1,5 / 2 n'est pas une plage régulière : un balayage de Lm par valeur de wr
-   etapes:[0.6, 1, 1.5, 2].map(k=>({motif:"monopole", nom:"wr × "+k,
-            cotes:d=>({wr:+(d.wr*k).toFixed(4)}),
-            bal:{source:"m.Lm", rel:[-0.03, 0.03, 0.03]}}))},
-  {id:"validation-facteurs", fichier:"validation-facteurs.json",
-   titre:"3. Dipôle, monopôle, IFA — facteurs hors de leur cas (6 calculs)",
-   etapes:[].concat(...["dipole", "monopole", "ifa"].map(m=>[
-     {motif:m, nom:m+" · 5,8 GHz · FR-4 1,53 mm", f:5.8e9},
-     {motif:m, nom:m+" · 2,45 GHz · RO4003C 0,813 mm", modele:"ro4003-2c-1524", ep:0.813}]))},
-  {id:"balayage-patch-y0-fin", fichier:"balayage-patch-y0-fin.json",
-   titre:"4. Patch — y₀ fin, de −1,5 à 0 mm (7 points)",
-   etapes:[{motif:"patch", bal:{source:"m.y0", dec:[-1.5, 0, 0.25]}}]},
-  {id:"croisement-patch-strates", fichier:"croisement-patch-strates.json",
-   titre:"5. Patch — FR-4 haute fréquence et RO4003C 1,524 mm, L × y₀ (2 × 15 points)",
-   // premier passage, centré sur le gabarit ; la confirmation du point interpolé suit à la main
-   etapes:["fr4-2c-16-hf", "ro4003-2c-1524"].map(m=>({motif:"patch", nom:m, modele:m,
-            bal:{source:"m.L", rel:[-0.01, 0.01, 0.01],
-                 source2:"m.y0", rel2:[-0.4, 0.4, 0.2]}}))},
-  {id:"mslport-ecart", fichier:"mslport-ecart.json",
-   titre:"6. MSLPort — maillage ou port (2 calculs)",
-   etapes:["maillage", "grossier"].map(m=>({motif:"patch", nom:"essai « "+m+" »", msl:m}))}
+  /* La campagne du 22/10/2026 (six plans, relevés à la racine) a montré le
+     port localisé sous-maillé ; le ruban se maille fin depuis. Reste à recaler
+     les deux lois du patch (patchCorrLongueur, patchCorrRbord) sur ce
+     maillage : L de 0 à +2 % (le maillage fin remonte la résonance de
+     0,74 %), y₀ à ± 20 % de la loi provisoire. 868 MHz n'y est pas : trop cher. */
+  {id:"recalage-patch", fichier:"recalage-patch-maillage-fin.json",
+   titre:"Recalage du patch, maillage fin — L × y₀ (5 × 15 points)",
+   etapes:[["fr4-2c-16", 2.45e9, "FR-4 1,53 mm · 2,45 GHz"],
+           ["fr4-2c-16-hf", 2.45e9, "FR-4 haute fréquence · 2,45 GHz"],
+           ["ro4003-2c-1524", 2.45e9, "RO4003C 1,524 mm · 2,45 GHz"],
+           ["ro4350-2c-0762", 2.45e9, "RO4350B 0,762 mm · 2,45 GHz"],
+           ["fr4-2c-16", 5.8e9, "FR-4 1,53 mm · 5,8 GHz"]].map(c=>({motif:"patch", modele:c[0], f:c[1], nom:c[2],
+            bal:{source:"m.L", rel:[0, 0.02, 0.01], source2:"m.y0", rel2:[-0.2, 0.2, 0.1]}}))}
 ];
 
 const CAMP_CLE="antenne.campagne";

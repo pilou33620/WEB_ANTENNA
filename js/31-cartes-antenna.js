@@ -1174,20 +1174,24 @@ const CARTES_ANTENNA = (function(){
     /* -- 7. le motif patch : ce que la mesure a tranché ------------------ */
     /* Voir HISTORIQUE.md § 1 : le gabarit corrige désormais sa longueur et sa
        résistance de bord par la mesure (`patchCorrLongueur`,
-       `patchCorrRbord`, 22-antennes.js). La seconde n'est mesurée que sur
-       DEUX stratifiés, FR-4 et RO4350B ; entre eux et au-delà, c'est une
-       interpolation en tan δ, et l'encastrement qui en sort se balaye. */
+       `patchCorrRbord`, 22-antennes.js). La seconde est mesurée sur quatre
+       stratifiés ; ailleurs c'est une loi interpolée en tan δ et en épaisseur,
+       et l'encastrement qui en sort se balaye. */
     if(con && CON.gabarit === "patch" && !CON.gabaritTouche.y0){
       const y0 = +((CON.gabaritP || {}).y0);
-      const df = (typeof conSubstrat === "function") ? conSubstrat().df : NaN;
-      const mesure = isFinite(df) && (Math.abs(df - 0.02) < 0.002 ||
-                                       Math.abs(df - 0.0037) < 0.0005);
+      const sub = (typeof conSubstrat === "function") ? conSubstrat() : {};
+      const df = sub.df, h = sub.h;
+      // les quatre stratifiés mesurés : tan δ, épaisseur (mm)
+      const mesure = isFinite(df) && isFinite(h) &&
+        [[0.02, 1.53], [0.012, 1.53], [0.0027, 1.524], [0.0037, 0.762]].some(m =>
+          Math.abs(df - m[0]) < 0.1 * m[0] && Math.abs(h - m[1]) < 0.03);
       if(isFinite(y0) && y0 > 0 && !mesure)
         dire("attention", "L'encastrement du patch est interpolé, pas mesuré",
              "y0 vaut " + nb(y0, 2) + " mm. Le gabarit corrige la résistance "+
              "de bord du modèle de cavité par la mesure, mais celle-ci n'a été "+
-             "faite que sur FR-4 (tan δ 0,02) et RO4350B (tan δ 0,0037) ; ce "+
-             "stratifié (tan δ " + nb(df, 4) + ") est entre les deux ou au-delà. "+
+             "faite que sur FR-4, FR-4 haute fréquence et RO4003C de 1,5 mm, et "+
+             "RO4350B de 0,76 mm ; ce stratifié (tan δ " + nb(df, 4) + ", " +
+             nb(h, 3) + " mm) est entre eux ou au-delà. "+
              "Balayez l'encastrement plutôt que de le croire.",
              /* « m. » et non « f. » : ce sont les cotes DU MOTIF, celles que
                 24-balayage.js propose en reposant le gabarit à chaque point. */

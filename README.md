@@ -1269,24 +1269,20 @@ barrière est la bande passante mémoire, et la séquence laisse le premier
 résultat arriver tôt : on voit le sens de la variation avant la fin, et on peut
 arrêter dès qu'il est clair. Un point qui échoue n'efface pas les autres.
 
-### La campagne de mesures — les plans d'HISTORIQUE.md, seuls, une nuit
+### La campagne de mesures — provisoire
 
-Le bouton **📋 Campagne** (`js/39-campagne.js`) enchaîne les « Plans de mesure »
-d'[HISTORIQUE.md](HISTORIQUE.md) sans personne devant l'écran : il pose chaque
-motif comme le bouton « Exemple », règle son balayage, lance, suit, passe au
-suivant. **Chiffrer** donne la durée de chaque étape avant de rien lancer ;
-**Lancer** part ; **Arrêter** coupe le calcul en cours (**Reprendre** le refait).
-Une étape qui échoue est notée et la campagne continue. Fermer ou recharger la
-page ne perd rien : l'avancement est gardé dans le navigateur, et une page
-rouverte reprend le suivi du calcul en cours.
+Le bouton **📋 Campagne** (`js/39-campagne.js`) enchaîne des balayages sans personne
+devant l'écran : il pose chaque motif comme le bouton « Exemple », règle son balayage,
+lance, suit, passe au suivant. **Chiffrer** donne la durée de chaque étape avant de rien
+lancer ; **Lancer** part ; **Arrêter** coupe le calcul en cours (**Reprendre** le refait).
+Une étape qui échoue est notée et la campagne continue ; recharger la page reprend le
+suivi du calcul en cours.
 
-Chaque plan fini **se télécharge** sous le nom qu'HISTORIQUE.md lui donne
-(`croisement-mifa-kd-n.json`, `croisement-monopole-wr-Lm.json`,
-`validation-facteurs.json`, `balayage-patch-y0-fin.json`,
-`croisement-patch-strates.json`, `mslport-ecart.json`) : à poser à la racine
-de l'outil et à pousser. Les corrections de [A-FAIRE.md](A-FAIRE.md) s'écrivent
-d'après eux. Le plan des deux strates du patch n'est qu'un premier passage
-(L ± 1 % × y₀ ± 40 %) : la confirmation du point interpolé reste à faire.
+Elle a servi aux six « Plans de mesure » d'[HISTORIQUE.md](HISTORIQUE.md) le 22/10/2026,
+et ne porte plus que le **recalage du patch** sur le maillage fin du ruban : L × `y₀` sur
+quatre stratifiés à 2,45 GHz et le FR-4 à 5,8 GHz. Le fichier
+`recalage-patch-maillage-fin.json` se télécharge à la fin : à poser à la racine et à
+pousser. L'outil sera retiré ensuite ([A-FAIRE.md](A-FAIRE.md)).
 
 ## Le mode conception — quand l'antenne n'existe pas encore
 

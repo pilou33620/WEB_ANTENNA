@@ -220,20 +220,30 @@ function conSymbole(ch){
      substrat est épais devant la longueur d'onde : L = L_formule ·
      (1 − 0,466·√(h/λ₀)). Les quatre cas tiennent à 0,2 % de fréquence près.
    - LA RÉSISTANCE DE BORD, d'où sort l'encastrement. La conductance de fente
-     seule la donne trois à six fois trop forte ; le rapport mesuré vaut 0,173
-     sur FR-4 (tan δ 0,02) aux trois fréquences, 0,722 sur RO4350B
-     (tan δ 0,0037). Il suit les pertes, dans le sens attendu : plus de
-     pertes, moins de résistance au bord, encastrement moins profond. */
+     seule la donne trois à six fois trop forte. Le rapport k mesuré vaut
+     0,173 sur FR-4 1,53 mm (tan δ 0,02) aux trois fréquences, 0,246 sur
+     FR-4 haute fréquence (0,012), 0,310 sur RO4003C 1,524 mm (0,0027) et
+     0,722 sur RO4350B 0,762 mm (0,0037) — campagne du 22/10/2026 pour les
+     deux premiers. À épaisseur égale, 1/k suit les pertes en ligne droite
+     (à 8 % près) ; le substrat mince, lui, double k à pertes égales : c'est
+     l'épaisseur qui sépare RO4003C et RO4350B, pas les pertes. */
 const PATCH_K_LONGUEUR=0.466;
 function patchCorrLongueur(h,f){
   return 1-PATCH_K_LONGUEUR*Math.sqrt(h/(CON_C0/f));
 }
-function patchCorrRbord(df){
-  /* ponytail: deux stratifiés mesurés, interpolés en tan δ et bornés à leurs
-     deux valeurs ; un troisième (FR-4 HF, tan δ 0,012) dira si la droite
-     tient, et en dehors de [0,0037 ; 0,02] c'est une extrapolation bornée. */
-  const t=Math.min(Math.max(isFinite(df)?df:0.02,0.0037),0.02);
-  return 0.722+(t-0.0037)*(0.173-0.722)/(0.02-0.0037);
+/* 1/k = a(h) + b·tan δ : b et a(1,53 mm) sur les trois stratifiés épais,
+   a(0,762 mm) sur le RO4350B ; a linéaire en h entre les deux. */
+const PATCH_RBORD={b:146.1, a_epais:2.667, h_epais:1.53, a_mince:0.844, h_mince:0.762,
+                   t_min:0.0027, t_max:0.02};
+function patchCorrRbord(df,h){
+  /* shortcut: deux épaisseurs mesurées (0,762 et 1,53 mm), interpolées en h et
+     bornées à elles ; tan δ borné à [0,0027 ; 0,02]. Mesurer une troisième
+     épaisseur si un patch sort de cette plage. */
+  const R=PATCH_RBORD;
+  const t=Math.min(Math.max(isFinite(df)?df:0.02,R.t_min),R.t_max);
+  const hb=Math.min(Math.max(isFinite(h)?h:R.h_epais,R.h_mince),R.h_epais);
+  const a=R.a_mince+(hb-R.h_mince)*(R.a_epais-R.a_mince)/(R.h_epais-R.h_mince);
+  return 1/(a+R.b*t);
 }
 
 const CON_MOTIF_PATCH={
@@ -251,7 +261,7 @@ const CON_MOTIF_PATCH={
     {id:"y0", nom:"encastrement",
      aide:"la profondeur d'entrée de la ligne dans le patch : c'est le "+
           "réglage d'adaptation, et la cote la moins sûre du motif. Le "+
-          "calcul est corrigé par mesure (FR-4 et RO4350B) ; sur un autre "+
+          "calcul est corrigé par mesure (quatre stratifiés) ; sur un autre "+
           "stratifié, balayez-le"},
     {id:"wf", nom:"largeur de la ligne", piste:true, z50:true,
      aide:"synthétisée pour 50 Ω sur ce substrat"},
@@ -280,7 +290,7 @@ const CON_MOTIF_PATCH={
        mesure (voir `patchCorrRbord`). */
     const lam0=CON_C0/f;
     const G1=(W/lam0<1)?(1/90)*Math.pow(W/lam0,2):(1/120)*(W/lam0);
-    const Rin=patchCorrRbord(c.df)/(2*G1);
+    const Rin=patchCorrRbord(c.df,c.h)/(2*G1);
     return {
       W:W, L:L,
       y0:(Rin>50)?(L/Math.PI)*Math.acos(Math.sqrt(50/Rin)):0,
@@ -319,7 +329,7 @@ const CON_MOTIF_PATCH={
     const festim=f_cav*patchCorrLongueur(c.h,f_cav);
     const lam0=CON_C0/c.f;
     const G1=(p.W/lam0<1)?(1/90)*Math.pow(p.W/lam0,2):(1/120)*(p.W/lam0);
-    const Rin=patchCorrRbord(c.df)/(2*G1);
+    const Rin=patchCorrRbord(c.df,c.h)/(2*G1);
     const Zin=Rin*Math.pow(Math.cos(Math.PI*p.y0/Math.max(p.L,1e-6)),2);
 
     return {
