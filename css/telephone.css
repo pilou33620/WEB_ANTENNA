@@ -1,0 +1,95 @@
+/* ==========================================================================
+   Téléphone — disposition des outils sur un petit écran
+   COPIE IDENTIQUE dans WEB_ANTENNA (css/) et WEB_3D (css/) ; l'original est
+   WEB_CAO/commun/telephone.css, avec son script telephone.js.
+
+   Rien ne s'applique tant que telephone.js n'a pas posé body.tel :
+   - portrait (largeur ≤ 600 px) : une ligne de titre, une rangée d'outils qui
+     défile au doigt, le canevas, la barre d'état sur une ligne, puis les
+     panneaux dans un tiroir à onglets en bas ;
+   - paysage (hauteur ≤ 500 px) : l'en-tête devient un rail à gauche et le
+     tiroir s'ouvre à droite par une languette.
+   Tablette et ordinateur gardent leur disposition.
+   ========================================================================== */
+:root{--tel-rail:150px;--tel-tiroir:min(320px,42vw)}
+
+/* ---------- docks : leurs panneaux sont dans le tiroir ---------- */
+body.tel .dock,body.tel .gut{display:none !important}
+
+/* ---------- en-tête ---------- */
+body.tel>header{flex-wrap:nowrap;gap:6px;height:auto}
+body.tel>header .brand span:not(.proj){display:none}
+body.tel>header .brand b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.tel>header .sep{display:none}
+body.tel>header .tools{flex-wrap:nowrap;min-width:0;scrollbar-width:none}
+body.tel>header .tools::-webkit-scrollbar{display:none}
+body.tel>header .tools>*,body.tel>header .tools .nav-gauche>*,
+body.tel>header .menubar>*{flex:none}
+body.tel>header .nav-gauche,body.tel>header .menubar{flex-wrap:nowrap}
+body.tel>header .tb,body.tel>header .mnu-t,body.tel>header .mnu-chip{min-height:40px;white-space:nowrap}
+/* les menus déroulants sortent de la rangée qui défile (position fixe) */
+body.tel .mnu-pop{position:fixed;min-width:0;z-index:90}
+
+/* ---------- barre d'état : une ligne qui défile ---------- */
+body.tel>footer{flex-wrap:nowrap;overflow-x:auto;white-space:nowrap;gap:12px;padding:3px 10px;scrollbar-width:none}
+body.tel>footer::-webkit-scrollbar{display:none}
+body.tel>footer>*{flex:none}
+body.tel>footer .hint{display:none}
+
+/* ---------- tiroir ---------- */
+#telTiroir,#telLanguette{display:none}
+body.tel #telTiroir{display:flex;flex-direction:column;min-height:0;background:var(--panel)}
+body.tel #telTiroir.vide,body.tel #telTiroir.vide~#telLanguette{display:none}
+.tel-poignee{flex:none;height:20px;border:0;background:none;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;color:var(--txt-dim);font:14px var(--ui)}
+.tel-poignee::before{content:"";width:40px;height:5px;border-radius:3px;background:var(--border2)}
+.tel-onglets{flex:none;display:flex;gap:4px;padding:2px 8px 6px;overflow-x:auto;scrollbar-width:none}
+.tel-onglets::-webkit-scrollbar{display:none}
+.tel-onglets button{flex:none;min-height:36px;padding:0 12px;border-radius:8px;border:1px solid transparent;
+  background:none;color:var(--txt-dim);font:13px var(--ui);cursor:pointer;white-space:nowrap}
+.tel-onglets button[aria-selected="true"]{color:var(--txt);background:var(--panel2);border-color:var(--border2)}
+.tel-onglets button:focus-visible,.tel-poignee:focus-visible,#telLanguette:focus-visible{outline:2px solid var(--blue);outline-offset:-2px}
+.tel-corps{flex:1;min-height:0;display:flex;flex-direction:column;border-top:1px solid var(--border);overflow:auto}
+#telTiroir:not(.ouvert) .tel-corps{display:none}
+.tel-corps>*{flex:1 1 auto;min-height:0}
+.tel-corps>.tel-cache,.tel-corps .pnl-head,.tel-corps .fres{display:none !important}
+.tel-corps .pnl{position:static !important;width:auto !important;height:auto !important;border:0 !important}
+
+/* ---------- portrait ---------- */
+body.tel-portrait>header{flex-direction:column;align-items:stretch;padding:6px 8px;
+  padding-top:max(6px,env(safe-area-inset-top,0px))}
+body.tel-portrait>header .tools{flex:none;overflow-x:auto;padding-bottom:2px}
+body.tel-portrait .mnu-pop{top:var(--tel-haut,100px);left:8px;right:8px;max-height:calc(100% - var(--tel-haut,100px) - 8px)}
+body.tel-portrait #telTiroir{flex:none;border-top:1px solid var(--border2);border-radius:12px 12px 0 0;
+  padding-bottom:env(safe-area-inset-bottom,0px);box-shadow:0 -6px 18px rgba(0,0,0,.35)}
+body.tel-portrait #telTiroir.ouvert{height:48%}
+body.tel-portrait .pilote{bottom:calc(var(--tel-bas,60px) + 8px)}
+
+/* ---------- paysage ---------- */
+body.tel-paysage{padding-left:calc(var(--tel-rail) + env(safe-area-inset-left,0px))}
+body.tel-paysage>header{position:fixed;left:0;top:0;bottom:0;width:calc(var(--tel-rail) + env(safe-area-inset-left,0px));
+  flex-direction:column;align-items:stretch;padding:6px;padding-left:max(6px,env(safe-area-inset-left,0px));
+  border-bottom:0;border-right:1px solid var(--border)}
+body.tel-paysage>header .brand{flex:none;min-width:0}
+body.tel-paysage>header .tools{flex:1;flex-direction:column;align-items:stretch;overflow-y:auto}
+body.tel-paysage>header .nav-gauche,body.tel-paysage>header .menubar{flex-direction:column;align-items:stretch}
+body.tel-paysage>header .tb,body.tel-paysage>header .mnu-t{justify-content:flex-start;overflow:hidden;text-overflow:ellipsis}
+body.tel-paysage .mnu-pop{top:8px;left:calc(var(--tel-rail) + env(safe-area-inset-left,0px) + 6px);
+  width:min(320px,calc(100vw - var(--tel-rail) - 20px));max-height:calc(100% - 16px)}
+body.tel-paysage>footer{padding-right:max(10px,env(safe-area-inset-right,0px))}
+body.tel-paysage #telTiroir{position:fixed;top:0;right:0;bottom:0;width:var(--tel-tiroir);z-index:60;
+  border-left:1px solid var(--border2);padding-right:env(safe-area-inset-right,0px);
+  transform:translateX(100%);visibility:hidden}
+body.tel-paysage #telTiroir.ouvert{transform:none;visibility:visible}
+body.tel-paysage.tel-ouvert{padding-right:var(--tel-tiroir)}
+body.tel-paysage .tel-poignee{justify-content:flex-start;padding:0 12px;height:30px}
+body.tel-paysage .tel-poignee::before{content:"Fermer ›";width:auto;height:auto;background:none}
+body.tel-paysage:not(.tel-ouvert) #telLanguette{display:block;position:fixed;z-index:60;top:50%;
+  right:env(safe-area-inset-right,0px);transform:translateY(-50%);writing-mode:vertical-rl;padding:12px 7px;
+  background:var(--panel2);color:var(--txt);border:1px solid var(--border2);border-right:0;
+  border-radius:8px 0 0 8px;font:12px var(--ui);cursor:pointer}
+body.tel-paysage.tel-ouvert .pilote{right:calc(var(--tel-tiroir) + 12px)}
+
+@media (prefers-reduced-motion:no-preference){
+  body.tel-paysage #telTiroir{transition:transform .2s,visibility .2s}
+}
