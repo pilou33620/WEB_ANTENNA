@@ -52,6 +52,24 @@
     }
   }
 
+  /* « Ctrl+Shift+Z », « Delete », « Escape », « r »… pour le geste « touche » : la touche en dernier,
+     au nom du DOM (KeyboardEvent.key). */
+  function touches(texte) {
+    const m = /^(.*?)\+?([^+]+|\+)$/.exec(String(texte || "").trim());
+    if (!m) throw new Error("Touche vide : « Ctrl+Z », « Delete », « Escape », « r »…");
+    const mods = { ctrlKey: false, shiftKey: false, altKey: false, metaKey: false };
+    for (const p of m[1].split("+").filter(Boolean)) {
+      const cle = { ctrl: "ctrlKey", control: "ctrlKey", shift: "shiftKey", maj: "shiftKey", alt: "altKey",
+                    meta: "metaKey", cmd: "metaKey" }[p.toLowerCase()];
+      if (!cle) throw new Error("Modificateur « " + p + " » inconnu : Ctrl, Shift, Alt, Meta.");
+      mods[cle] = true;
+    }
+    let key = m[2];
+    if (key.length === 1) key = mods.shiftKey ? key.toUpperCase() : key.toLowerCase();
+    const code = /^[a-z]$/i.test(key) ? "Key" + key.toUpperCase() : /^\d$/.test(key) ? "Digit" + key : key;
+    return Object.assign({ key, code }, mods);
+  }
+
   function creer(env, reglages) {
     /* silence > 60 s : après 5 min en arrière-plan, Chrome ne réveille plus les minuteurs d'un onglet
        qu'une fois par minute ; un onglet caché s'annonce donc rarement, mais il est vivant. Un onglet
@@ -181,6 +199,8 @@
       const args = c.args || {};
       try {
         if (c.nom === "capture") { const image = capturer(); tracer("Claude a capturé la vue."); return repondre(c.id, "finie", image); }
+        if (c.nom === "interface_lire") { tracer("Claude a lu l'interface."); return repondre(c.id, "finie", lireInterface(args)); }
+        if (c.nom === "interface") return await ecrire(c, INTERFACE, args);
         const def = P.commandes[c.nom];
         if (!def) throw new Error("Commande « " + c.nom + " » inconnue de cette page (" + P.page + ").");
         if (def.ecriture) return await ecrire(c, def, args);
@@ -206,6 +226,200 @@
       }
       return { image: toile.toDataURL("image/png"), largeur: toile.width, hauteur: toile.height };
     }
+
+    // -- l'interface de la page, comme l'utilisateur la voit ------------------
+    /* interface_lire numérote les contrôles visibles (data-pilote) ; interface y fait un geste, pour ce
+       qu'aucune commande de la page ne fait. Le panneau n'en fait jamais partie : Claude n'appuie pas
+       sur ses propres cartes ni sur l'interrupteur. */
+    const CONTROLES = "button, a[href], input, select, textarea, summary, [contenteditable=true], [onclick], " +
+                      "[role=button], [role=tab], [role=menuitem], [role=checkbox], [role=option], [role=switch]";
+
+    function dansPanneau(e) { return !!(panneau && e && panneau.contains(e)); }
+
+    function libelle(e) {
+      // un champ n'a pas de texte à lui (celui d'un select, ce sont ses choix) : son <label>, ou celui qui le précède
+      const champ = /^(INPUT|SELECT|TEXTAREA)$/.test(e.tagName), avant = e.previousElementSibling;
+      let t = e.getAttribute("aria-label") || (champ ? (e.labels && e.labels[0] && e.labels[0].textContent) ||
+              (avant && avant.tagName === "LABEL" && avant.textContent) || e.placeholder || e.name : e.innerText) || "";
+      if (e.title && e.title !== t) t = t ? t + " — " + e.title : e.title;   // l'infobulle des boutons à icône
+      return String(t).replace(/\s+/g, " ").trim().slice(0, 100);
+    }
+
+    function etatControle(e) {
+      const t = (e.type || "").toLowerCase(), d = [];
+      if (t === "checkbox" || t === "radio") d.push(e.checked ? "coché" : "décoché");
+      else if (e.tagName === "SELECT")
+        d.push("= « " + (e.selectedOptions[0] ? e.selectedOptions[0].text.trim() : "") + " » parmi : " +
+               [...e.options].slice(0, 40).map(o => o.text.trim()).join(" | ") + (e.options.length > 40 ? " | …" : ""));
+      else if (/^(INPUT|TEXTAREA)$/.test(e.tagName) && !/^(button|submit|reset|file)$/.test(t))
+        d.push("= « " + String(e.value).slice(0, 80) + " »");
+      if (e.disabled) d.push("désactivé");
+      if (e.getAttribute("aria-selected") === "true" || e.getAttribute("aria-pressed") === "true" || e.classList.contains("active"))
+        d.push("actif");
+      return d.join(", ");
+    }
+
+    /* La toile de capture, si elle est à l'écran : les gestes « souris » sont en pixels de la capture. */
+    function toileEcran() {
+      const t = P.capturer && P.capturer();
+      return t && t.isConnected && t.getBoundingClientRect().width ? t : null;
+    }
+    function echelle(t) { return Math.min(1, LARGEUR_MAX / t.width, LARGEUR_MAX / t.height); }
+
+    function lireInterface(a) {
+      const doc = env.document, filtre = String(a.filtre || "").toLowerCase(), L = [];
+      doc.querySelectorAll("[data-pilote]").forEach(e => e.removeAttribute("data-pilote"));
+      let n = 0;
+      for (const e of doc.querySelectorAll(CONTROLES)) {
+        if (dansPanneau(e) || e.type === "hidden" || !e.getClientRects().length ||
+            env.fenetre.getComputedStyle(e).visibility === "hidden") continue;
+        e.dataset.pilote = ++n;        // numéroté même hors filtre : un numéro ne dépend pas du filtre
+        const lib = libelle(e), etat = etatControle(e);
+        if (filtre && !(lib + " " + etat + " " + e.id).toLowerCase().includes(filtre)) continue;
+        L.push("[" + n + "] " + e.tagName.toLowerCase() + (e.type && e.tagName === "INPUT" ? "/" + e.type : "") +
+               (e.id ? " #" + e.id : "") + " « " + lib + " »" + (etat ? " (" + etat + ")" : ""));
+      }
+      const t = toileEcran();
+      if (t) L.unshift("Canevas (gestes « souris ») : " + Math.round(t.width * echelle(t)) + " × " +
+                       Math.round(t.height * echelle(t)) + " px, les coordonnées de la capture.");
+      return (L.length ? L : ["Aucun contrôle visible" + (filtre ? " pour « " + filtre + " »." : ".")]).join("\n");
+    }
+
+    function cibleUi(c) {
+      const s = String(c == null ? "" : c).trim();
+      let e = null;
+      try { e = /^\d+$/.test(s) ? env.document.querySelector('[data-pilote="' + s + '"]') : s && env.document.querySelector(s); }
+      catch (_) { throw new Error("« cible » : un numéro rendu par interface_lire, ou un sélecteur CSS (#bDrc)."); }
+      if (!e) throw new Error("Cible « " + s + " » introuvable : relis l'interface, elle a pu changer.");
+      if (dansPanneau(e)) throw new Error("Le panneau « Claude » est réservé à l'utilisateur.");
+      if (e.disabled) throw new Error("« " + libelle(e) + " » est désactivé.");
+      return e;
+    }
+
+    function souris(e, type, x, y, o) {
+      const W = env.fenetre, Ev = type.startsWith("pointer") ? W.PointerEvent : type === "wheel" ? W.WheelEvent : W.MouseEvent;
+      return e.dispatchEvent(new Ev(type, Object.assign({ bubbles: true, cancelable: true, composed: true, view: W,
+        clientX: x, clientY: y, button: 0, buttons: 0, pointerId: 1, pointerType: "mouse", isPrimary: true }, o)));
+    }
+
+    /* Un clic comme le navigateur le fait : pointer puis souris (sauf pointerdown empêché), puis click. */
+    function clic(e, x, y, o, detail) {
+      const bas = Object.assign({}, o, { buttons: o.button === 2 ? 2 : 1, detail }), haut = Object.assign({}, o, { detail });
+      const compat = souris(e, "pointerdown", x, y, bas);
+      if (compat) souris(e, "mousedown", x, y, bas);
+      souris(e, "pointerup", x, y, haut);
+      if (compat) souris(e, "mouseup", x, y, haut);
+      souris(e, o.button === 2 ? "contextmenu" : "click", x, y, haut);
+    }
+
+    function changer(e) {
+      e.dispatchEvent(new env.fenetre.Event("input", { bubbles: true }));
+      e.dispatchEvent(new env.fenetre.Event("change", { bubbles: true }));
+    }
+
+    /* Le geste, vérifié pour la carte (proposer) et recalculé au clic : le contrôle a pu bouger depuis. */
+    function geste(a) {
+      const g = a.geste;
+      if (g === "cliquer" || g === "saisir") {
+        const e = cibleUi(a.cible), lib = "« " + libelle(e) + " »";
+        if (g === "cliquer") return { titre: "Interface : cliquer " + lib, faire: () => {
+          const r = e.getBoundingClientRect();
+          if (typeof e.focus === "function") e.focus();
+          clic(e, r.left + r.width / 2, r.top + r.height / 2, { button: 0 }, 1);
+          return "Cliqué " + lib + ".";
+        } };
+        if (a.valeur == null) throw new Error("« saisir » : donne « valeur ».");
+        const t = (e.type || "").toLowerCase(), v = a.valeur;
+        if (t === "checkbox" || t === "radio") {
+          const voulu = v === true || /^(true|1|oui|coché)$/i.test(String(v));
+          return { titre: "Interface : " + lib, avant: e.checked ? "coché" : "décoché", apres: voulu ? "coché" : "décoché",
+                   faire: () => { if (e.checked !== voulu) e.click(); return lib + (e.checked ? " coché." : " décoché."); } };
+        }
+        if (e.tagName === "SELECT") {
+          const q = String(v).trim().toLowerCase(), opts = [...e.options];
+          const o = opts.find(x => x.value.toLowerCase() === q) || opts.find(x => x.text.trim().toLowerCase() === q);
+          if (!o) throw new Error(lib + " : « " + v + " » n'est pas un choix (" + opts.map(x => x.text.trim()).join(" | ") + ").");
+          return { titre: "Interface : " + lib, avant: e.selectedOptions[0] ? e.selectedOptions[0].text.trim() : "", apres: o.text.trim(),
+                   faire: () => { e.value = o.value; changer(e); return lib + " = « " + o.text.trim() + " »."; } };
+        }
+        if (!/^(INPUT|TEXTAREA)$/.test(e.tagName) && !e.isContentEditable) throw new Error(lib + " n'est pas un champ à remplir.");
+        return { titre: "Interface : " + lib, avant: e.isContentEditable ? e.innerText : e.value, apres: String(v), faire: () => {
+          if (typeof e.focus === "function") e.focus();
+          if (e.isContentEditable) e.textContent = String(v);
+          // le setter natif : une valeur posée par e.value = … échappe aux composants qui le surchargent
+          else Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e), "value").set.call(e, String(v));
+          changer(e);
+          return lib + " = « " + String(v).slice(0, 80) + " ».";
+        } };
+      }
+      if (g === "touche") {
+        const k = touches(a.touche), nom = String(a.touche).trim();
+        return { titre: "Interface : touche " + nom, faire: () => {
+          const doc = env.document;
+          let e = a.cible != null ? cibleUi(a.cible) : doc.activeElement;
+          if (!e || e === doc.documentElement || dansPanneau(e)) e = doc.body;   // pas le bouton « Appliquer » de la carte
+          const o = Object.assign({ bubbles: true, cancelable: true, composed: true, view: env.fenetre }, k);
+          e.dispatchEvent(new env.fenetre.KeyboardEvent("keydown", o));
+          e.dispatchEvent(new env.fenetre.KeyboardEvent("keyup", o));
+          return "Touche " + nom + ".";
+        } };
+      }
+      if (g === "souris") {
+        const t = toileEcran();
+        if (!t) throw new Error("Pas de canevas à l'écran dans cette page : « cliquer » un contrôle d'interface_lire.");
+        const k = echelle(t);
+        const point = (x, y) => {
+          if (typeof x !== "number" || typeof y !== "number") throw new Error("« souris » : x et y, en pixels de la capture.");
+          const r = t.getBoundingClientRect();
+          return [r.left + x / k * r.width / t.width, r.top + y / k * r.height / t.height];
+        };
+        const [x, y] = point(a.x, a.y);
+        const fin = a.x2 != null || a.y2 != null ? point(a.x2, a.y2) : null;
+        const mods = a.modificateurs ? touches(a.modificateurs + "+x") : {};
+        delete mods.key; delete mods.code;
+        const quoi = a.molette ? "molette " + a.molette : fin ? "glisser jusqu'à (" + a.x2 + ", " + a.y2 + ")" :
+                     a.double ? "double-clic" : a.droit ? "clic droit" : "clic";
+        return { titre: "Interface : " + quoi + " sur le canevas en (" + a.x + ", " + a.y + ")" +
+                        (a.modificateurs ? " avec " + a.modificateurs : ""), faire: () => {
+          const e = env.document.elementFromPoint(x, y);
+          if (!e) throw new Error("Ce point du canevas est hors de l'écran : recadre la vue, puis une nouvelle capture.");
+          if (dansPanneau(e)) throw new Error("Le panneau « Claude » couvre ce point : demande à l'utilisateur de le replier.");
+          const o = Object.assign({ button: a.droit ? 2 : 0 }, mods);
+          souris(e, "pointermove", x, y, o);
+          souris(e, "mousemove", x, y, o);
+          if (a.molette) souris(e, "wheel", x, y, Object.assign({ deltaY: a.molette, deltaMode: 0 }, o));
+          else if (fin) {
+            const bas = Object.assign({}, o, { buttons: 1 });
+            souris(e, "pointerdown", x, y, bas);
+            souris(e, "mousedown", x, y, bas);
+            for (let i = 1; i <= 8; i++) {
+              const xi = x + (fin[0] - x) * i / 8, yi = y + (fin[1] - y) * i / 8;
+              souris(e, "pointermove", xi, yi, bas);
+              souris(e, "mousemove", xi, yi, bas);
+            }
+            souris(e, "pointerup", fin[0], fin[1], o);
+            souris(e, "mouseup", fin[0], fin[1], o);
+          } else {
+            clic(e, x, y, o, 1);
+            if (a.double) { clic(e, x, y, o, 2); souris(e, "dblclick", x, y, Object.assign({ detail: 2 }, o)); }
+          }
+          return quoi[0].toUpperCase() + quoi.slice(1) + " fait sur le canevas.";
+        } };
+      }
+      throw new Error("« geste » : cliquer, saisir, touche ou souris.");
+    }
+
+    // Une écriture comme celles des pages : la carte attend le clic, sauf interrupteur allumé
+    const INTERFACE = {
+      irreversible: "Un geste dans l'interface, comme le tien : la carte ne l'annule pas (Ctrl+Z dans l'éditeur, " +
+                    "si le geste y fait une étape).",
+      proposer: a => { const p = geste(a); return { titre: p.titre, avant: p.avant, apres: p.apres }; },
+      appliquer: async a => {
+        const dit = geste(a).faire();
+        await new Promise(r => env.fenetre.requestAnimationFrame(() => setTimeout(r, 50)));   // laisser la page se redessiner
+        return dit;
+      },
+    };
 
     // -- écritures : carte, interrupteur, annulation ------------------------
     function texte(v) { return typeof v === "string" ? v : JSON.stringify(v); }
@@ -769,7 +983,7 @@
     return P;
   }
 
-  if (typeof module !== "undefined" && module.exports) module.exports = { creer };
+  if (typeof module !== "undefined" && module.exports) module.exports = { creer, touches };
   if (typeof window !== "undefined" && typeof document !== "undefined") {
     let stockage = null;
     try { stockage = window.localStorage; } catch (_) { /* refusé : un relais par onglet */ }
