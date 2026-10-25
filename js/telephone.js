@@ -15,18 +15,28 @@
   const qPortrait=matchMedia("(max-width:600px) and (orientation:portrait)");
   const qPaysage=matchMedia("(max-height:500px) and (orientation:landscape)");
   const B=document.body;
-  const tir=document.createElement("div");
-  tir.id="telTiroir";
-  tir.innerHTML='<button type="button" class="tel-poignee" aria-label="Ouvrir ou fermer les panneaux"></button>'+
-    '<div class="tel-onglets" role="tablist"></div><div class="tel-corps"></div>';
-  const lang=document.createElement("button");
-  lang.type="button";lang.id="telLanguette";lang.textContent="Panneaux ‹";
-  B.append(tir,lang);
-  const onglets=tir.querySelector(".tel-onglets"), corps=tir.querySelector(".tel-corps");
   const avecWS=typeof wsApply==="function";
   const fixes=avecWS?null:Array.from(document.querySelectorAll(".dock > .pan"));
   const origine=new Map();
-  let mode="", actif=null;
+  let mode="", actif=null, tir=null, onglets=null, corps=null;
+
+  /* le tiroir n'est construit qu'au premier écran de téléphone : sur
+     ordinateur, la page reste exactement celle d'avant */
+  function construire(){
+    function bloc(tag,cls){const e=document.createElement(tag);e.className=cls;return e;}
+    tir=document.createElement("div");
+    tir.id="telTiroir";
+    const poignee=bloc("button","tel-poignee");
+    poignee.type="button";poignee.setAttribute("aria-label","Ouvrir ou fermer les panneaux");
+    poignee.onclick=function(){ouvrir(!tir.classList.contains("ouvert"));};
+    onglets=bloc("div","tel-onglets");onglets.setAttribute("role","tablist");
+    corps=bloc("div","tel-corps");
+    tir.appendChild(poignee);tir.appendChild(onglets);tir.appendChild(corps);
+    const lang=document.createElement("button");
+    lang.type="button";lang.id="telLanguette";lang.textContent="Panneaux ‹";
+    lang.onclick=function(){ouvrir(true);};
+    B.appendChild(tir);B.appendChild(lang);
+  }
 
   function panneaux(){
     if(!avecWS)return fixes;
@@ -76,6 +86,7 @@
     requestAnimationFrame(function(){mesurer();dispatchEvent(new Event("resize"));});
   }
   function ouvrir(o){
+    if(!tir)return;
     tir.classList.toggle("ouvert",o);
     B.classList.toggle("tel-ouvert",o);
     redimensionner();
@@ -88,6 +99,7 @@
     B.classList.toggle("tel",!!m);
     B.classList.toggle("tel-portrait",m==="portrait");
     B.classList.toggle("tel-paysage",m==="paysage");
+    if(m&&!tir)construire();
     if(m&&!avant)remplir();
     else if(!m){ouvrir(false);rendre();}
     redimensionner();
@@ -99,8 +111,6 @@
     const base=wsApply;
     wsApply=function(save){base(save);if(mode)remplir();};
   }
-  tir.querySelector(".tel-poignee").onclick=function(){ouvrir(!tir.classList.contains("ouvert"));};
-  lang.onclick=function(){ouvrir(true);};
   qPortrait.addEventListener("change",appliquer);
   qPaysage.addEventListener("change",appliquer);
   appliquer();
