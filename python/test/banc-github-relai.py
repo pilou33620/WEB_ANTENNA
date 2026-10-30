@@ -64,7 +64,7 @@ LOCAL = web_antenna.Poste._boucle_locale
 
 def req(methode, route, corps=None, entetes=None):
     c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=30)
-    h = {"Content-Type": "application/json"}
+    h = {"Content-Type": "application/json", "X-WEB_ANTENNA": "1"}
     h.update(entetes or {})
     c.request(methode, route, body=json.dumps(corps).encode("utf-8") if corps is not None else None,
               headers=h)

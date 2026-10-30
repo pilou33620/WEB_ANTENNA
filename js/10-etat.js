@@ -353,7 +353,8 @@ function antKf(){ return ANT_UNITES_F[ANT.uniteF]||1e9; }
 /* Millimètres par unité du fichier. Tout ce qui est envoyé au serveur reste
    dans l'unité du fichier — c'est le serveur qui convertit, une fois, et le
    document porte l'unité. */
-function antUnite(){ return V.unite==="in" ? "in" : "mm"; }
+function antUnite(){ return V.unite==="in"||V.unite==="um" ? V.unite : "mm"; }
+function antKmm(){ return V.unite==="in" ? 25.4 : V.unite==="um" ? 1e-3 : 1; }
 
 /* ==========================================================================
    Remise à neuf
@@ -363,6 +364,9 @@ function antUnite(){ return V.unite==="in" ? "in" : "mm"; }
    simulation sur des index qui ne désignent plus le même cuivre — une faute
    silencieuse, et la pire espèce. */
 function antRaz(){
+  /* Le calcul d'avant continue sur le serveur, mais son suivi écrirait ses
+     résultats dans la carte qu'on ouvre. */
+  if(typeof oeSuiviStop==="function")oeSuiviStop();
   antVieillir();
   ANT.etape=0;
   ANT.nets=new Set();
@@ -684,7 +688,7 @@ function antRevetements(){
 }
 
 function antEmpilage(){
-  const k=(V.unite==="in")?(1/25.4):1;       // LT est en mm, le doc en unité fichier
+  const k=1/antKmm();       // LT est en mm, le doc en unité fichier
   const horsCuivre={};
   antRevetementsLocaux().forEach(function(r){ horsCuivre[r.nom]=true; });
   const out=[];

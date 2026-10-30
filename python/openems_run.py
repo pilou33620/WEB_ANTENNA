@@ -506,9 +506,6 @@ class Tache(object):
             self.detail = "Resultats illisibles : %s" % exc
             self.avancement["restant_s"] = None
             return
-        self.etat = "fini"
-        self.avancement["pourcent"] = 100.0
-        self.avancement["restant_s"] = 0.0
         # UNE SIMULATION SEULE MERITE LE MEME DIAGNOSTIC QU'UN POINT DE
         # BALAYAGE. Elle est meme le cas le plus frequent : c'est par elle
         # qu'on commence, et c'est donc elle qui rend pour la premiere fois un
@@ -523,6 +520,9 @@ class Tache(object):
                 self._ajouter("Aucune grandeur exploitable : la simulation "
                               "n'a rien rendu de fini.")
                 self._ajouter(d)
+        self.avancement["pourcent"] = 100.0
+        self.avancement["restant_s"] = 0.0
+        self.etat = "fini"                 # en dernier : le resultat est complet
         self._noter_debit()
 
     def _noter_debit(self):
@@ -889,7 +889,15 @@ class TacheBalayage(Tache):
         # UN POINT RATE N'EFFACE PAS LES AUTRES. Une geometrie degeneree au
         # milieu d'une plage est une information en soi — et les courbes deja
         # obtenues valent ce qu'elles valent, c'est-a-dire beaucoup.
-        self.etat = "fini"
+        # LE RESULTAT D'ABORD, L'ETAT ENSUITE : la page cesse de sonder des
+        # qu'elle lit « fini », et lirait alors un resultat encore vide.
+        try:
+            resultat = self._assembler(finis)
+        except Exception as exc:                       # noqa: BLE001
+            self.etat = "echoue"
+            self.detail = ("Les points n'ont pas pu etre assembles : %s: %s"
+                           % (type(exc).__name__, exc))
+            return
         # UNE SUITE APPREND AUTANT DU POSTE QU'UNE SIMULATION SEULE, et meme
         # davantage : elle a tourne N fois. Les vitesses de tous les points
         # sont dans le meme sac, et c'est leur mediane qui part au modele.
@@ -899,7 +907,8 @@ class TacheBalayage(Tache):
                            "marques dans la liste, avec leur raison."
                            % (len(finis), "" if len(finis) < 2 else "s",
                               len(self.points)))
-        self.resultat = self._assembler(finis)
+        self.resultat = resultat
+        self.etat = "fini"
 
     def _un_point(self, pt, m):
         os.makedirs(pt["dossier"], exist_ok=True)
@@ -1752,8 +1761,18 @@ def archiver(ident, base_destination):
     octets = _poids_dossier(source)
     try:
         os.makedirs(os.path.dirname(destination), exist_ok=True)
-        shutil.move(source, destination)
+        try:
+            os.rename(source, destination)          # meme disque : d'un coup
+        except OSError:
+            # D'un disque a l'autre : copie, puis effacement de la source
+            # SEULEMENT une fois la copie entiere (un reste dans le TEMP ne
+            # perd rien ; une copie partielle effacee, si).
+            shutil.copytree(source, destination, symlinks=True)
+            shutil.rmtree(source, ignore_errors=True)
     except (OSError, shutil.Error) as exc:
+        # Elle n'existait pas avant (verifie plus haut) : une copie partielle
+        # laissee la gagnerait sur l'originale au prochain archivage.
+        shutil.rmtree(destination, ignore_errors=True)
         raise openems_modele.ErreurModele(
             "Le dossier de calcul n'a pas pu etre range : %s" % exc,
             "Il est reste ou il etait : %s" % source)

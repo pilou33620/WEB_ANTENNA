@@ -907,7 +907,7 @@ window.addEventListener("keydown",function(e){
   if(kl==="x"||kl==="y"||kl==="z"){
     prendre(); PL.axe=(PL.axe===kl)?"xy":kl; PL.mode="deplacer"; antPlaceBarre(); return;
   }
-  const pas=(PL.pas>0?PL.pas:(V.unite==="in"?0.02:0.5))*(e.shiftKey?10:1)*antKmm();
+  const pas=(PL.pas>0?PL.pas:(V.unite==="in"?0.02:0.5/antKmm()))*(e.shiftKey?10:1)*antKmm();
   const d={ArrowLeft:[-pas,0,0], ArrowRight:[pas,0,0], ArrowUp:[0,pas,0], ArrowDown:[0,-pas,0],
            PageUp:[0,0,pas], PageDown:[0,0,-pas]}[k];
   if(!d)return;

@@ -67,7 +67,7 @@ function antCuivreRetenuEn(nomCouche,x,y){
   const cu=antCuivreDuModele();
   const b=cu&&cu.blocs.find(k=>k.couche===nomCouche);
   if(!b)return "";
-  const pas=ANT_SEAU_MM*(V.unite==="in"?1/25.4:1);
+  const pas=ANT_SEAU_MM/antKmm();
   const s=antSeauxBloc(b,pas);
   const seau=s.seaux.get(Math.floor(x/pas)+","+Math.floor(y/pas))||[];
   let vu="";
@@ -91,7 +91,7 @@ function antCuivreRetenuEn(nomCouche,x,y){
    (15-overlay2d.js) lisent les MÊMES points : une borne rouge à l'écran et
    un ✓ dans le panneau ne peuvent pas se contredire. */
 function antPortBornesPlan(p){
-  const k=V.unite==="in"?1/25.4:1, d=0.01*k;
+  const k=1/antKmm(), d=0.01*k;
   const e=(p.ecart>0?p.ecart:0.2*k)/2;
   const ux=p.dir==="x"?1:0, uy=p.dir==="y"?1:0;
   return [-1,1].map(function(sg){
@@ -116,7 +116,7 @@ function antPortVerdict(p){
     out.push({ok:false,t:"Les deux couches du port ne sont pas choisies."});
     return out;
   }
-  const k=V.unite==="in" ? 1/25.4 : 1;
+  const k=1/antKmm();
   const nom=function(n){ return n==="antenne"?"l'antenne":n==="masse"?"la masse":"rien"; };
 
   if(p.type==="coaxial")return antPortVerdictCoax(p,nom);

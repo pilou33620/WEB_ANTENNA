@@ -828,6 +828,26 @@ verifie("le port en pouces retombe au meme endroit en mm",
         and abs(m3["port"]["y"] - m["port"]["y"]) < 1e-6,
         "(%.4f, %.4f) vs (%.4f, %.4f)"
         % (m3["port"]["x"], m3["port"]["y"], m["port"]["x"], m["port"]["y"]))
+# Et en microns : un IPC-2581 en MICRON, la page envoie « um ».
+d = document()
+d["unite"] = "um"
+d["empilage"][1]["ep"] = H * 1000
+d["empilage"][0]["ep"] = d["empilage"][2]["ep"] = 35.0
+d["cuivre"] = [{"couche": c["couche"],
+                "polys": [{"o": [v * 1000 for v in p["o"]]} for p in c["polys"]]}
+               for c in document()["cuivre"]]
+d["port"] = dict(document()["port"])
+for cle in ("x", "y", "w", "l"):
+    d["port"][cle] = d["port"][cle] * 1000
+d["boite"] = {"mx": 40000.0, "my": 40000.0, "mz_haut": 40000.0, "mz_bas": 40000.0}
+m4 = openems_modele.normaliser(d)
+verifie("en microns : memes cotes, meme cuivre, meme port en mm",
+        abs(m4["z_haut"] - m["z_haut"]) < 1e-6
+        and all(abs(a - b) < 1e-6
+                for a, b in zip(m4["boite_cuivre"], m["boite_cuivre"]))
+        and abs(m4["port"]["x"] - m["port"]["x"]) < 1e-6
+        and abs(m4["boite"]["mx"] - 40.0) < 1e-6,
+        "z %.5f vs %.5f" % (m4["z_haut"], m["z_haut"]))
 
 print()
 print("7. Doublons de maillage")
@@ -1165,6 +1185,27 @@ if _r_ts is not None:
     verifie("le tableau et le balayage ne se lisent pas sous la meme clef",
             _r_ts.TacheTableauS.CLEF == "tableau_s"
             and _r_ts.TacheBalayage.CLEF == "balayage")
+
+    # « fini » ne se pose qu'une fois le resultat assemble : la page cesse de
+    # sonder des qu'elle le lit. Et un assemblage qui casse rend « echoue ».
+    def _suite_essai(assembler):
+        _s = _r_ts.TacheTableauS("essai-ordre", ".", ts)
+        _s._un_point = lambda pt, m: pt.update(etat="fini", resultat={})
+        _s._noter_debit = lambda: None          # ne pas ecrire le reglage du poste
+        _s._assembler = lambda finis: assembler(_s)
+        _s._courir_tout()
+        return _s
+    _vu = []
+    _s = _suite_essai(lambda t: _vu.append(t.etat) or {"s": 1})
+    verifie("suite : l'etat n'est pas « fini » pendant l'assemblage",
+            _vu and _vu[0] != "fini" and _s.etat == "fini"
+            and _s.resultat == {"s": 1}, str(_vu))
+    def _casse(t):
+        raise ValueError("colonne illisible")
+    _s = _suite_essai(_casse)
+    verifie("suite : un assemblage qui casse rend « echoue », avec le detail",
+            _s.etat == "echoue" and _s.resultat is None
+            and "colonne illisible" in _s.detail, _s.detail)
 
 # --------------------------------------------------------------------------
 print()
@@ -1511,6 +1552,7 @@ try:
                               ("CON", "un peripherique Windows"),
                               ("nul.json", "un peripherique deguise"),
                               ("fin.", "un point final"),
+                              (".cache", "un point en tete (dossier cache)"),
                               ("x" * 81, "quatre-vingt-un caracteres"),
                               ("", "rien du tout")):
         try:
@@ -1537,6 +1579,46 @@ try:
         verifie("ouvrir un dossier quelconque est refuse", False)
     except projet.ErreurProjet:
         verifie("ouvrir un dossier quelconque est refuse", True)
+
+    # « ENREGISTRER SOUS » UN PROJET EXISTANT N'EFFACE PAS SA CARTE NI SES
+    # RESULTATS sans l'accord (`ecraser`) que la page demande avant.
+    _autre = projet.enregistrer({"nom": "Autre", "carte": {"nets": []},
+                                 "resultats": {"r": 1}})["dossier"]
+    projet.enregistrer({"nom": "Patch 2,45 GHz"})          # l'ouvert change
+    try:
+        projet.enregistrer({"nom": "Autre", "carte": None, "resultats": None})
+        verifie("enregistrer sous un autre projet sans accord est refuse", False)
+    except projet.ErreurProjet as _exc:
+        verifie("enregistrer sous un autre projet sans accord est refuse",
+                "carte.json" in _exc.message)
+    verifie("... et sa carte et ses resultats sont toujours la",
+            os.path.isfile(os.path.join(_autre, "carte.json"))
+            and os.path.isfile(os.path.join(_autre, "resultats.json")))
+    projet.enregistrer({"nom": "Autre", "resultats": None, "ecraser": True})
+    verifie("avec l'accord, ses resultats s'effacent",
+            not os.path.isfile(os.path.join(_autre, "resultats.json")))
+    shutil.rmtree(_autre)
+    projet.fermer()
+
+    # Le reglage du poste : lire-modifier-ecrire sous verrou, par .tmp.
+    _cfg_vrai = projet.CONFIG
+    projet.CONFIG = os.path.join(_bac, "config.json")
+    try:
+        import threading as _th
+        _fils = [_th.Thread(target=lambda k=k: [projet._config_ecrire(k, i)
+                                                for i in range(30)])
+                 for k in ("a", "b", "c", "d", "e", "f")]
+        for _f in _fils:
+            _f.start()
+        for _f in _fils:
+            _f.join()
+        verifie("reglage : six ecrivains en meme temps ne perdent aucune cle",
+                projet._config_lire() == {k: 29 for k in "abcdef"},
+                str(projet._config_lire()))
+        verifie("reglage : aucun .tmp ne traine",
+                not os.path.exists(projet.CONFIG + ".tmp"))
+    finally:
+        projet.CONFIG = _cfg_vrai
 
     # ----------------------------------------------------------------------
     # RANGER UN CALCUL DEJA FAIT DANS LE PROJET.
@@ -1632,6 +1714,40 @@ try:
             verifie("sans projet ouvert, archiver est refuse", False)
         except openems_modele.ErreurModele:
             verifie("sans projet ouvert, archiver est refuse", True)
+
+        # D'un disque a l'autre (rename refuse) : une copie interrompue ne
+        # laisse rien dans le projet, et la source reste entiere.
+        _id4, _dos4 = openems_run._dossier_neuf()
+        with open(os.path.join(_dos4, "J_xy_000.vtr"), "w") as _f:
+            _f.write("v" * 64)
+        _ren, _ct = os.rename, shutil.copytree
+        def _sans_rename(*a, **k):
+            raise OSError(18, "Invalid cross-device link")
+        def _copie_coupee(src, dst, **k):
+            os.makedirs(dst)
+            open(os.path.join(dst, "J_xy_000.vtr"), "w").close()
+            raise OSError(28, "No space left on device")
+        os.rename, shutil.copytree = _sans_rename, _copie_coupee
+        try:
+            openems_run.archiver(_id4, _cible)
+            verifie("archiver : une copie coupee est refusee", False)
+        except openems_modele.ErreurModele:
+            verifie("archiver : une copie coupee est refusee", True)
+        finally:
+            os.rename, shutil.copytree = _ren, _ct
+        verifie("... sans laisser de copie partielle dans le projet",
+                not os.path.exists(os.path.join(_cible, _id4)))
+        verifie("... et la source est entiere",
+                os.path.getsize(os.path.join(_dos4, "J_xy_000.vtr")) == 64)
+        os.rename = _sans_rename
+        try:
+            _out4 = openems_run.archiver(_id4, _cible)
+        finally:
+            os.rename = _ren
+        verifie("archiver d'un disque a l'autre : copie entiere, source effacee",
+                os.path.getsize(os.path.join(_out4["dossier"], "J_xy_000.vtr"))
+                == 64 and not os.path.isdir(_dos4))
+        shutil.rmtree(_out4["dossier"])
 
         # ------------------------------------------------------------------
         # LISTER LES CALCULS, ET EN IMPORTER UN D'AILLEURS.

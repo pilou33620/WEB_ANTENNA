@@ -622,6 +622,14 @@ def _texte(valeur, maxi=120):
     return str(valeur)[:maxi]
 
 
+def _k_mm(unite):
+    """Millimetres par unite du fichier : « in », « um » (MICRON) ou mm."""
+    u = _texte(unite, 12).lower()
+    if u.startswith("in"):
+        return 25.4
+    return 1e-3 if u.startswith(("um", "micron", "\u00b5m")) else 1.0
+
+
 def _dict(valeur):
     return valeur if isinstance(valeur, dict) else {}
 
@@ -3469,8 +3477,7 @@ def _dumps(doc, emprise, boite, bande, mx, my, mz, nmax=0):
     elif region == "plan_z":
         # Un plan horizontal : c'est la vue qui montre le courant sur le
         # cuivre, et c'est celle qu'on regarde neuf fois sur dix.
-        z = _nb(d.get("z"), 0.0) * (25.4 if str(doc.get("unite", "")).lower()
-                                    .startswith("in") else 1.0)
+        z = _nb(d.get("z"), 0.0) * _k_mm(doc.get("unite"))
         z1 = z2 = z
     elif region == "coupe_x":
         x1 = x2 = _nb(d.get("x"), (x1 + x2) / 2.0)
@@ -3555,8 +3562,7 @@ def normaliser(doc):
     if not isinstance(doc, dict):
         raise ErreurModele("Document JSON (objet) attendu.")
 
-    unite = (_texte(doc.get("unite"), 12) or "mm").lower()
-    k_mm = 25.4 if unite.startswith("in") else 1.0
+    k_mm = _k_mm(doc.get("unite"))
 
     # Comment le cuivre est modelise. « feuille » par defaut : une surface
     # sans epaisseur qui porte quand meme la resistance du cuivre reel.

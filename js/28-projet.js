@@ -85,7 +85,7 @@ async function prjAppel(route,options){
 function prjPost(route,doc){
   return prjAppel(route,{
     method:"POST",
-    headers:{"Content-Type":"application/json"},
+    headers:Object.assign({"Content-Type":"application/json"},ENTETE_WEB),
     body:JSON.stringify(doc||{})
   });
 }
@@ -429,6 +429,7 @@ function prjConAppliquer(d){
       deux précédents.
 */
 async function prjAppliquer(charge){
+  oeSuiviStop();             // le suivi d'un calcul de l'autre projet s'arrête ici
   const dessin=(charge.source==="dessin")||
                (!charge.carte&&charge.dessin&&
                 (charge.dessin.elements||[]).length>0);
@@ -522,6 +523,18 @@ async function prjEnregistrer(nom){
   const cible=(nom||PRJ.nom||"").trim();
   if(!cible)throw new Error("Donnez un nom au projet avant de l'enregistrer.");
   const doc=prjCapturer(cible);
+  /* « ENREGISTRER SOUS » UN NOM DÉJÀ PRIS REMPLACE L'AUTRE PROJET : on le dit,
+     et l'on n'écrit qu'avec l'accord. `ecraser` est cet accord pour le
+     serveur, qui refuse sans lui d'effacer la carte ou les résultats d'un
+     projet qui n'est pas l'ouvert (python/projet.py). */
+  const pris=cible!==PRJ.nom&&PRJ.projets.some(p=>p&&p.nom===cible);
+  if(pris&&!window.confirm("Le projet « "+cible+" » existe déjà.\n"+
+       "L'enregistrer sous ce nom remplace son dessin et ses réglages, "+
+       (doc.carte===null?"supprime":"remplace")+" sa carte et "+
+       (doc.resultats===null?"supprime":"remplace")+" ses résultats "+
+       "(ses dossiers de calcul restent).\n\nRemplacer « "+cible+" » ?"))
+    return null;
+  if(pris||cible===PRJ.nom)doc.ecraser=true;
   const out=await prjPost(PRJ_ROUTE+"/enregistrer",doc);
   PRJ.nom=out.nom;
   PRJ.racine=out.racine||PRJ.racine;
@@ -594,6 +607,7 @@ async function prjImporterCalcul(chemin){
    rend donc l'ennui, et l'appelant l'affiche. */
 async function prjEnregistrerTout(nom){
   const out=await prjEnregistrer(nom);
+  if(!out)return null;                  // remplacement refusé : rien d'écrit
   if(!prjArchivable())return {projet:out, calcul:null};
   let arch=null;
   try{
@@ -625,7 +639,7 @@ function prjDireCalcul(arch){
 }
 
 async function prjOuvrir(nom){
-  const charge=await prjAppel(PRJ_ROUTE+"/ouvrir?nom="+encodeURIComponent(nom));
+  const charge=await prjPost(PRJ_ROUTE+"/ouvrir",{nom:nom});
   await prjAppliquer(charge);
   PRJ.nom=charge.nom;
   PRJ.enregistre=(charge.modifie||0)*1000;
@@ -648,6 +662,7 @@ async function prjEnregistrerGeste(nom){
   try{
     r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(nom));
   }catch(e){ prjRendre(); return null; }
+  if(!r){ hint("Enregistrement annulé : rien n'est écrit."); prjRendre(); return null; }
   const calcul=prjDireCalcul(r.calcul);
   hint("Projet « "+r.projet.nom+" » enregistré dans "+r.projet.dossier+
        "."+calcul);
@@ -722,6 +737,7 @@ async function prjEnregistrerGithub(nom){
   try{
     r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(cible));
   }catch(e){ prjRendre(); return; }
+  if(!r){ hint("Enregistrement annulé : rien n'est écrit."); prjRendre(); return; }
   const dit="Projet « "+r.projet.nom+" » enregistré."+prjDireCalcul(r.calcul);
   const heure=prjDate(Date.now());
   if(message===null){

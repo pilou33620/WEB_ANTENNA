@@ -4,7 +4,8 @@
    web_suite/lanceur/pilote.js et la CI de web_suite vérifie les copies.
    Spec : web_suite/lanceur/docs/SPEC-mcp-canal-pilote.md. Banc : lanceur/banc_pilote.js.
 
-   Usage dans une page :
+   Usage dans une page (ENTETE_WEB déclaré avant ce script : l'en-tête maison des POST de l'outil) :
+       const ENTETE_WEB = { "X-WEB_CAO": "1" };
        Pilote.declarer({page: "pcb", projet: () => nomDuProjet});
        Pilote.capture(() => canevas);
        Pilote.commande("cao_calcul", {executer: async args => rapport});
@@ -86,6 +87,8 @@
     const traitees = new Set();     // ids de commandes déjà reçues : une redistribution ne rejoue rien
     const originaux = new WeakMap(); // def d'écriture -> son « appliquer » d'origine, que seul le clic appelle
     const nav = idNavigateur(env.stockage, P.id);
+    // En-tête maison de l'outil (X-WEB_CAO…), que son serveur exige sur tout POST : REGLES §2.3
+    const enJson = Object.assign({ "Content-Type": "application/json" }, env.entete);
 
     function visible() {
       if (env.visible) return !!env.visible();
@@ -113,7 +116,7 @@
 
     async function envoyer(route, corps) {
       const r = await env.fetch("/api/pilote/" + route, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corps) });
+        method: "POST", headers: enJson, body: JSON.stringify(corps) });
       if (!r.ok) {
         const e = new Error("pilote : " + route + " a répondu " + r.status);
         e.statut = r.status;
@@ -636,7 +639,7 @@
       occupe(true);
       try {
         const r = await env.fetch("/api/pilote/demande", {
-          method: "POST", headers: { "Content-Type": "application/json" },
+          method: "POST", headers: enJson,
           body: JSON.stringify({ navigateur: nav, onglet: P.id, texte: texteSaisi, nouvelle, pieces: envoyees,
                                  modele: choixModele.value }) });
         const d = await lireJson(r);
@@ -989,9 +992,13 @@
     try { stockage = window.localStorage; } catch (_) { /* refusé : un relais par onglet */ }
     // Ouverte sans serveur (monofichier en file://), la page n'a pas de canal : Pilote ne démarre pas
     const servie = /^https?:$/.test(window.location.protocol);
-    const balise = (url, corps) => navigator.sendBeacon(url, new Blob([corps], { type: "application/json" }));
+    // Posé par la page avant ce script : { "X-WEB_CAO": "1" }, { "X-WEB_ANTENNA": "1" }, { "X-Web3D": "1" }
+    const entete = typeof ENTETE_WEB === "object" ? ENTETE_WEB : null;
+    // fetch keepalive et non sendBeacon, qui ne peut pas porter l'en-tête maison : il part aussi à la fermeture
+    const balise = (url, corps) => window.fetch(url, { method: "POST", keepalive: true, body: corps,
+      headers: Object.assign({ "Content-Type": "application/json" }, entete) }).catch(() => {});
     window.Pilote = creer({ fetch: (u, o) => window.fetch(u, o), BroadcastChannel: servie ? window.BroadcastChannel : null,
-                            stockage, document, fenetre: window, balise: navigator.sendBeacon ? balise : null,
+                            stockage, document, fenetre: window, balise, entete,
                             decoderImage: window.createImageBitmap ? f => window.createImageBitmap(f) : null });
   }
 })();

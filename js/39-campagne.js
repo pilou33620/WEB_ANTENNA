@@ -179,6 +179,7 @@ async function campDerouler(rendre){
         }
         rendre&&rendre();
         const t=await oeSuivre(()=>rendre&&rendre());
+        if(!t)break;               // suivi arrêté (autre projet ouvert) : « Reprendre » le reprend
         if(CAMP.stop&&t.etat!=="fini"){                // « Reprendre » refera cette étape
           CAMP.etat.tache=null; campGarder(); break;
         }

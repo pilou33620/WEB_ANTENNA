@@ -61,7 +61,7 @@ async function oeAppel(route,options){
 function oePost(route,doc){
   return oeAppel(route,{
     method:"POST",
-    headers:{"Content-Type":"application/json"},
+    headers:Object.assign({"Content-Type":"application/json"},ENTETE_WEB),
     body:JSON.stringify(doc)
   });
 }
@@ -227,6 +227,7 @@ async function oeSuivre(surAvance){
       j=await oeAppel(OE_ROUTE+"/journal?id="+encodeURIComponent(id)
                       +"&depuis="+vues);
     }catch(e){
+      if(mien!==OE_SUIVI)return null;
       /* Le serveur a redémarré, ou le réseau a hoqueté. On ne fait pas
          disparaître le calcul pour autant : il tourne dans son propre
          processus, et il continuera sans nous. */
@@ -238,6 +239,9 @@ async function oeSuivre(surAvance){
       return ANT.tache;
     }
 
+    /* Arrêté pendant l'attente (un autre projet s'est ouvert) : sa réponse
+       n'est plus la nôtre, et l'écrire dans ANT l'écrirait dans l'autre. */
+    if(mien!==OE_SUIVI)return null;
     const neuf=(j.lignes||[]).length;
     if(neuf){ toutes.push.apply(toutes,j.lignes); attente=OE_SONDAGE; }
     else attente=Math.min(OE_SONDAGE_MAX,attente*1.5);
@@ -253,7 +257,7 @@ async function oeSuivre(surAvance){
     }
     await new Promise(r=>setTimeout(r,attente));
   }
-  return ANT.tache;
+  return null;                       // arrêté : un autre suivi ou un autre projet
 }
 
 function oeSuiviStop(){ OE_SUIVI++; }

@@ -190,9 +190,9 @@ class Pilote:
             taille = int(handler.headers.get("Content-Length") or 0)
         except ValueError:
             raise Refus(400, "Content-Length invalide.")
-        if taille > maxi:
-            handler.close_connection = True       # le corps n'est pas lu
-            raise Refus(413, "Corps trop gros.")
+        if not 0 <= taille <= maxi:
+            handler.close_connection = True       # le corps n'est pas lu (négatif : rfile.read(-1) lirait sans fin)
+            raise Refus(413, "Corps trop gros.") if taille > maxi else Refus(400, "Content-Length invalide.")
         try:
             corps = json.loads(handler.rfile.read(taille) or b"null")
         except (ValueError, RecursionError):      # RecursionError : [[[[… très imbriqué
@@ -705,6 +705,7 @@ if __name__ == "__main__":
                b'"focus_il_y_a": NaN}]}')[0] == 400
     assert req("POST", "/api/pilote/battement", brut=b"{pas du json")[0] == 400
     assert req("POST", "/api/pilote/battement", brut=b"x" * 10000)[0] == 413
+    assert req("POST", "/api/pilote/battement", brut=b"", entetes={"Content-Length": "-1"})[0] == 400
     # une commande porte un fichier : au-delà du petit corps, jusqu'au gros
     assert req("POST", "/api/pilote/commande", {"onglet": "absent", "page": "pcb", "nom": "x",
                                                 "args": {"texte": "k" * 2000}})[0] != 413
@@ -837,6 +838,7 @@ if __name__ == "__main__":
     distant[0] = True
     # Personne ne prend la demande (pas de lanceur sur ce poste) : elle échoue en le disant
     P.prise = 0.2
+    battement("ipad", [onglet("I", "pcb", 0)])           # oubli à 1 s : un Pi chargé l'a dépassé depuis
     code, dem = req("POST", "/api/pilote/demande", {"navigateur": "ipad", "onglet": "I", "texte": "bonjour"})
     time.sleep(0.3)
     conv = req("GET", "/api/pilote/conversation?navigateur=ipad&id=%s&depuis=0" % dem["id"])[1]

@@ -101,7 +101,23 @@ def jeton(ancien=None):
             if j:
                 return j
             time.sleep(0.02)
-        return neuf
+        # Toujours vide ou trop court (démarrage coupé en pleine écriture) : on le remplace.
+        # Rendre `neuf` sans l'écrire changeait de jeton à chaque démarrage.
+        temp = "%s.%d.tmp" % (chemin, os.getpid())
+        try:
+            with os.fdopen(os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
+                f.write(neuf + "\n")
+            os.replace(temp, chemin)
+        except OSError:
+            try:
+                os.remove(temp)
+            except OSError:
+                pass
+            print("  %s illisible et impossible à remplacer : jeton de cette session seulement." % chemin, flush=True)
+            return neuf
+        print("  %s était vide ou abîmé : jeton neuf écrit, les appareils redonneront le code." % chemin, flush=True)
+        # shortcut: deux tools qui le remplacent au même instant gardent le dernier écrit ; un verrou si ça arrive
+        return _lire(chemin) or neuf
     except OSError:
         # Dossier personnel en lecture seule (Pyto sur iPad…) : un jeton pour
         # cette session seulement ; les appareils redonneront le code au redémarrage.
@@ -776,6 +792,12 @@ if __name__ == "__main__":
         os.remove(os.environ["WEB_TOOLS_JETON_FICHIER"])
         j = jeton()
         assert len(j) >= 16 and j != "a" * 22 and jeton() == j
+        with open(os.environ["WEB_TOOLS_JETON_FICHIER"], "w") as f:
+            f.write("court")                                      # fichier abîmé : remplacé et gardé
+        j = jeton()
+        assert len(j) >= 16 and jeton() == j and _lire(os.environ["WEB_TOOLS_JETON_FICHIER"]) == j
+        if os.name != "nt":
+            assert os.stat(os.environ["WEB_TOOLS_JETON_FICHIER"]).st_mode & 0o777 == 0o600
         os.environ["WEB_TOOLS_JETON_FICHIER"] = os.path.join(ancien, "impossible", "jeton.txt")
         assert len(jeton()) >= 16                                 # pas de plantage sans dossier inscriptible
         os.environ["WEB_TOOLS_JETON_FICHIER"] = os.path.join(tmp, "partage", "jeton.txt")

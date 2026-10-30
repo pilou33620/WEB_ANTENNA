@@ -92,7 +92,7 @@ function antObjetsChemins(m,k){
 function antPeindreObjets(c,dpr){
   const m=ANT.modele;
   if(!m||!((m.primitives||[]).length||(m.pieces||[]).length))return;
-  const k=(V.unite==="in")?(1/25.4):1;
+  const k=1/antKmm();
   const ch=antObjetsChemins(m,k);
   poserMonde(c,dpr);
   c.save();
@@ -165,7 +165,7 @@ function antPeindreBoite(c,dpr){
   const m=ANT.modele;
   if(!m)return;
   /* Le modèle est en millimètres ; la carte est dans l'unité du fichier. */
-  const k=(V.unite==="in")?(1/25.4):1;
+  const k=1/antKmm();
   const b=m.boite;
   poserMonde(c,dpr);
   c.save();
@@ -241,7 +241,7 @@ function antPeindreMaillage(c,dpr){
   if(!ANT.vueMaillage)return;
   const m=ANT.modele;
   if(!m||!m.maillage||!m.maillage.x||!m.maillage.y)return;
-  const k=(V.unite==="in")?(1/25.4):1;
+  const k=1/antKmm();
   const b=m.boite;
   const x1=b.x1*k, x2=b.x2*k;
   const y1=b.y1*k, y2=b.y2*k;

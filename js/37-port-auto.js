@@ -256,7 +256,7 @@ function antPortAutoOublier(p){
 function antPortAuto(){
   const p=ANT.port;
   if(!p||p.type==="coaxial"||!p.de||!V.modele)return null;
-  const k=V.unite==="in"?1/25.4:1;
+  const k=1/antKmm();
   const couches=antCouchesEnZ();
   const cu=antCuivreDuModele();
   const vias=(cu&&cu.vias)||[];

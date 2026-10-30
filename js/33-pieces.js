@@ -469,10 +469,6 @@ function antMaillageJoindre(a,b){
   return {pos:pos, idx:idx};
 }
 
-/* Millimètres par unité du fichier : la position se saisit dans l'unité de
-   la carte, les sommets sont toujours en millimètres. */
-function antKmm(){ return (V.unite==="in")?25.4:1; }
-
 /* La carte, en millimètres : son contour en xy, son épaisseur en z. */
 function antCarteMm(){
   const k=antKmm();

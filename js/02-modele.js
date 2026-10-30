@@ -25,7 +25,7 @@
 const V={
   modele:null,          // le JSON, tel que reçu
   fichier:"",           // nom du fichier ouvert
-  unite:"mm",           // mm ou in, selon ce que déclare le fichier
+  unite:"mm",           // mm, in ou um, selon ce que déclare le fichier
   couches:[],           // table des couches (voir mdlCouches)
   parNet:[],            // net index -> {pistes, arcs, plans, pads, trous, …}
   parRef:null,          // repère -> composant (Map)
@@ -119,7 +119,7 @@ function mdlEsc(s){
    que le micron reste visible sans noyer la valeur sous les zéros. */
 function mdlNb(v,dec){
   if(v==null||isNaN(v))return "—";
-  const d=(dec==null)?(V.unite==="in"?4:3):dec;
+  const d=(dec==null)?(V.unite==="in"?4:V.unite==="um"?1:3):dec;
   return Number(v).toFixed(d).replace(/\.?0+$/,"").replace(".",",")||"0";
 }
 function mdlMes(v,dec){ return mdlNb(v,dec)+" "+V.unite; }
@@ -505,7 +505,7 @@ function mdlChainePistesMemeCouche(piste0){
   const arcs=(n.arcs||[]).filter(a=>a.c===piste0.c);
   if(cands.length<=1&&!arcs.length)return cands.length?cands:[piste0];
 
-  const tol=(/INCH/i.test(V.unite||"")?0.02/25.4:0.02);
+  const tol=0.02/antKmm();   // 0,02 mm
 
   const boutsMap=new Map();
   for(const p of cands){
@@ -628,7 +628,7 @@ function selRefs(){
 function mdlCharger(modele,nomFichier){
   V.modele=modele;
   V.fichier=nomFichier||modele.fichier||"carte";
-  V.unite=/INCH/i.test(modele.unites||"")?"in":"mm";
+  V.unite=/INCH/i.test(modele.unites||"")?"in":/MICRON/i.test(modele.unites||"")?"um":"mm";
   V.couches=mdlCouches(modele);
   V.net=-1; V.comp=""; V.survol=null; V.mev=mdlMevTout(); V.sel=[];
   MDL_FORMES.clear();
@@ -737,7 +737,7 @@ function mdlBoiteComp(comp){
   }
   for(const p of (comp.pins||[]))voir(p.x,p.y,0.2);
   if(!isFinite(x1)){                       // ni pastille ni broche connue
-    const d=(V.unite==="in")?0.02:0.5;
+    const d=(V.unite==="in")?0.02:0.5/antKmm();
     return {x1:comp.x-d,y1:comp.y-d,x2:comp.x+d,y2:comp.y+d};
   }
   return {x1:x1,y1:y1,x2:x2,y2:y2};

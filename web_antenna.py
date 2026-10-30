@@ -58,6 +58,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.parse
 import webbrowser
 
@@ -230,13 +231,12 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         return bool(origine and hote
                     and origine.lower() in ("http://" + hote, "https://" + hote))
 
-    def _cors(self):
-        origine = self.headers.get("Origin")
-        if self._origine_permise(origine):
-            self.send_header("Access-Control-Allow-Origin", origine)
-            self.send_header("Vary", "Origin")
-
     def _csrf(self):
+        # En-tete maison exige (REGLES §2.3) : une page d'un autre site ne peut pas
+        # l'ajouter sans pre-vol CORS, que ce serveur ne valide pas (aucun Access-Control-*).
+        if self.headers.get("X-WEB_ANTENNA") != "1":
+            self._json({"detail": "Requete refusee"}, 403)
+            return False
         origine = self.headers.get("Origin")
         if origine and not self._origine_permise(origine):
             self._json({"detail": "Origine inter-site refusee"}, 403)
@@ -247,11 +247,12 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         """La requete vient-elle de CETTE machine ?
 
         LE CONTROLE D'ORIGINE NE SUFFIT PAS ICI, ET C'EST LA NUANCE QUI
-        COMPTE. `_csrf` et `_cors` protegent contre une PAGE : un navigateur
+        COMPTE. `_csrf` protege contre une PAGE : un navigateur
         qui charge evil.com ne peut pas lire la reponse d'une route d'ici,
-        faute d'en-tete `Access-Control-Allow-Origin`. Mais ils ne protegent
+        faute d'en-tete `Access-Control-Allow-Origin`. Mais il ne protege
         de rien contre un client qui n'est pas un navigateur : un `curl` sur
-        le reseau local n'envoie aucun `Origin`, et `_csrf` le laisse passer
+        le reseau local pose l'en-tete maison lui-meme et n'envoie aucun
+        `Origin`, et `_csrf` le laisse passer
         — deliberement, puisque c'est ainsi qu'une tablette ouvre la page.
 
         Pour les routes qui designent un chemin du disque, ce marche-la ne
@@ -271,7 +272,6 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(corps)))
-        self._cors()
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(corps)
@@ -290,7 +290,10 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             self._json({"detail": exc.message}, exc.code)
         except Exception as exc:                       # noqa: BLE001
             self.close_connection = True
-            self._json({"detail": "Erreur interne : %s" % exc}, 500)
+            # La trace au terminal, pas au client : elle porte des chemins.
+            traceback.print_exc(file=sys.stderr)
+            self._json({"detail": "Erreur interne (%s) : le detail est dans "
+                                  "le terminal du serveur." % type(exc).__name__}, 500)
 
     def _corps(self, plafond):
         """Le corps de la requete en octets. Refuse vide, trop gros.
@@ -600,8 +603,9 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         return dict(projet.etat(), dispo=True)
 
     def _pr_ouvrir(self):
-        nom = (self._params().get("nom") or [""])[0]
-        if not nom:
+        doc = self._document(4096)
+        nom = doc.get("nom") if isinstance(doc, dict) else None
+        if not nom or not isinstance(nom, str):
             raise Refus(400, "Nom de projet manquant")
         charge = self._pr_action(lambda: projet.ouvrir(nom))
         self._pr_suivre()
@@ -817,19 +821,6 @@ class Poste(http.server.SimpleHTTPRequestHandler):
     # ==================================================================
     # Aiguillage
     # ==================================================================
-    API = ("/api/ipc2581", "/api/openems", "/api/openems/script",
-           "/api/openems/balayage", "/api/openems/balayage/lancer",
-           "/api/openems/tableau-s", "/api/openems/tableau-s/lancer",
-           "/api/openems/lancer", "/api/openems/arreter",
-           "/api/openems/journal", "/api/openems/dossier",
-           "/api/openems/fils", "/api/openems/banc/lancer",
-           "/api/openems/champs", "/api/openems/champ",
-           "/api/projet", "/api/projet/ouvrir", "/api/projet/racine",
-           "/api/projet/enregistrer", "/api/projet/fermer",
-           "/api/projet/dossier", "/api/projet/archiver",
-           "/api/projet/calculs", "/api/projet/importer",
-           "/api/github", "/api/github/envoyer", "/api/github/identite")
-
     def do_GET(self):
         if PILOTE.traiter(self):
             return
@@ -856,9 +847,6 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             return
         if route == "/api/projet/calculs":
             self._api(self._pr_calculs)
-            return
-        if route == "/api/projet/ouvrir":
-            self._api(self._pr_ouvrir)
             return
         if route == "/api/github":
             self._api(self._github_etat)
@@ -924,6 +912,10 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         if route == "/api/openems/dossier":
             self._api(lambda: self._oe_voir(openems_antenne.dossier))
             return
+        # En POST : ouvrir change le projet courant du serveur
+        if route == "/api/projet/ouvrir":
+            self._api(self._pr_ouvrir)
+            return
         if route == "/api/projet/racine":
             self._api(self._pr_racine)
             return
@@ -949,16 +941,6 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             self._api(self._github_identite)
             return
         self._json({"detail": "Route inconnue : %s" % route}, 404)
-
-    def do_OPTIONS(self):
-        if self._route() not in self.API:
-            self.send_error(405, "Unsupported method (OPTIONS)")
-            return
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self._cors()
-        self.end_headers()
 
     # Un fichier servi en clair ne doit pas etre mis en cache par le
     # navigateur : on modifie ces fichiers-la en travaillant, et un .js garde

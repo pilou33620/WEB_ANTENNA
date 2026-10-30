@@ -18,6 +18,9 @@
    ============================================================================= */
 
 const API_PORT=8000;                   // DEFAULT_PORT de web_antenna.py
+/* En-tête maison exigé sur tout POST par web_antenna.py (une autre page ne peut
+   pas l'ajouter sans pré-vol CORS) ; js/pilote.js le lit aussi. */
+const ENTETE_WEB={"X-WEB_ANTENNA":"1"};
 const API_ROUTE="/api/ipc2581";
 
 let API_BASE=null;                     // racine retenue, "" = même origine
@@ -81,7 +84,7 @@ async function apiImporter(fichier){
                     " (maximum "+moPoids(etat.max)+").");
   const rep=await fetch(API_BASE+API_ROUTE+"?nom="+encodeURIComponent(fichier.name),{
     method:"POST",
-    headers:{"Content-Type":"application/octet-stream"},
+    headers:Object.assign({"Content-Type":"application/octet-stream"},ENTETE_WEB),
     body:fichier
   });
   if(!rep.ok)throw new Error(await apiErreur(rep));

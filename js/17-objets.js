@@ -30,7 +30,7 @@ const ANT_FORMES={
 /* Le haut de l'empilage, dans l'unité du fichier : c'est le plan de référence
    à partir duquel on pose tout ce qui est au-dessus de la carte. */
 function antHautCarte(){
-  const k=(V.unite==="in")?(1/25.4):1;
+  const k=1/antKmm();
   let h=0;
   for(const e of (LT.pile||[]))if(!e.cuivre)h+=e.ep;
   return +(h*k).toFixed(4);
@@ -42,7 +42,7 @@ function antHautCarte(){
 function antObjetNeuf(type){
   const b=V.bbox||{x1:0,y1:0,x2:10,y2:10};
   const cx=+((b.x1+b.x2)/2).toFixed(3), cy=+((b.y1+b.y2)/2).toFixed(3);
-  const k=(V.unite==="in")?(1/25.4):1;
+  const k=1/antKmm();
   const h=+(10*k).toFixed(3), r=+(0.5*k).toFixed(3), z=antHautCarte();
   const base={nom:ANT_FORMES[type].titre.toLowerCase()+" "+(ANT.primitives.length+1),
               type:type, materiau:"metal", er:4.3, df:0.02, priorite:20};

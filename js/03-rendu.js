@@ -398,7 +398,7 @@ function peindreComposants(c,dpr){
    celle d'une sérigraphie courante, et le zoom fait le reste. */
 function peindreTextes(c,dpr){
   if(!V.aff.textes)return;
-  const h=(V.unite==="in")?0.05:1.2;         // hauteur de référence
+  const h=(V.unite==="in")?0.05:1.2/antKmm();         // hauteur de référence
   const px=h*V.vue.scale;
   if(px<5)return;                            // illisible : autant ne rien mettre
   const f=fenetre(h*4);

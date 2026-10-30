@@ -3415,6 +3415,67 @@ charger("39-campagne.js");
           r.points[0].f0===2.4e9&&r.points[0].z0_re===40&&!("freqs" in r.points[0])&&r.balayage.nom==="kd");
 }
 
+}).then(async()=>{
+
+console.log("");
+console.log("Unites, suivi d'un calcul, enregistrer sous");
+/* MICRON : la page le dit « um » au serveur, et chaque conversion mm -> unite
+   du fichier passe par antKmm. */
+const uGarde=V.unite;
+V.unite="um";
+verifie("micron : 1 um = 0,001 mm, et la page l'envoie « um »",
+        antKmm()===1e-3&&antUnite()==="um");
+V.unite="in";
+verifie("pouce : 25,4 mm, « in »", antKmm()===25.4&&antUnite()==="in");
+V.unite=uGarde;
+
+/* LE SUIVI S'ARRETE A L'OUVERTURE D'UN AUTRE PROJET : la reponse qui arrive
+   apres ne s'ecrit pas dans ANT. Un suivi relance ensuite marche. */
+charger("12-api-openems.js");
+const oeGarde=global.oeAppel;
+let rendre;
+global.oeAppel=()=>new Promise(r=>{ rendre=r; });
+ANT.tache={id:"vieux", lignes:[]}; ANT.resultat=null;
+const suivi=oeSuivre();
+antRaz();                                   // une autre carte s'ouvre
+ANT.tache={id:"neuf", lignes:[], etat:"fini"};
+rendre({id:"vieux", etat:"fini", resultat:{f0:1}, lignes:[], n:0});
+const rendu=await suivi;
+verifie("suivi arrete : le resultat du calcul d'avant ne s'ecrit pas dans l'autre",
+        rendu===null&&ANT.resultat===null&&ANT.tache.id==="neuf");
+global.oeAppel=async()=>({id:"neuf", etat:"fini", resultat:{f0:2}, lignes:["x"], n:1});
+const t2=await oeSuivre();
+verifie("un suivi relance ensuite rend son resultat",
+        t2&&t2.etat==="fini"&&ANT.resultat&&ANT.resultat.f0===2);
+global.oeAppel=oeGarde;
+
+/* ENREGISTRER SOUS UN NOM PRIS demande confirmation ; refus -> rien d'envoye. */
+extraire("28-projet.js","prjEnregistrer");
+const envois=[];
+global.PRJ={nom:"A", projets:[{nom:"A"},{nom:"B"}], racine:""};
+global.PRJ_ROUTE="/api/projet";
+global.prjCapturer=nom=>({nom:nom, carte:null, resultats:null});
+global.prjPost=async(route,doc)=>{ envois.push(doc); return {nom:doc.nom, projets:PRJ.projets}; };
+let question="";
+window.confirm=q=>{ question=q; return false; };
+const refuse=await prjEnregistrer("B");
+verifie("enregistrer sous un nom pris : confirmation demandee, qui dit ce qui se perd",
+        /« B » existe/.test(question)&&/supprime sa carte/.test(question)&&
+        /supprime ses résultats/.test(question), question);
+verifie("... refusee : rien n'est envoye", refuse===null&&envois.length===0);
+window.confirm=()=>true;
+await prjEnregistrer("B");
+verifie("... acceptee : envoye avec l'accord (ecraser)",
+        envois.length===1&&envois[0].ecraser===true&&PRJ.nom==="B");
+question="";
+window.confirm=q=>{ question=q; return false; };
+await prjEnregistrer("B");
+await prjEnregistrer("C");
+verifie("le projet ouvert et un nom neuf ne demandent rien",
+        question===""&&envois.length===3&&envois[1].ecraser===true&&!envois[2].ecraser);
+delete window.confirm;
+
+}).then(()=>{
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")
                                             :"toutes passees."));

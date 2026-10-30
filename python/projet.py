@@ -44,7 +44,9 @@
 #   pas : ABSENT veut dire « inchange, n'y touche pas », NUL veut dire « il n'y
 #   en a plus ». Cela ne porte que sur ces deux fichiers-la, nommes en dur, et
 #   dans un dossier dont le nom a passe `_verifier_nom` et la comparaison a la
-#   racine. Rien d'autre n'est jamais retire.
+#   racine. Dans un projet existant qui n'est pas l'ouvert, il faut en plus
+#   `"ecraser": true` (l'accord demande par la page). Rien d'autre n'est
+#   jamais retire.
 #
 # Fonctions : etat, definir_racine, liste, ouvrir, enregistrer, ouvert,
 #            fermer, dossier_calculs, calculs, importer_calcul,
@@ -60,6 +62,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 FORMAT = "antenne-openems/projet"
@@ -112,6 +115,9 @@ class ErreurProjet(Exception):
 # meme poste n'ont pas les memes projets, et un depot qu'on met a jour par
 # git ne doit pas trainer le chemin de travail de celui qui l'a clone.
 CONFIG = os.path.join(os.path.expanduser("~"), ".antenne-openems.json")
+# Toutes les ecritures du reglage passent par ce verrou : deux requetes qui
+# lisent-modifient-ecrivent en meme temps perdraient l'une des deux cles.
+_CONFIG_VERROU = threading.Lock()
 
 
 def racine_defaut():
@@ -134,16 +140,16 @@ def _config_lire():
 
 
 def _config_ecrire(cle, valeur):
-    d = _config_lire()
-    d[cle] = valeur
-    try:
-        with open(CONFIG, "w", encoding="utf-8") as f:
-            json.dump(d, f, ensure_ascii=False, indent=1)
-    except OSError:
-        # Un profil en lecture seule ne doit pas faire echouer l'enregistrement
-        # du projet lui-meme : la racine vaudra pour la session, et c'est tout
-        # ce qu'on perd.
-        pass
+    with _CONFIG_VERROU:
+        d = _config_lire()
+        d[cle] = valeur
+        try:
+            _ecrire_json(CONFIG, d)       # .tmp puis os.replace
+        except ErreurProjet:
+            # Un profil en lecture seule ne doit pas faire echouer
+            # l'enregistrement du projet lui-meme : la racine vaudra pour la
+            # session, et c'est tout ce qu'on perd.
+            pass
 
 
 _RACINE = None
@@ -221,8 +227,10 @@ def _verifier_nom(nom):
             "« %s » ne peut pas etre un nom de dossier." % n,
             "Les caracteres  \\ / : * ? \" < > |  y sont interdits, et le nom "
             "ne doit pas depasser 80 caracteres.")
-    if n in (".", "..") or n.endswith("."):
-        raise ErreurProjet("Un nom de projet ne peut pas finir par un point.")
+    # Un point en tete fait un dossier cache (et la regle commune les refuse).
+    if n.startswith(".") or n.endswith("."):
+        raise ErreurProjet(
+            "Un nom de projet ne peut ni commencer ni finir par un point.")
     if n.split(".")[0].upper() in _RESERVES:
         raise ErreurProjet(
             "« %s » est un nom reserve par Windows." % n,
@@ -342,8 +350,8 @@ def liste():
         return out
     for nom in noms:
         dossier = os.path.join(base, nom)
-        if not os.path.isdir(dossier):
-            continue
+        if nom.startswith(".") or not os.path.isdir(dossier):
+            continue                      # un dossier cache ne s'ouvrirait pas
         if not os.path.isfile(os.path.join(dossier, F_PROJET)):
             continue
         out.append(_resume(dossier, nom))
@@ -418,6 +426,18 @@ def enregistrer(charge):
         raise ErreurProjet("Document de projet illisible.")
     nom = _verifier_nom(charge.get("nom"))
     dossier = _dossier(nom, creer=True)
+    # « Enregistrer sous » un projet existant : effacer SA carte ou SES
+    # resultats demande l'accord que la page envoie (`ecraser`) apres l'avoir
+    # demande. Le projet ouvert, lui, se reecrit sans.
+    perdus = [f for cle, f in (("carte", F_CARTE), ("resultats", F_RESULTATS))
+              if cle in charge and charge[cle] is None
+              and os.path.isfile(os.path.join(dossier, f))]
+    if perdus and charge.get("ecraser") is not True \
+            and nom != (_OUVERT or {}).get("nom"):
+        raise ErreurProjet(
+            "Le projet « %s » existe deja : l'enregistrer sous ce nom "
+            "supprimerait %s." % (nom, " et ".join(perdus)),
+            "Choisissez un autre nom, ou confirmez le remplacement.")
 
     try:
         ancien = _lire_json(os.path.join(dossier, F_PROJET))

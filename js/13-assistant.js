@@ -38,7 +38,7 @@ function aL(v,dec){ return aNb(v,dec==null?3:dec)+" "+antUnite(); }
    d'un nombre. La conversion vaut aussi pour 16-resultats.js, d'où la
    fonction plutôt qu'un facteur recopié. */
 function antLongModele(v,dec){
-  return aL(v*((V.unite==="in")?(1/25.4):1),dec);
+  return aL(v/antKmm(),dec);
 }
 
 /* ==========================================================================
@@ -159,7 +159,7 @@ function antAutoEtq(id){
 function antAutoEcrire(corps){
   if(!corps)return;
   const m=ANT.modele;
-  const k=(V.unite==="in")?(1/25.4):1;
+  const k=1/antKmm();
   const focus=document.activeElement;
   const etqs={};
   ANT_AUTO.forEach(function(ch){
@@ -320,7 +320,7 @@ function antAssistantRendre(forcer){
 
 function antEtapeActualiser(etapeId,corps){
   const m=ANT.modele;
-  const k=(V.unite==="in")?(1/25.4):1;
+  const k=1/antKmm();
   if(etapeId==="boite"){
     const cEl=corps.querySelector("#antBoiteConseil");
     if(cEl){
@@ -1241,7 +1241,7 @@ ANT_CORPS.boite=function(){
   /* Les marges sont en millimètres dans le modèle, en unité du fichier dans
      la saisie : sur une carte en pouces, saisir une marge en millimètres à
      côté de coordonnées en pouces serait une invitation à se tromper. */
-  const k=(V.unite==="in")?(1/25.4):1;
+  const k=1/antKmm();
   return `
 <p class="intro">La marge se compte en <b>deux morceaux</b> : l'air physique
    entre l'antenne et le début de la couche absorbante — un quart de la
@@ -1672,7 +1672,8 @@ async function antVerifPort(){
   }
   ANT.verif.prepare=false;
   antAssistantRendre(); antJournalRendre(); antBoutonsEtat();
-  await oeSuivre(function(){ antJournalRendre(); antBoutonsEtat(); });
+  /* Arrêté parce qu'un autre projet s'est ouvert : ne pas y remettre l'état d'avant. */
+  if(!await oeSuivre(function(){ antJournalRendre(); antBoutonsEtat(); }))return;
   const t=ANT.tache;
   const v=t.etat==="fini" ? antVerifVerdict(ANT.resultat)
     : t.etat==="arrete" ? {rang:"info", t:"Vérification arrêtée avant la fin."}
