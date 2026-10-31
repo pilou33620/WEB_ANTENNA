@@ -2,8 +2,11 @@
 # -*- coding: utf-8 -*-
 # ==========================================
 # VERSIONING
-# Version: 1.4.0
-# Date: 2026-10-21
+# Version: 1.5.0
+# Date: 2026-10-31
+# 1.5.0 : « b » d'une piste ou d'un arc : son lineEnd quand il n'est pas
+#         ROUND (SQUARE ou NONE, parseur 1.84) ; « pads » d'un composant
+#         sans pastille dans les calques : la forme de ses broches.
 # 1.4.0 : « nm »: 1 pour un composant non monte (populate="false" de la BOM,
 #         parseur 1.83) ; cle absente pour un monte.
 # 1.3.0 : « hauteur » et « corps » d'un composant, tires de son <Package>
@@ -70,8 +73,9 @@ Cle par cle, le dictionnaire produit :
                   matrice          {"A|B": isolement en mm}
                 Vide quand le fichier n'en porte pas ; la visionneuse s'en
                 sert comme classement initial, devant la detection.
-    pistes      {c, n, w (largeur), p (points a plat), f (remplissage)}
-    arcs        {c, n, w, s (debut), e (fin), m (centre), h (horaire)}
+    pistes      {c, n, w (largeur), p (points a plat), f (remplissage),
+                 b (bout : SQUARE ou NONE ; absent, ROUND)}
+    arcs        {c, n, w, s (debut), e (fin), m (centre), h (horaire), b}
     plans       {c, n, f, g: [{o, t}]} -- zones de cuivre remplies
     textes      {c, x, y, r (rotation), m (miroir), t, h (hauteur),
                  b (boite [x1,y1,x2,y2])}
@@ -402,6 +406,8 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
                     "w": _r(piste.width), "p": _pts(piste.points)}
             if piste.fill_property and piste.fill_property != "HOLLOW":
                 item["f"] = piste.fill_property
+            if getattr(piste, "bout", ""):
+                item["b"] = piste.bout      # lineEnd SQUARE ou NONE (ROUND : absent)
             pistes.append(item)
         for arc in net.arcs:
             arcs.append({
@@ -410,6 +416,7 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
                 "e": [_r(arc.end.x), _r(arc.end.y)],
                 "m": [_r(arc.center.x), _r(arc.center.y)],
                 "h": 1 if arc.clockwise else 0,
+                **({"b": arc.bout} if getattr(arc, "bout", "") else {}),
             })
         for plan in net.copper_planes:
             formes = [_contour(c) for c in plan.contours]
@@ -505,7 +512,10 @@ def design_en_dict(design: IPCDesign, fichier: str = "") -> dict:
             item["nm"] = 1          # non monté (populate="false" dans la BOM)
         paquet = comp.package_obj
         if paquet:
-            item["pads"] = [_pad_en_dict(p, nets) for p in paquet.pads]
+            # les pastilles du boitier, sinon (aucune dans les calques) la
+            # forme de ses broches : voir _repli_broches du parseur
+            item["pads"] = [_pad_en_dict(p, nets) for p in
+                            (paquet.pads or getattr(comp, "pads_repli", []))]
             broches = []
             for pin in paquet.pins:
                 b = {"num": pin.number, "x": _r(pin.x), "y": _r(pin.y)}

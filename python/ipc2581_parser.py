@@ -1,3 +1,39 @@
+# [2026-10-31] Version 1.84: compatibilite avec les autres outils de CAO
+# Description:
+#              - <Features> : son <Location> et son <Xform> (rotation, miroir)
+#                placent ce qu'il contient, comme le veut le XSD ; un
+#                <StandardPrimitiveRef>, un <UserPrimitiveRef> ou une forme
+#                standard ecrite en ligne y devient une pastille posee ; un
+#                <Outline> y est lu comme un trait ferme. Exception : le
+#                <UserSpecial> d'un export « Editeur PCB » revision 1, qui
+#                ecrivait ses traits en absolu (corrige a la revision 2).
+#              - Toutes les formes standard du XSD rev. C : Ellipse, Diamond,
+#                Octagon, Hexagon, Triangle, RectCorner, Butterfly en POLYGON ;
+#                Donut, Thermal, Moire, et un Contour a decoupes en forme
+#                utilisateur (plusieurs contours, des trous). Une pastille
+#                padUse="THERMAL" n'ecrase plus la pastille de sa couche.
+#              - Broche de <Package> : sa forme (reference ou en ligne) et son
+#                <Xform> sont lus, en repli seulement (attribut pose
+#                `pads_repli` du composant) : sans pastille de ce composant
+#                dans les calques, sinon chaque pastille serait en double.
+#              - <FillDescRef> (DictionaryFillDesc) et lineEnd (attribut pose
+#                `bout` des pistes et des arcs, "b" dans le JSON) ; unites
+#                propres d'un dictionnaire converties dans celles du fichier ;
+#                un arc de polygone decoupe tous les 0,05 mm quelle que soit
+#                l'unite (il l'etait tous les 0,05 pouce en pouces).
+#              - A recopier dans WEB_ANTENNA (la CI de WEB_SUITE compare).
+#
+# Liste des fonctions modifiees :
+# - [~] parse, _parse_line_dictionary, _parse_standard_dictionary,
+#       _parse_user_dictionary, _get_fill_desc, _shape_max_dimension,
+#       _parse_padstack_defs, _process_step_padstack, _parse_ecad,
+#       _process_features, _process_pad_instance, _process_package,
+#       _process_simple_line, _parse_polygon, _process_polyline,
+#       _process_arc, _process_contour
+# - [+] _parse_fill_dictionary, _k_dico, _get_line_end, _lire_forme,
+#       _forme_en_ligne, _anneau, _thermique, _echelle_forme_user,
+#       _repli_broches
+#
 # [2026-10-21] Version 1.83: populate="false" d'un <RefDes> de la BOM -> Component.populate
 # [2026-10-15] Version 1.82: corps et hauteur des boitiers (dossier mecanique)
 # Description:
@@ -345,6 +381,12 @@ class IPC2581Parser:
         self.root = None
         self.ns: Dict[str, str] = {}
         self.line_width_dict: Dict[str, float] = {}
+        self.line_end_dict: Dict[str, str] = {}     # id de LineDesc -> lineEnd
+        self.fill_dict: Dict[str, str] = {}         # id de FillDesc -> fillProperty
+        self._formes_en_ligne = {}                  # (balise, attributs) -> id de forme
+        # vrai pour un export « Editeur PCB » revision 1 : traits du
+        # <UserSpecial> en absolu malgre le <Location> du <Features>
+        self._userspecial_absolu = False
         self.specs: Dict[str, Dict[str, str]] = {}
         self.design = IPCDesign()
         self.inline_ps_counter = 0
@@ -413,7 +455,13 @@ class IPC2581Parser:
             logger.info("Étape 1/6 : Extraction des unités...")
             self._parse_units()
 
+            for sp in self.root.iter(self._tag("SoftwarePackage")):
+                if (sp.attrib.get("name"), sp.attrib.get("vendor"),
+                        sp.attrib.get("revision")) == ("Editeur PCB", "WEB_CAO", "1"):
+                    self._userspecial_absolu = True
+
             logger.info("Étape 2/6 : Parsing du dictionnaire de lignes...")
+            self._parse_fill_dictionary()
             self._parse_line_dictionary()
 
             logger.info("Étape 3/6 : Parsing du dictionnaire standard...")
@@ -494,7 +542,16 @@ class IPC2581Parser:
     def _shape_max_dimension(self, shape_ref: str) -> float:
         """Diamètre équivalent (plus grande dimension) d'une forme référencée."""
         shape = self.design.shapes.get(shape_ref)
-        return shape.max_dimension() if shape else 0.0
+        if shape:
+            return shape.max_dimension()
+        # forme utilisateur (Donut, Thermal, UserPrimitiveRef) : son encombrement
+        user = self.design.user_shapes.get(shape_ref)
+        pts = [p for pl in (user.planes if user else []) for c in pl.contours for p in c.outline]
+        pts += [p for t in (user.tracks if user else []) for p in t.points]
+        if not pts:
+            return 0.0
+        return max(max(p.x for p in pts) - min(p.x for p in pts),
+                   max(p.y for p in pts) - min(p.y for p in pts))
 
     @staticmethod
     def _extraire_val_tol(texte: str):
@@ -661,6 +718,7 @@ class IPC2581Parser:
         dict_line = content.find(self._tag("DictionaryLineDesc"))
         if dict_line is None:
             return
+        k = self._k_dico(dict_line)
         for entry in dict_line.findall(self._tag("EntryLineDesc")):
             entry_id = entry.attrib.get("id")
             line_desc = entry.find(self._tag("LineDesc"))
@@ -668,7 +726,26 @@ class IPC2581Parser:
             # le déclarait faux et le dictionnaire restait vide -- toutes les
             # pistes du fichier se retrouvaient alors à une largeur nulle.
             if entry_id and line_desc is not None:
-                self.line_width_dict[entry_id] = self._safe_float(line_desc.attrib.get("lineWidth"))
+                self.line_width_dict[entry_id] = self._safe_float(line_desc.attrib.get("lineWidth")) * k
+                self.line_end_dict[entry_id] = (line_desc.attrib.get("lineEnd") or "ROUND").upper()
+
+    def _parse_fill_dictionary(self):
+        """<DictionaryFillDesc> : id -> fillProperty, pour les <FillDescRef>."""
+        content = self.root.find(self._tag("Content"))
+        dico = content.find(self._tag("DictionaryFillDesc")) if content is not None else None
+        if dico is None:
+            return
+        for entry in dico.findall(self._tag("EntryFillDesc")):
+            fill = entry.find(self._tag("FillDesc"))
+            if entry.attrib.get("id") and fill is not None:
+                self.fill_dict[entry.attrib["id"]] = fill.attrib.get("fillProperty", "HOLLOW").upper()
+
+    def _k_dico(self, dico: ET.Element) -> float:
+        """Facteur des unites propres d'un dictionnaire vers celles du fichier
+        (CadHeader) ; 1 si l'une des deux manque ou est inconnue."""
+        a = self._UNITES_MM.get((dico.attrib.get("units") or "").upper())
+        b = self._UNITES_MM.get((self.design.units or "").upper())
+        return a / b if a and b else 1.0
 
     # ------------------------------------------------------------------
     # Étape 3 : Dictionnaire standard
@@ -681,67 +758,213 @@ class IPC2581Parser:
         std_dict = content.find(self._tag("DictionaryStandard"))
         if std_dict is None:
             return
-
+        k = self._k_dico(std_dict)
         for entry in std_dict.findall(self._tag("EntryStandard")):
             entry_id = entry.attrib.get("id")
-            if not entry_id:
+            if entry_id and not self._lire_forme(entry_id, entry, k):
+                self.design.shapes[entry_id] = ShapeDefinition(id=entry_id, shape_type="UNKNOWN")
+
+    # Les formes standard du XSD rev. C (StandardPrimitive), hors Contour
+    _PRIMITIVES = ("Circle", "RectCenter", "Oval", "RectRound", "RectCham", "Ellipse",
+                   "Diamond", "Octagon", "Hexagon", "Triangle", "RectCorner",
+                   "Butterfly", "Donut", "Thermal", "Moire")
+
+    @staticmethod
+    def _regulier(n: int, rayon: float, phase: float) -> List[Point]:
+        """Polygone regulier de n sommets sur le cercle de ce rayon."""
+        return [Point(rayon * math.cos(phase + 2 * math.pi * i / n),
+                      rayon * math.sin(phase + 2 * math.pi * i / n)) for i in range(n)]
+
+    def _anneau(self, forme: str, r: float) -> List[Point]:
+        """Contour d'un Donut ou d'un Thermal ; r est le rayon INSCRIT
+        (demi-cote du carre, demi-distance entre plats)."""
+        if forme == "SQUARE":
+            return [Point(-r, -r), Point(r, -r), Point(r, r), Point(-r, r)]
+        if forme == "HEXAGON":
+            return self._regulier(6, r / math.cos(math.pi / 6), 0.0)
+        if forme == "OCTAGON":
+            return self._regulier(8, r / math.cos(math.pi / 8), math.pi / 8)
+        return self._regulier(72, r, 0.0)
+
+    def _thermique(self, noeud: ET.Element, k: float) -> list:
+        """Un <Thermal> : l'anneau outer/innerDiameter coupe par spokeCount
+        fentes droites de largeur spokeWidth (gap aux revisions anterieures),
+        la premiere a spokeStartAngle. Rend [(contour, trous)] : un secteur
+        par contour."""
+        f = lambda cle: self._safe_float(noeud.attrib.get(cle)) * k
+        forme = (noeud.attrib.get("shape") or "ROUND").upper()
+        ro, ri = f("outerDiameter") / 2, f("innerDiameter") / 2
+        n = self._safe_int(noeud.attrib.get("spokeCount"), 4)
+        demi = (f("spokeWidth") or f("gap")) / 2
+        if n <= 0 or demi <= 0:
+            return [(self._anneau(forme, ro), [self._anneau(forme, ri)])]
+        # shortcut: un Thermal SQUARE, HEXAGON ou OCTAGON est dessine rond ; a
+        # reprendre si un fichier reel en porte
+        if demi >= ro:
+            return []
+        a0 = math.radians(self._safe_float(noeud.attrib.get("spokeStartAngle")))
+        pas = 2 * math.pi / n
+
+        def arc(r, t1, t2):
+            m = max(2, int(abs(t2 - t1) / (2 * math.pi) * 72))
+            return [Point(r * math.cos(t1 + (t2 - t1) * i / m),
+                          r * math.sin(t1 + (t2 - t1) * i / m)) for i in range(m + 1)]
+
+        ao = math.asin(demi / ro)
+        # les bords de deux fentes voisines se coupent a cette distance du centre
+        coin = demi / math.sin(min(pas / 2, math.pi / 2))
+        secteurs = []
+        for i in range(n):
+            t1, t2 = a0 + i * pas, a0 + (i + 1) * pas
+            if t2 - ao <= t1 + ao or coin >= ro:
                 continue
+            if ri > coin:
+                ai = math.asin(demi / ri)
+                dedans = arc(ri, t2 - ai, t1 + ai)
+            else:
+                dedans = [Point(coin * math.cos((t1 + t2) / 2), coin * math.sin((t1 + t2) / 2))]
+            secteurs.append((arc(ro, t1 + ao, t2 - ao) + dedans, []))
+        return secteurs
 
-            shape_def = ShapeDefinition(id=entry_id, shape_type="UNKNOWN")
+    def _lire_forme(self, entry_id: str, parent: ET.Element, k: float = 1.0) -> bool:
+        """Range sous `entry_id` la forme standard que porte `parent` (son
+        premier enfant reconnu) : une ShapeDefinition, ou une forme
+        utilisateur quand il lui faut plusieurs contours ou des trous (Donut,
+        Thermal, Moire, Contour a decoupes) -- la visionneuse et la simulation
+        les lisent deja. Dimensions multipliees par k. Faux si rien n'est
+        reconnu."""
+        noeud, nom = None, ""
+        for enfant in parent:
+            nom = enfant.tag.split('}')[-1]
+            if nom in self._PRIMITIVES or nom in ("Contour", "Polygon"):
+                noeud = enfant
+                break
+        if noeud is None:
+            return False
+        f = lambda cle: self._safe_float(noeud.attrib.get(cle)) * k
+        mul = lambda pts: [Point(p.x * k, p.y * k) for p in pts]
+        sd = ShapeDefinition(id=entry_id, shape_type="POLYGON",
+                             fill_property=self._get_fill_desc(noeud))
+        plans = None                    # [(contour, [trous])] : forme utilisateur
+        if nom == "Circle":
+            sd.shape_type, sd.diameter = "CIRCLE", f("diameter")
+        elif nom in ("RectCenter", "Oval", "RectRound", "RectCham"):
+            sd.shape_type, sd.width, sd.height = nom.upper(), f("width"), f("height")
+            if nom == "RectRound":
+                sd.radius = f("radius")
+            if nom == "RectCham":
+                sd.chamfer = f("chamfer")
+            if nom in ("RectRound", "RectCham"):
+                sd.corners = [c for c in ("upperRight", "upperLeft", "lowerRight", "lowerLeft")
+                              if noeud.attrib.get(c, "false").lower() == "true"]
+        elif nom == "Ellipse":
+            sd.points = [Point(p.x * f("width") / 2, p.y * f("height") / 2)
+                         for p in self._regulier(72, 1.0, 0.0)]
+        elif nom == "Diamond":
+            w, h = f("width") / 2, f("height") / 2
+            sd.points = [Point(0, -h), Point(w, 0), Point(0, h), Point(-w, 0)]
+        elif nom == "Hexagon":
+            # length : d'un sommet a l'oppose, un sommet vers +Y (IPC-2581C 3.5.9.7)
+            sd.points = self._regulier(6, f("length") / 2, math.pi / 2)
+        elif nom == "Octagon":
+            # shortcut: length lu d'un sommet a l'oppose, comme l'Hexagon (lecture
+            # de diodeinc/pcb ; boardui le lit entre plats, 8 % plus grand) ; a
+            # trancher sur un fichier reel
+            sd.points = self._regulier(8, f("length") / 2, math.pi / 8)
+        elif nom == "Triangle":
+            b, h = f("base") / 2, f("height") / 2
+            sd.points = [Point(-b, -h), Point(b, -h), Point(0, h)]
+        elif nom == "RectCorner":
+            x1, y1, x2, y2 = (f(c) for c in ("lowerLeftX", "lowerLeftY", "upperRightX", "upperRightY"))
+            sd.points = [Point(x1, y1), Point(x2, y1), Point(x2, y2), Point(x1, y2)]
+        elif nom == "Butterfly":
+            # deux quarts opposes (I et III), d'un seul trace par le centre
+            rond = (noeud.attrib.get("shape") or "").upper() == "ROUND"
+            r = (f("diameter") if rond else f("side")) / 2
+            o = Point(0.0, 0.0)
+            if rond:
+                q = [Point(r * math.cos(t * math.pi / 36), r * math.sin(t * math.pi / 36)) for t in range(19)]
+                sd.points = [o] + q + [o] + [Point(-p.x, -p.y) for p in q]
+            else:
+                sd.points = [o, Point(r, 0), Point(r, r), Point(0, r), o,
+                             Point(-r, 0), Point(-r, -r), Point(0, -r)]
+        elif nom == "Donut":
+            forme = (noeud.attrib.get("shape") or "ROUND").upper()
+            plans = [(self._anneau(forme, f("outerDiameter") / 2),
+                      [self._anneau(forme, f("innerDiameter") / 2)])]
+        elif nom == "Thermal":
+            plans = self._thermique(noeud, k)
+        elif nom == "Moire":
+            # shortcut: anneaux au pas ringWidth + ringGap depuis le bord
+            # exterieur (lecture litterale du XSD, sans exemple pour trancher)
+            plans = []
+            rond = lambda r: self._regulier(72, r, 0.0)
+            lw, pas = f("ringWidth"), f("ringWidth") + f("ringGap")
+            r = f("diameter") / 2
+            for i in range(min(self._safe_int(noeud.attrib.get("ringNumber")), 100)):
+                ro = r - i * pas
+                if ro <= 0 or lw <= 0:
+                    break
+                plans.append((rond(ro), [rond(ro - lw)] if ro > lw else []))
+            trait = f("lineWidth")
+            if trait > 0:
+                lg = f("lineLength") or 2 * r
+                for deg in (0.0, 90.0):
+                    t = math.radians(self._safe_float(noeud.attrib.get("lineAngle")) + deg)
+                    c, s = math.cos(t), math.sin(t)
+                    plans.append(([Point(x * c - y * s, x * s + y * c) for x, y in
+                                   ((-lg / 2, -trait / 2), (lg / 2, -trait / 2),
+                                    (lg / 2, trait / 2), (-lg / 2, trait / 2))], []))
+        else:                           # Contour, ou Polygon nu
+            poly = noeud if nom == "Polygon" else noeud.find(self._tag("Polygon"))
+            if poly is None:
+                return False
+            sd.points = mul(self._parse_polygon(poly))
+            sd.fill_property = self._get_fill_desc(poly)
+            trous = [mul(self._parse_polygon(c)) for c in noeud.findall(self._tag("Cutout"))]
+            if nom == "Contour" and any(len(t) >= 3 for t in trous):
+                plans = [(sd.points, trous)]
+        if plans is None:
+            self.design.shapes[entry_id] = sd
+            return True
+        us = UserShape(id=entry_id)
+        for contour, trous in plans:
+            if len(contour) >= 3:
+                us.planes.append(CopperPlane(
+                    layer_name="", net_name="", fill_property="FILL",
+                    contours=[Contour(outline=contour, cutouts=[t for t in trous if len(t) >= 3])]))
+        self.design.user_shapes[entry_id] = us
+        return True
 
-            circle = entry.find(self._tag("Circle"))
-            if circle is not None:
-                shape_def.shape_type = "CIRCLE"
-                shape_def.diameter = self._safe_float(circle.attrib.get("diameter"))
-                shape_def.fill_property = self._get_fill_desc(circle)
+    def _forme_en_ligne(self, elem: ET.Element) -> str:
+        """Id de la forme standard ecrite EN LIGNE dans `elem` (pas par
+        reference), rangee une fois par jeu d'attributs ; "" s'il n'y en a pas."""
+        for enfant in elem:
+            nom = enfant.tag.split('}')[-1]
+            if nom in self._PRIMITIVES:
+                cle = (nom, tuple(sorted(enfant.attrib.items())))
+                fid = self._formes_en_ligne.get(cle)
+                if fid is None:
+                    fid = "inline_forme_%d" % (len(self._formes_en_ligne) + 1)
+                    self._formes_en_ligne[cle] = fid
+                    self._lire_forme(fid, elem)
+                return fid
+        return ""
 
-            rect = entry.find(self._tag("RectCenter"))
-            if rect is not None:
-                shape_def.shape_type = "RECTCENTER"
-                shape_def.width = self._safe_float(rect.attrib.get("width"))
-                shape_def.height = self._safe_float(rect.attrib.get("height"))
-                shape_def.fill_property = self._get_fill_desc(rect)
-
-            oval = entry.find(self._tag("Oval"))
-            if oval is not None:
-                shape_def.shape_type = "OVAL"
-                shape_def.width = self._safe_float(oval.attrib.get("width"))
-                shape_def.height = self._safe_float(oval.attrib.get("height"))
-                shape_def.fill_property = self._get_fill_desc(oval)
-
-            rect_round = entry.find(self._tag("RectRound"))
-            if rect_round is not None:
-                shape_def.shape_type = "RECTROUND"
-                shape_def.width = self._safe_float(rect_round.attrib.get("width"))
-                shape_def.height = self._safe_float(rect_round.attrib.get("height"))
-                shape_def.radius = self._safe_float(rect_round.attrib.get("radius"))
-                for corner in ["upperRight", "upperLeft", "lowerRight", "lowerLeft"]:
-                    if rect_round.attrib.get(corner, "false").lower() == "true":
-                        shape_def.corners.append(corner)
-                shape_def.fill_property = self._get_fill_desc(rect_round)
-
-            rect_cham = entry.find(self._tag("RectCham"))
-            if rect_cham is not None:
-                shape_def.shape_type = "RECTCHAM"
-                shape_def.width = self._safe_float(rect_cham.attrib.get("width"))
-                shape_def.height = self._safe_float(rect_cham.attrib.get("height"))
-                shape_def.chamfer = self._safe_float(rect_cham.attrib.get("chamfer"))
-                for corner in ["upperRight", "upperLeft", "lowerRight", "lowerLeft"]:
-                    if rect_cham.attrib.get(corner, "false").lower() == "true":
-                        shape_def.corners.append(corner)
-                shape_def.fill_property = self._get_fill_desc(rect_cham)
-
-            contour = entry.find(self._tag("Contour"))
-            polygon = entry.find(self._tag("Polygon"))
-            if polygon is None and contour is not None:
-                polygon = contour.find(self._tag("Polygon"))
-
-            if polygon is not None:
-                shape_def.shape_type = "POLYGON"
-                shape_def.points = self._parse_polygon(polygon)
-                shape_def.fill_property = self._get_fill_desc(polygon)
-
-            self.design.shapes[entry_id] = shape_def
+    def _echelle_forme_user(self, forme: UserShape, k: float):
+        """Une forme du dictionnaire utilisateur, de ses unites propres a
+        celles du fichier."""
+        mul = lambda p: Point(p.x * k, p.y * k)
+        for t in forme.tracks:
+            t.points, t.width = [mul(p) for p in t.points], t.width * k
+        for a in forme.arcs:
+            a.start, a.end, a.center, a.width = mul(a.start), mul(a.end), mul(a.center), a.width * k
+        for pl in forme.planes:
+            for c in pl.contours:
+                c.outline = [mul(p) for p in c.outline]
+                c.cutouts = [[mul(p) for p in t] for t in c.cutouts]
+        for t in forme.texts:
+            t.location = mul(t.location)
 
     # ------------------------------------------------------------------
     # Étape 4 : Dictionnaire utilisateur
@@ -754,6 +977,7 @@ class IPC2581Parser:
         user_dict = content.find(self._tag("DictionaryUser"))
         if user_dict is None:
             return
+        k = self._k_dico(user_dict)
 
         for entry in user_dict.findall(self._tag("EntryUser")):
             entry_id = entry.attrib.get("id")
@@ -811,6 +1035,8 @@ class IPC2581Parser:
             for text_node in entry.iter(self._tag("Text")):
                 self._process_text(text_node, "", "", user_shape.texts)
 
+            if k != 1.0:
+                self._echelle_forme_user(user_shape, k)
             self.design.user_shapes[entry_id] = user_shape
 
     # ------------------------------------------------------------------
@@ -832,10 +1058,21 @@ class IPC2581Parser:
             return Point(self._safe_float(loc.attrib.get("x")), self._safe_float(loc.attrib.get("y")))
         return Point(0.0, 0.0)
 
+    def _get_line_end(self, elem: ET.Element) -> str:
+        """lineEnd du trait (ROUND, SQUARE ou NONE), local ou par LineDescRef."""
+        line_desc = elem.find(self._tag("LineDesc"))
+        if line_desc is not None:
+            return (line_desc.attrib.get("lineEnd") or "ROUND").upper()
+        ref = elem.find(self._tag("LineDescRef"))
+        return self.line_end_dict.get(ref.attrib.get("id"), "ROUND") if ref is not None else "ROUND"
+
     def _get_fill_desc(self, parent_elem: ET.Element) -> str:
         fill_desc = parent_elem.find(self._tag("FillDesc"))
         if fill_desc is not None:
             return fill_desc.attrib.get("fillProperty", "HOLLOW").upper()
+        ref = parent_elem.find(self._tag("FillDescRef"))
+        if ref is not None:
+            return self.fill_dict.get(ref.attrib.get("id"), "UNKNOWN")
         return "UNKNOWN"
 
     # ------------------------------------------------------------------
@@ -888,6 +1125,10 @@ class IPC2581Parser:
                         pad_use = child.attrib.get("padUse", "REGULAR").upper()
                         if child.attrib.get("padUsage", "").upper() == "VIA":
                             is_via = True
+                        if pad_use == "THERMAL":
+                            # le raccord a un plan negatif, pas la pastille :
+                            # il ecrasait celle de la couche
+                            continue
 
                         current_pad_diam = 0.0
                         current_shape_ref = ""
@@ -952,6 +1193,8 @@ class IPC2581Parser:
         for lpad in ps_elem.findall(self._tag("LayerPad")):
             layer_ref = lpad.attrib.get("layerRef", "")
             pad_use = lpad.attrib.get("padUse", "REGULAR").upper()
+            if pad_use == "THERMAL":
+                continue                # raccord a un plan negatif, pas la pastille
 
             if not loc:
                 loc_node = lpad.find(self._tag("Location"))
@@ -1656,10 +1899,26 @@ class IPC2581Parser:
             for direct_features in layer_feature.findall(self._tag("Features")):
                 self._process_features(direct_features, layer_ref, "Non-Net")
 
+        self._repli_broches()
+
         if self.design.ignored_layers:
             logger.info("%d calque(s) hors simulation ignore(s) : %s",
                         len(self.design.ignored_layers),
                         ", ".join(sorted(self.design.ignored_layers)))
+
+    def _repli_broches(self):
+        """La forme des broches d'un <Package> ne sert qu'au composant dont
+        aucune pastille n'est posee dans les calques (attribut pose
+        `pads_repli`) : un export qui pose ses pastilles en <Set><Pad> ecrit
+        presque toujours aussi la forme de la broche, et la lire partout
+        doublerait chaque pastille de la carte."""
+        poses = {p.pin_ref for p in self.design.standalone_pads if p.pin_ref}
+        for comp in self.design.components:
+            pkg = comp.package_obj
+            if pkg is None or pkg.pads or not getattr(pkg, "pads_broches", None):
+                continue
+            if not any("%s.%s" % (comp.ref_des, pin.number) in poses for pin in pkg.pins):
+                comp.pads_repli = pkg.pads_broches
 
     def _role_calque(self, layer_ref: str, fonction: str) -> str:
         """Ce qu'on fait d'un <LayerFeature> : "percage", "cuivre", "contour"
@@ -1701,39 +1960,65 @@ class IPC2581Parser:
                 return
 
     def _process_features(self, features_elem: ET.Element, layer_ref: str, net_name: str):
-        """Traite un bloc <Features> (ou <UserSpecial>) : lignes, polylignes, arcs, textes, contours."""
-        for line in features_elem.findall(self._tag("Line")):
-            self._process_simple_line(line, layer_ref, net_name)
-        for poly in features_elem.findall(self._tag("Polyline")):
-            self._process_polyline(poly, layer_ref, net_name)
-        for arc in features_elem.findall(self._tag("Arc")):
-            self._process_arc(arc, layer_ref, net_name)
+        """Traite un bloc <Features> : lignes, polylignes, arcs, contours,
+        traits fermes (<Outline>), textes, <UserSpecial>, et la forme posee
+        (reference ou en ligne), qui devient une pastille.
+
+        LE <Location> ET LE <Xform> DU <Features> PLACENT CE QU'IL CONTIENT :
+        le XSD (FeaturesType : Xform?, Location, Feature) donne les
+        coordonnees du contenu relatives a eux. Miroir puis rotation, puis la
+        translation : la matrice de la pastille dans la visionneuse
+        (mdlPadDans). Les exports a (0, 0) -- pyedb, l'editeur PCB -- ne
+        bougent pas."""
+        loc_f = features_elem.find(self._tag("Location"))
+        xf_f = features_elem.find(self._tag("Xform"))
+        ox = self._safe_float(loc_f.attrib.get("x")) if loc_f is not None else 0.0
+        oy = self._safe_float(loc_f.attrib.get("y")) if loc_f is not None else 0.0
+        rot = self._safe_float(xf_f.attrib.get("rotation")) if xf_f is not None else 0.0
+        mir = xf_f is not None and xf_f.attrib.get("mirror", "false").lower() == "true"
+        xf = None
+        if ox or oy or rot or mir:
+            co, si, k = math.cos(math.radians(rot)), math.sin(math.radians(rot)), (-1 if mir else 1)
+            xf = lambda p: Point(ox + k * p.x * co - p.y * si, oy + k * p.x * si + p.y * co)
+
+        def simples(parent, xf):
+            for line in parent.findall(self._tag("Line")):
+                self._process_simple_line(line, layer_ref, net_name, xf)
+            for poly in parent.findall(self._tag("Polyline")):
+                self._process_polyline(poly, layer_ref, net_name, xf)
+            for outline in parent.findall(self._tag("Outline")):
+                poly = outline.find(self._tag("Polygon"))
+                if poly is not None:
+                    self._process_polyline(poly, layer_ref, net_name, xf, outline)
+            for arc in parent.findall(self._tag("Arc")):
+                self._process_arc(arc, layer_ref, net_name, xf, mir)
+            for contour in parent.findall(self._tag("Contour")):
+                self._process_contour(contour, layer_ref, net_name, xf)
+
+        simples(features_elem, xf)
         # La norme (XSD rev. C) pose la place d'un <Text> dans le <Location>
         # de son <Features>, a cote de lui ; les premiers exports lus ici la
         # mettaient dans le <Text>. Celle du <Text> passe devant.
-        loc_f = features_elem.find(self._tag("Location"))
-        loc_defaut = (Point(self._safe_float(loc_f.attrib.get("x")),
-                            self._safe_float(loc_f.attrib.get("y")))
-                      if loc_f is not None else None)
+        loc_defaut = Point(ox, oy) if loc_f is not None else None
         for text_node in features_elem.findall(self._tag("Text")):
             self._process_text(text_node, layer_ref, net_name, self.design.texts,
                                loc_defaut)
 
         special_node = features_elem.find(self._tag("UserSpecial"))
         if special_node is not None:
-            for line in special_node.findall(self._tag("Line")):
-                self._process_simple_line(line, layer_ref, net_name)
-            for poly in special_node.findall(self._tag("Polyline")):
-                self._process_polyline(poly, layer_ref, net_name)
-            for arc in special_node.findall(self._tag("Arc")):
-                self._process_arc(arc, layer_ref, net_name)
+            # l'editeur PCB revision 1 y ecrivait ses traits en absolu
+            simples(special_node, None if self._userspecial_absolu else xf)
             for text_node in special_node.findall(self._tag("Text")):
                 self._process_text(text_node, layer_ref, net_name, self.design.texts)
-            for contour in special_node.findall(self._tag("Contour")):
-                self._process_contour(contour, layer_ref, net_name)
 
-        for contour in features_elem.findall(self._tag("Contour")):
-            self._process_contour(contour, layer_ref, net_name)
+        # LA FORME POSEE : <StandardPrimitiveRef>, <UserPrimitiveRef> ou une
+        # forme standard en ligne. Le <Features> a la forme d'une <Pad>
+        # (Xform, Location, forme) : il en devient une, sur ce calque.
+        forme = self._forme_en_ligne(features_elem)
+        if forme or features_elem.find(self._tag("StandardPrimitiveRef")) is not None \
+                or features_elem.find(self._tag("UserPrimitiveRef")) is not None:
+            self.design.standalone_pads.append(
+                self._process_pad_instance(features_elem, layer_ref, net_name, forme))
 
     # ------------------------------------------------------------------
     # Perçages (calques DRILL)
@@ -2089,7 +2374,10 @@ class IPC2581Parser:
                            "emplacement.", len(orphelins))
 
     def _process_pad_instance(self, pad_elem: ET.Element, current_layer: str = "ALL",
-                              default_net: str = "") -> PadInstance:
+                              default_net: str = "", forme: str = "") -> PadInstance:
+        """Une <Pad> (ou ce qui en a la forme : un <Features>, un <Pin>).
+        `forme` : id d'une forme ecrite en ligne (_forme_en_ligne), a la
+        place d'un <StandardPrimitiveRef>."""
         net_name = pad_elem.attrib.get("net", default_net)
 
         padstack_ref = pad_elem.attrib.get("padstackDefRef", "")
@@ -2117,8 +2405,8 @@ class IPC2581Parser:
         if pref is None:
             pref = pad_elem.find(self._tag("UserPrimitiveRef"))
 
-        if pref is not None:
-            shape_ref = pref.attrib.get("id", "")
+        if pref is not None or forme:
+            shape_ref = forme or pref.attrib.get("id", "")
             if shape_ref:
                 # UN PADSTACK PAR (forme, couche, usage), pas par pastille :
                 # 20 000 pastilles identiques faisaient 20 000 definitions,
@@ -2172,6 +2460,10 @@ class IPC2581Parser:
         if poly is not None:
             package.corps = self._parse_polygon(poly)
 
+        # La forme ecrite sur la broche elle-meme (XSD : Xform?, Location,
+        # StandardShape), posee en attribut : elle ne sert qu'en repli
+        # (voir _repli_broches).
+        package.pads_broches = []
         for pin_elem in pkg_elem.findall(self._tag("Pin")):
             number = pin_elem.attrib.get("number", "?")
             pin_type = pin_elem.attrib.get("type", "UNKNOWN")
@@ -2183,6 +2475,13 @@ class IPC2581Parser:
                 if not pad_inst.pin_ref:
                     pad_inst.pin_ref = number
                 package.pads.append(pad_inst)
+
+            forme = self._forme_en_ligne(pin_elem)
+            if forme or pin_elem.find(self._tag("StandardPrimitiveRef")) is not None \
+                    or pin_elem.find(self._tag("UserPrimitiveRef")) is not None:
+                pad_inst = self._process_pad_instance(pin_elem, "ALL", "", forme)
+                pad_inst.pin_ref = number
+                package.pads_broches.append(pad_inst)
 
         self.design.packages[name] = package
 
@@ -2417,15 +2716,26 @@ class IPC2581Parser:
         except Exception as e:
             logger.debug("Texte ignoré : %s", e)
 
-    def _process_simple_line(self, line_elem: ET.Element, layer: str, default_net: str):
+    def _poser_bout(self, trace, elem: ET.Element):
+        """lineEnd en attribut pose `bout`, seulement s'il n'est pas ROUND
+        (le cas courant) : les classes Track et Arc ne changent pas."""
+        bout = self._get_line_end(elem)
+        if bout != "ROUND":
+            trace.bout = bout
+        return trace
+
+    def _process_simple_line(self, line_elem: ET.Element, layer: str, default_net: str, xf=None):
         try:
             net = line_elem.attrib.get("net", default_net)
             p1 = Point(float(line_elem.attrib["startX"]), float(line_elem.attrib["startY"]))
             p2 = Point(float(line_elem.attrib["endX"]), float(line_elem.attrib["endY"]))
+            if xf:
+                p1, p2 = xf(p1), xf(p2)
             width = self._get_width(line_elem)
             fill_prop = self._get_fill_desc(line_elem)
-            self.design.add_track(Track(width=width, points=[p1, p2], layer_name=layer,
-                                        net_name=net, fill_property=fill_prop))
+            self.design.add_track(self._poser_bout(Track(
+                width=width, points=[p1, p2], layer_name=layer,
+                net_name=net, fill_property=fill_prop), line_elem))
         except Exception as e:
             logger.debug("Ligne ignorée (couche %s) : %s", layer, e)
 
@@ -2471,7 +2781,9 @@ class IPC2581Parser:
 
                     sweep_angle = abs(angle_end - angle_start)
                     arc_length = radius * sweep_angle
-                    steps = min(360, max(12, int(arc_length / 0.05)))
+                    # une corde par 0,05 mm, dans l'unite du fichier
+                    pas = 0.05 / self._UNITES_MM.get((self.design.units or "").upper(), 1.0)
+                    steps = min(360, max(12, int(arc_length / pas)))
 
                     for i in range(1, steps):
                         angle = angle_start + (angle_end - angle_start) * (i / steps)
@@ -2482,38 +2794,51 @@ class IPC2581Parser:
 
         return points
 
-    def _process_polyline(self, poly_elem: ET.Element, layer: str, default_net: str):
+    def _process_polyline(self, poly_elem: ET.Element, layer: str, default_net: str,
+                          xf=None, trait_elem: Optional[ET.Element] = None):
+        """Une <Polyline>, ou le <Polygon> d'un <Outline> (trait_elem : le
+        <Outline>, qui porte la largeur du trait)."""
+        trait_elem = poly_elem if trait_elem is None else trait_elem
         net = poly_elem.attrib.get("net", default_net)
-        width = self._get_width(poly_elem)
+        width = self._get_width(trait_elem)
         fill_prop = self._get_fill_desc(poly_elem)
         points = self._parse_polygon(poly_elem)
+        if xf:
+            points = [xf(p) for p in points]
         if len(points) >= 2:
-            self.design.add_track(Track(width=width, points=points, layer_name=layer,
-                                        net_name=net, fill_property=fill_prop))
+            self.design.add_track(self._poser_bout(Track(
+                width=width, points=points, layer_name=layer,
+                net_name=net, fill_property=fill_prop), trait_elem))
 
-    def _process_arc(self, arc_elem: ET.Element, layer: str, default_net: str):
+    def _process_arc(self, arc_elem: ET.Element, layer: str, default_net: str,
+                     xf=None, miroir: bool = False):
         try:
             net = arc_elem.attrib.get("net", default_net)
             start = Point(float(arc_elem.attrib["startX"]), float(arc_elem.attrib["startY"]))
             end = Point(float(arc_elem.attrib["endX"]), float(arc_elem.attrib["endY"]))
             center = Point(float(arc_elem.attrib["centerX"]), float(arc_elem.attrib["centerY"]))
             clockwise = arc_elem.attrib.get("clockwise", "false").lower() == "true"
+            if xf:
+                start, end, center = xf(start), xf(end), xf(center)
+                clockwise ^= miroir     # le miroir inverse le sens de parcours
             width = self._get_width(arc_elem)
             fill_prop = self._get_fill_desc(arc_elem)
 
             arc = Arc(width=width, start=start, end=end, center=center, clockwise=clockwise,
                       layer_name=layer, net_name=net, fill_property=fill_prop)
-            self.design.add_arc(arc)
+            self.design.add_arc(self._poser_bout(arc, arc_elem))
         except Exception as e:
             logger.debug("Arc ignoré (couche %s) : %s", layer, e)
 
-    def _process_contour(self, contour_elem: ET.Element, layer: str, default_net: str):
+    def _process_contour(self, contour_elem: ET.Element, layer: str, default_net: str, xf=None):
         net = contour_elem.attrib.get("net", default_net)
         polygon = contour_elem.find(self._tag("Polygon"))
         if polygon is None:
             return
 
         outline_points = self._parse_polygon(polygon)
+        if xf:
+            outline_points = [xf(p) for p in outline_points]
         if len(outline_points) < 3:
             return
 
@@ -2522,6 +2847,8 @@ class IPC2581Parser:
 
         for cutout in contour_elem.findall(self._tag("Cutout")):
             cutout_points = self._parse_polygon(cutout)
+            if xf:
+                cutout_points = [xf(p) for p in cutout_points]
             if len(cutout_points) >= 3:
                 contour_data.cutouts.append(cutout_points)
 
