@@ -760,7 +760,7 @@ async function valider() {
     const d = await r.json().catch(() => ({}));
     if (d.ok) { dire('Appareil autorisé.', 'ok'); location.replace('/'); return; }
     dire(d.message || ('Refusé (' + r.status + ').'), 'err'); champ.select();
-  } catch (e) { dire('Serveur injoignable : ' + e.message, 'err'); }
+  } catch (e) { dire(location.protocol === 'https:' ? 'Envoi bloqué : cet appareil ne fait sans doute pas encore confiance au certificat de ce poste (ou le serveur est arrêté). Installez le certificat (lien ci-dessous), puis rechargez la page.' : 'Serveur injoignable : ' + e.message, 'err'); }
   envoi = false; bouton.disabled = false;
 }
 document.getElementById('f').addEventListener('submit', e => { e.preventDefault(); valider(); });
