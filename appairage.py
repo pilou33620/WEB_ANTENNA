@@ -763,6 +763,15 @@ async function valider() {
   } catch (e) { dire(location.protocol === 'https:' ? 'Envoi bloqué : cet appareil ne fait sans doute pas encore confiance au certificat de ce poste (ou le serveur est arrêté). Installez le certificat (lien ci-dessous), puis rechargez la page.' : 'Serveur injoignable : ' + e.message, 'err'); }
   envoi = false; bouton.disabled = false;
 }
+// Déjà autorisé ? Le cookie SameSite=Strict n'accompagne pas une arrivée depuis un autre site
+// (launcher en HTTP, autre nom d'hôte, lien d'une autre appli) : sans ce contrôle, il fallait
+// recharger la page. Refait au retour sur l'onglet (code validé ailleurs, page sortie du cache).
+function deja() {
+  fetch('/appairage', { credentials: 'same-origin', cache: 'no-store', redirect: 'manual' })
+    .then(r => { if (r.type === 'opaqueredirect') location.replace('/'); }).catch(() => {});
+}
+addEventListener('pageshow', deja);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) deja(); });
 document.getElementById('f').addEventListener('submit', e => { e.preventDefault(); valider(); });
 champ.addEventListener('input', () => {
   const c = champ.value.replace(/\\D/g, '').slice(0, 6);
@@ -849,6 +858,7 @@ if __name__ == "__main__":
         assert req("/", entetes={"Host": "piege.example:80"}).status == 403
         r = req(PAGE)
         assert r.status == 200 and b"/api/appairer" in r.corps and b"TEST" in r.corps
+        assert b"opaqueredirect" in r.corps                       # déjà autorisé : la page repart seule
         code = g.code.code
         assert affiches and Appairage.lisible(code) in affiches[-1]
         assert appairer(code, x=False).status == 403              # sans en-tête : refusé
