@@ -420,7 +420,7 @@ class IPC2581Parser:
         if hasattr(self.xml_file, "seek") and hasattr(self.xml_file, "read"):
             pos = self.xml_file.tell()
             self.xml_file.seek(0)
-            debut = self.xml_file.read(65536)
+            debut = self.xml_file.read()      # tout : une entite declaree apres 64 Ko passait
             self.xml_file.seek(pos)
             debut_b = debut.encode("utf-8", errors="ignore") if isinstance(debut, str) else bytes(debut)
             if b"<!ENTITY" in debut_b.upper():
@@ -430,7 +430,7 @@ class IPC2581Parser:
                 import os
                 if os.path.isfile(self.xml_file):
                     with open(self.xml_file, "rb") as f:
-                        debut_b = f.read(65536)
+                        debut_b = f.read()
                         if b"<!ENTITY" in debut_b.upper():
                             raise IPC2581ParseError("Declaration d'entite XML interdite (<!ENTITY).")
             except OSError:
