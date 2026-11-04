@@ -2,8 +2,9 @@
 /* =============================================================================
    Antenne openEMS — 31-cartes-antenna.js
    La liste des réglages et l'audit local, lus par `antenna_lire` (reglages et
-   audit, js/29-lecture-antenna.js) : rien n'est écrit ici. Chaque remarque de
-   l'audit porte sa correction (`prop`), à faire à l'interface.
+   audit, js/29-lecture-antenna.js) ; l'audit se lit aussi dans la page (#bAudit,
+   panneau Assistant). Rien n'est écrit ici. Chaque remarque de l'audit porte sa
+   correction (`prop`), à faire à l'interface.
 
    Le code vient de l'ancien assistant IA intégré : le banc
    test/banc-interface.js §9 l'éprouve.
@@ -582,3 +583,14 @@ const CARTES_ANTENNA = (function(){
 
   return { CHAMPS, resoudre, controles };
 })();
+
+/* Les contrôles dans la page : le texte même d'antenna_lire audit, ce que Claude lit, l'utilisateur le voit. */
+function antAuditAfficher(){
+  const sortie = document.getElementById("auditResultat");
+  sortie.textContent = LECTURE_ANTENNA.audit().join("\n");   // textContent : des noms viennent du fichier
+  sortie.hidden = false;
+}
+window.addEventListener("DOMContentLoaded", function(){
+  const b = document.getElementById("bAudit");
+  if(b) b.onclick = antAuditAfficher;
+});

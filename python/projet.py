@@ -362,7 +362,14 @@ def liste():
 
 
 def ouvrir(nom):
-    """Tout ce qu'un projet contient, pret a repeupler la page."""
+    """Tout ce qu'un projet contient, pret a repeupler la page ; il devient le projet ouvert."""
+    charge = lire(nom)
+    _ouvrir_memoire(nom, charge["dossier"])
+    return charge
+
+
+def lire(nom):
+    """Le contenu d'un projet, sans rien changer a l'etat du serveur."""
     dossier = _dossier(nom)
     tete = _lire_json(os.path.join(dossier, F_PROJET))
     if tete is None:
@@ -380,7 +387,6 @@ def ouvrir(nom):
     charge["dossier"] = dossier
     charge["carte"] = _lire_json(os.path.join(dossier, F_CARTE))
     charge["resultats"] = _lire_json(os.path.join(dossier, F_RESULTATS))
-    _ouvrir_memoire(nom, dossier)
     return charge
 
 

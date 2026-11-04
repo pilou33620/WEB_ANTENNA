@@ -624,6 +624,14 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         if not self._boucle_locale():
             raise Refus(403, "Seul ce poste peut choisir un dossier du disque.")
 
+    def _pr_lire(self):
+        """Le projet ouvert, en lecture : un GET, qui ne change pas le projet courant."""
+        self._pr()
+        ouvert = projet.ouvert()
+        if not ouvert:
+            raise Refus(409, "Aucun projet ouvert")
+        return self._pr_action(lambda: projet.lire(ouvert["nom"]))
+
     def _pr_racine(self):
         self._ce_poste()
         doc = self._document(4096)
@@ -847,6 +855,9 @@ class Poste(http.server.SimpleHTTPRequestHandler):
             return
         if route == "/api/projet/calculs":
             self._api(self._pr_calculs)
+            return
+        if route == "/api/projet/lire":
+            self._api(self._pr_lire)
             return
         if route == "/api/github":
             self._api(self._github_etat)

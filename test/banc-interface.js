@@ -3006,6 +3006,7 @@ console.log("10. Le canal de pilotage");
   const PIL={};
   global.Pilote={declarer(o){PIL.page=o.page;PIL.projet=o.projet;return this;},
                  capture(f){PIL.capture=f;return this;},commande(n,d){PIL[n]=d;return this;}};
+  charger("12-api-openems.js");      // les devis qu'antenna_openems_chiffrer reprend
   charger("pilote-antenna.js");
   piloteAntenna();
   verifie("la page se declare « antenna », avec sa capture",
@@ -3104,8 +3105,12 @@ console.log("10. Le canal de pilotage");
         const vue=async a=>{ try{ return await V2.executer(a); }catch(e){ return "REFUS "+e.message; } };
         for(const [a,motif] of [[{vue:"4d"},/2d ou 3d/],[{onglet:"phase"},/resultats « phase » inconnu/],[{vue:"3d",etape:99},/de 1 à \d+/],
                                 [{panneau:"cuisine"},/panneau « cuisine » inconnu : resultats, couches/],[{toile:"3d"},/passe d'abord en vue 3D/],
-                                [{vue:"3d",ajuster:true},/vaut pour la vue 2D/],[{onglet:"bal"},/resultats « bal » sans objet/],[{},/Rien à faire/]])
+                                [{vue:"3d",ajuster:true},/vaut pour la vue 2D/],[{onglet:"bal"},/resultats « bal » sans objet/],[{onglet:"ff"},/resultats « ff » sans objet/],[{},/Rien à faire/]])
           verifie("antenna_vue refuse "+JSON.stringify(a)+" sans rien changer", motif.test(await vue(a))&&appels.length===0, appels.map(x=>x[0]).join(","));
+        /* onglet ff : le test de la page (16-resultats.js), un diagramme et non un nf2ff sans valeurs */
+        ANT.resultat.nf2ff.e_norm=[1,0.5];
+        verifie("antenna_vue : ff avec un diagramme", /onglet/.test(await vue({onglet:"ff"})));
+        delete ANT.resultat.nf2ff.e_norm; appels.length=0;
         const t=await vue({vue:"3d", maillage:true, onglet:"s21", etape:2, panneau:"resultats"});
         verifie("antenna_vue applique tout, et le dit",
                 ANT.vue==="3d"&&ANT_ONGLET==="s21"&&ANT.etape===1&&WS.order.dockB.includes("resultats")&&WS.panels.resultats.collapsed===false&&
@@ -3154,6 +3159,30 @@ console.log("10. Le canal de pilotage");
       CON.actif=conG;
       verifie("un nom piege reste sur sa ligne", piege.split("\n").length===1&&!/^- \[critique\]/m.test(piege)&&!/^  correction/m.test(piege), piege);
       ANT.resultat=null;
+      /* antenna_openems_chiffrer : le modele de la page, les routes de ses devis, jamais « lancer » */
+      {
+        const G={oePost:global.oePost, antDocument:global.antDocument, antBalayageSpec:global.antBalayageSpec};
+        const postes=[], modeleAvant=ANT.modele, refusAvant=ANT.refus;
+        global.oePost=async(route,doc)=>{ postes.push([route,doc]); return {chiffre:route}; };
+        global.antDocument=()=>({cuivre:[1]}); global.antBalayageSpec=()=>({points:[1,2]});
+        try{
+          for(const quoi of ["modele","balayage","tableau_s","script"]) await PIL.antenna_openems_chiffrer.executer({quoi});
+          verifie("antenna_openems_chiffrer : les routes de la page, avec son document",
+                  JSON.stringify(postes)===JSON.stringify([["/api/openems",{cuivre:[1]}],["/api/openems/balayage",{cuivre:[1],balayage:{points:[1,2]}}],
+                                                           ["/api/openems/tableau-s",{cuivre:[1]}],["/api/openems/script",{cuivre:[1]}]]), JSON.stringify(postes));
+          verifie("... sans toucher a ce que l'assistant affiche", ANT.modele===modeleAvant&&ANT.refus===refusAvant&&!PIL.antenna_openems_chiffrer.ecriture);
+          let refus=""; try{ await PIL.antenna_openems_chiffrer.executer({quoi:"lancer"}); }catch(e){ refus=e.message; }
+          verifie("... « lancer » refuse", /« quoi »/.test(refus)&&postes.length===4, refus);
+        }finally{ Object.assign(global,G); }
+      }
+      /* les controles se lisent aussi dans la page : le meme texte, en textContent */
+      {
+        const sortie={hidden:true, textContent:""}, docG=global.document;
+        global.document=Object.assign({},docG,{getElementById:id=>id==="auditResultat"?sortie:null});
+        try{ antAuditAfficher(); }finally{ global.document=docG; }
+        verifie("#bAudit montre ce que lit antenna_lire audit", !sortie.hidden&&(await lire({quoi:"audit"})).endsWith(sortie.textContent)&&sortie.textContent.length>0);
+        verifie("#bAudit est dans la page", /id="bAudit"/.test(fs.readFileSync(path.join(__dirname,"..","index.html"),"utf8")));
+      }
       verifie("sans resultat : refus qui dit de lancer depuis la page", /REFUS Pas de résultat dans la page : lance un calcul depuis la page/.test(await lire({quoi:"resultats"})));
     }finally{
       ANT.resultat=resGarde; global.V=window.V=vGarde;

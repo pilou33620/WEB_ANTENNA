@@ -103,9 +103,28 @@ PILOTE = [
     ("ouvrir un projet : POST seulement", pilote("GET", "/api/projet/ouvrir?nom=x")[0] == 404
      and pilote("POST", "/api/projet/ouvrir", {}, entete=False)[0] == 403
      and pilote("POST", "/api/projet/ouvrir", {})[0] == 400),
+    ("lire le projet ouvert : GET, et rien d'ouvert : 409", pilote("GET", "/api/projet/lire")[0] == 409),
     ("js/pilote.js servi", code("/js/pilote.js") == 200 and code("/js/pilote-antenna.js") == 200),
     ("css/pilote.css servi", code("/css/pilote.css") == 200),
 ]
+# Lire le projet ouvert (GET) : son contenu, sans changer le projet courant
+import json, shutil, tempfile  # noqa: E401,E402
+_d = tempfile.mkdtemp()
+_racine, web_antenna.projet.racine = web_antenna.projet.racine, lambda: _d
+try:
+    for _nom in ("p1", "p2"):
+        os.mkdir(os.path.join(_d, _nom))
+        with open(os.path.join(_d, _nom, web_antenna.projet.F_PROJET), "w") as _f:
+            json.dump({"format": web_antenna.projet.FORMAT}, _f)
+    web_antenna.projet.ouvrir("p1")
+    _st, _rep = pilote("GET", "/api/projet/lire")
+    PILOTE.append(("lire le projet ouvert : son contenu", _st == 200 and _rep["nom"] == "p1"))
+    web_antenna.projet.lire("p2")
+    PILOTE.append(("lire ne change pas le projet courant", web_antenna.projet.ouvert()["nom"] == "p1"))
+finally:
+    web_antenna.projet.fermer()
+    web_antenna.projet.racine = _racine
+    shutil.rmtree(_d, ignore_errors=True)
 _c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=10)
 _c.request("GET", "/")
 _r = _c.getresponse(); _r.read(); _c.close()

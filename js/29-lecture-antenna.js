@@ -604,7 +604,7 @@ const LECTURE_ANTENNA = (function(){
     throw new Error("« quoi » inconnu : conception, resultats, courbe, balayage, audit, reglages, " + Object.keys(OUTILS_CARTE).join(", ") + ".");
   }
 
-  return { contexte: extraireContexteOpenems, carte: OUTILS_CARTE, balayage: OUTIL_BALAYAGE, lire,
+  return { contexte: extraireContexteOpenems, carte: OUTILS_CARTE, balayage: OUTIL_BALAYAGE, lire, audit: auditLignes,
            aides: { nb, nbp, fHz, uniteDoc, contient, borner, balayageTermine, tableauBalayage,
                     resultatCourant, s11ALaCible } };
 })();

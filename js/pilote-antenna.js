@@ -90,7 +90,7 @@ function piloteAntennaVue(a){
     const r = point || antRes();
     if(!r) throw new Error("Pas de résultat dans la page : lance un calcul depuis la page.");
     if((o.id === "bal" && !antBal()) || (o.id === "ts" && !(typeof antTs === "function" && antTs())) ||
-       (o.id === "s21" && !r.couplages) || (o.id === "ff" && !r.nf2ff))
+       (o.id === "s21" && !r.couplages) || (o.id === "ff" && !(r.nf2ff && r.nf2ff.e_norm && r.nf2ff.e_norm.length)))   // le test de la page (16-resultats.js)
       throw new Error("resultats « " + o.id + " » sans objet pour ce résultat.");
     faire.push(() => { ANT_ONGLET = o.id; antResultatsRendre(); });
     dit.push(() => "onglet " + (ANT_ONGLETS.find(x => x.id === ANT_ONGLET) || o).titre);   // celui que la page affiche vraiment
@@ -126,6 +126,13 @@ function piloteAntennaVue(a){
   return "Vue : " + dit.map(d => typeof d === "function" ? d() : d).join(" ; ") + ".";
 }
 
+/* antenna_openems_chiffrer : les mêmes appels que les devis de la page (12-api-openems.js), sans lancer
+   ni toucher à ce que l'assistant affiche. Tous rendent le refus du serveur tel quel. */
+const PILOTE_CHIFFRAGES = {
+  modele:() => oePost(OE_ROUTE, antDocument()),   // oePreparer ferait la même chose, en réécrivant ANT.modele et ANT.refus
+  balayage:oeBalayage, tableau_s:oeTableauS, script:oeScript,
+};
+
 function piloteAntenna(){
   if(typeof Pilote === "undefined") return;
   Pilote.declarer({page:"antenna", projet:() => (typeof PRJ !== "undefined" ? PRJ.nom : "")});
@@ -133,4 +140,8 @@ function piloteAntenna(){
   // les lectures (js/29-lecture-antenna.js) : rien d'écrit, rien de lancé
   Pilote.commande("antenna_lire", {executer:async a => LECTURE_ANTENNA.lire(a.quoi, a)});
   Pilote.commande("antenna_vue", {executer:async a => piloteAntennaVue(a)});
+  Pilote.commande("antenna_openems_chiffrer", {executer:async a => {
+    if(!Object.prototype.hasOwnProperty.call(PILOTE_CHIFFRAGES, a.quoi)) throw new Error("« quoi » : " + Object.keys(PILOTE_CHIFFRAGES).join(", ") + ".");
+    return PILOTE_CHIFFRAGES[a.quoi]();
+  }});
 }

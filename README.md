@@ -1599,8 +1599,8 @@ Sonnet, Haiku) et dit, à chaque ouverture, si Claude Code est prêt.
 ### L'audit des réglages, exécuté par l'outil
 
 Il tourne dans la page (`js/31-cartes-antenna.js`, `controles`) : **zéro
-requête, et aucune donnée ne sort du poste**. Claude le lit par `antenna_lire`
-(audit) :
+requête, et aucune donnée ne sort du poste**. Le bouton **Contrôles** (`#bAudit`)
+du panneau Assistant l'affiche ; Claude le lit par `antenna_lire` (audit) :
 
 | Ce qui est vérifié | Ce qui est attrapé |
 |---|---|
