@@ -141,6 +141,22 @@ finally:
     web_antenna.Poste._pr_etat = _vrai
 PILOTE.append(("500 : message court, sans chemin", _st == 500 and "secret" not in _rep["detail"]
                and "FileNotFoundError" in _rep["detail"]))
+
+# Un client coupé en pleine réponse n'est pas une erreur à afficher ; une vraie erreur, si
+vues = []
+serveur.handle_error = lambda *a: vues.append(a[1])
+for exc, attendu in ((ConnectionAbortedError, 0), (ConnectionResetError, 0), (BrokenPipeError, 0), (ValueError, 1)):
+    def casse(_handler, exc=exc):
+        raise exc("essai")
+    vues.clear()
+    web_antenna.PILOTE.traiter = casse
+    try:
+        code("/")
+    except Exception:
+        pass             # la connexion tombe : c'est le but
+    del web_antenna.PILOTE.traiter
+    PILOTE.append(("client coupé : " + exc.__name__, len(vues) == attendu))
+
 for nom, bon in PILOTE:
     if not bon:
         echecs += 1

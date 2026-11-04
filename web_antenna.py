@@ -195,6 +195,14 @@ class Poste(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=ROOT, **kw)
 
+    def handle(self):
+        # Un client coupé (onglet fermé, attente du pilote abandonnée) n'est pas une erreur à afficher.
+        # ConnectionError couvre BrokenPipe, Reset et Aborted, celui que Windows donne le plus souvent.
+        try:
+            super().handle()
+        except ConnectionError:
+            self.close_connection = True
+
     # -- journal ---------------------------------------------------------
     def log_message(self, format, *args):              # noqa: A002
         sys.stderr.write("  " + appairage.masquer(format % args) + "\n")
