@@ -744,7 +744,7 @@ function wsMenuOpen(){
   };
   document.addEventListener("pointerdown",function(e){
     const m=wsQ("wsMenu");
-    if(m&&m.classList.contains("on")&&!m.contains(e.target)&&e.target!==wsQ("bWs"))
+    if(m&&m.classList.contains("on")&&!m.contains(e.target)&&e.target!==wsQ("bWs")&&!e.target.closest(".pilote"))
       wsMenuClose();
   });
   document.addEventListener("keydown",function(e){

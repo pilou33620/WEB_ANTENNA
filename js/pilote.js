@@ -236,6 +236,13 @@
        sur ses propres cartes ni sur l'interrupteur. */
     const CONTROLES = "button, a[href], input, select, textarea, summary, [contenteditable=true], [onclick], " +
                       "[role=button], [role=tab], [role=menuitem], [role=checkbox], [role=option], [role=switch]";
+    /* Jamais par Claude, même d'un geste (ROUTES_INTERDITES du MCP) : envoyer sur GitHub, lancer ou arrêter openEMS,
+       régler ses fils. Le banc vérifie que ces cibles existent. */
+    const GESTES_INTERDITS = "#bSaveGit, [data-prj=github], [data-id=sauverGit], #bLancer, #bLancer2, #bBalLancer, " +
+                             "#bTsLancer, #bCampagne, [data-con-motif-simuler], #bBanc, #antFils, #bFilsBest, #bArreter, " +
+                             "#bArret, #bArret2";
+    // Dans la visionneuse, Enregistrer envoie aussi sur GitHub (ailleurs, #bJson est un simple téléchargement)
+    const reserve = e => !!e.closest(GESTES_INTERDITS) || (P.page === "visionneuse-ipc" && !!e.closest("#bJson"));
 
     function dansPanneau(e) { return !!(panneau && e && panneau.contains(e)); }
 
@@ -257,6 +264,7 @@
       else if (/^(INPUT|TEXTAREA)$/.test(e.tagName) && !/^(button|submit|reset|file)$/.test(t))
         d.push("= « " + String(e.value).slice(0, 80) + " »");
       if (e.disabled) d.push("désactivé");
+      if (reserve(e)) d.push("réservé à l'utilisateur");
       if (e.getAttribute("aria-selected") === "true" || e.getAttribute("aria-pressed") === "true" || e.classList.contains("active"))
         d.push("actif");
       return d.join(", ");
@@ -295,7 +303,17 @@
       catch (_) { throw new Error("« cible » : un numéro rendu par interface_lire, ou un sélecteur CSS (#bDrc)."); }
       if (!e) throw new Error("Cible « " + s + " » introuvable : relis l'interface, elle a pu changer.");
       if (dansPanneau(e)) throw new Error("Le panneau « Claude » est réservé à l'utilisateur.");
-      if (e.disabled) throw new Error("« " + libelle(e) + " » est désactivé.");
+      const lib = "« " + libelle(e) + " »";
+      if (reserve(e)) throw new Error(lib + " est réservé à l'utilisateur : Claude n'y touche jamais.");
+      if (e.matches(":disabled")) throw new Error(lib + " est désactivé.");
+      // Comme une main : seulement ce qui est à l'écran et au premier plan (pas sous une fenêtre ou un voile)
+      if (!e.getClientRects().length || env.fenetre.getComputedStyle(e).visibility === "hidden")
+        throw new Error(lib + " n'est pas visible : ouvre d'abord son menu ou son panneau.");
+      e.scrollIntoView({ block: "nearest", inline: "nearest" });
+      const r = e.getBoundingClientRect();
+      const dessus = env.document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (!dessus || !(dansPanneau(dessus) || e.contains(dessus) || dessus.contains(e)))
+        throw new Error(lib + " est couvert ou hors de l'écran : ferme d'abord ce qui le recouvre.");
       return e;
     }
 
@@ -323,6 +341,8 @@
     /* Le geste, vérifié pour la carte (proposer) et recalculé au clic : le contrôle a pu bouger depuis. */
     function geste(a) {
       const g = a.geste;
+      // Dans un onglet masqué, personne ne peut cliquer, et la page ne se redessine pas
+      if (!visible()) throw new Error("Cet onglet n'est pas à l'écran : demande à l'utilisateur de l'afficher.");
       if (g === "cliquer" || g === "saisir") {
         const e = cibleUi(a.cible), lib = "« " + libelle(e) + " »";
         if (g === "cliquer") return { titre: "Interface : cliquer " + lib, faire: () => {
@@ -332,6 +352,7 @@
           return "Cliqué " + lib + ".";
         } };
         if (a.valeur == null) throw new Error("« saisir » : donne « valeur ».");
+        if (e.readOnly) throw new Error(lib + " est en lecture seule.");
         const t = (e.type || "").toLowerCase(), v = a.valeur;
         if (t === "checkbox" || t === "radio") {
           const voulu = v === true || /^(true|1|oui|coché)$/i.test(String(v));
@@ -357,6 +378,9 @@
       }
       if (g === "touche") {
         const k = touches(a.touche), nom = String(a.touche).trim();
+        // Ctrl+Maj+S envoie sur GitHub dans les éditeurs ; Ctrl+S aussi dans la visionneuse
+        if ((k.ctrlKey || k.metaKey) && k.key.toLowerCase() === "s" && (k.shiftKey || P.page === "visionneuse-ipc"))
+          throw new Error("Touche " + nom + " : elle envoie sur GitHub, ce qui est réservé à l'utilisateur.");
         return { titre: "Interface : touche " + nom, faire: () => {
           const doc = env.document;
           let e = a.cible != null ? cibleUi(a.cible) : doc.activeElement;
@@ -387,6 +411,7 @@
           const e = env.document.elementFromPoint(x, y);
           if (!e) throw new Error("Ce point du canevas est hors de l'écran : recadre la vue, puis une nouvelle capture.");
           if (dansPanneau(e)) throw new Error("Le panneau « Claude » couvre ce point : demande à l'utilisateur de le replier.");
+          if (reserve(e)) throw new Error("Ce point tombe sur un contrôle réservé à l'utilisateur.");
           const o = Object.assign({ button: a.droit ? 2 : 0 }, mods);
           souris(e, "pointermove", x, y, o);
           souris(e, "mousemove", x, y, o);
