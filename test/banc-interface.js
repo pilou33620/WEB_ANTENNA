@@ -1269,14 +1269,11 @@ charger("29-lecture-antenna.js");
 charger("31-cartes-antenna.js");
 
 // le registre des cartes et l'audit : js/31-cartes-antenna.js (CARTES_ANTENNA)
-const resoudreCarte=CARTES_ANTENNA.resoudre, validerCarte=CARTES_ANTENNA.valider,
-      propositionCarte=CARTES_ANTENNA.proposition, appliquerCarte=CARTES_ANTENNA.appliquer,
-      annulerCarte=CARTES_ANTENNA.annuler, controlesCarte=CARTES_ANTENNA.controles,
+const resoudreCarte=CARTES_ANTENNA.resoudre, controlesCarte=CARTES_ANTENNA.controles,
       CHAMPS_CARTES=CARTES_ANTENNA.CHAMPS;
 
 verifie("le module expose ce qu'il faut pour l'eprouver",
-        [resoudreCarte,validerCarte,propositionCarte,appliquerCarte,annulerCarte,
-         controlesCarte].every(f=>typeof f==="function")&&
+        [resoudreCarte,controlesCarte].every(f=>typeof f==="function")&&
         !!CHAMPS_CARTES);
 
 /* -- ce qui est refuse --------------------------------------------------- */
@@ -1298,16 +1295,6 @@ ANT.balayage.actif=false;
 const CARTE_CIBLE=resoudreCarte("bande.f1");
 verifie("un chemin de la liste blanche se resout",
         !CARTE_CIBLE.refus&&CARTE_CIBLE.obj===ANT.bande&&CARTE_CIBLE.cle==="f1");
-verifie("une valeur hors bornes est refusee en disant laquelle",
-        validerCarte(CARTE_CIBLE.descr,1e15).ok===false&&
-        validerCarte(CARTE_CIBLE.descr,1e15).pourquoi.indexOf("borne haute")>=0);
-verifie("un nombre ecrit a la virgule passe quand meme",
-        validerCarte(CHAMPS_CARTES["arret.energie"],"-45,5").v===-45.5);
-verifie("un entier reste entier",
-        validerCarte(CHAMPS_CARTES["boite.pml"],"8,4").v===8);
-verifie("un choix hors liste est refuse",
-        validerCarte(CHAMPS_CARTES["pertes.mode"],"debye").ok===true&&
-        validerCarte(CHAMPS_CARTES["pertes.mode"],"lorentz").ok===false);
 
 /* -- « port. » vise le port en cours de reglage -------------------------- */
 antPortAjouter();
@@ -1316,24 +1303,6 @@ verifie("« port.x » vise le port courant, pas le premier",
         resoudreCarte("port.x").obj===ANT.ports[1]);
 ANT.portActif=0;
 antPortRetirer(1);
-
-/* -- une proposition : l'avant, l'apres, et l'aller-retour ---------------- */
-const CARTE_P=propositionCarte({type:"reglages", titre:"Recentrer",
-                          valeurs:{"bande.f1":2.08e9, "bande.f2":2.82e9,
-                                   "bande.f9":1, "boite.pml":99}});
-verifie("une proposition garde l'avant en face de l'apres",
-        CARTE_P.lignes.length===2&&CARTE_P.lignes[0].avant===2.4e9&&
-        CARTE_P.lignes[0].apres===2.08e9);
-verifie("et elle dit ce qu'elle a refuse au lieu de le taire",
-        CARTE_P.refus.length===2);
-verifie("preparer une proposition n'ecrit rien",
-        ANT.bande.f1===2.4e9);
-appliquerCarte(CARTE_P);
-verifie("l'appliquer ecrit, et seulement ce qui etait valide",
-        ANT.bande.f1===2.08e9&&ANT.bande.f2===2.82e9&&ANT.boite.pml!==99);
-annulerCarte(CARTE_P);
-verifie("l'annuler remet exactement ce qui etait la",
-        ANT.bande.f1===2.4e9&&ANT.bande.f2===2.5e9);
 
 /* -- les verifications locales ------------------------------------------- */
 /* Elles doivent marcher sans reseau NI clef : c'est leur raison d'etre. */
@@ -1345,127 +1314,23 @@ verifie("une cible hors de la bande est relevee comme grave",
         !!CARTE_HORS&&CARTE_HORS.rang==="grave");
 verifie("et la remarque porte sa correction",
         !!CARTE_HORS.prop&&CARTE_HORS.prop.valeurs["bande.f1"]>4.9e9);
-appliquerCarte(propositionCarte(CARTE_HORS.prop));
+for(const [c,v] of Object.entries(CARTE_HORS.prop.valeurs)){ const r=resoudreCarte(c); r.obj[r.cle]=v; }
 verifie("appliquer la correction remet la cible dans la bande",
         ANT.bande.fcible>ANT.bande.f1&&ANT.bande.fcible<ANT.bande.f2);
 verifie("et la faute ne se releve plus",
         !controlesCarte().some(a=>a.titre.indexOf("hors de la bande")>=0));
 
-/* -- la geometrie libre : la seule carte qui pose du CUIVRE --------------- */
-/* POURQUOI CELLE-CI MERITE SES PROPRES EPREUVES. Les trois autres cartes
-   deplacent des nombres qu'un humain relit ; celle-ci ecrit dans le dessin,
-   c'est-a-dire dans l'antenne. Une forme qui passe la barriere alors qu'elle
-   n'aurait pas du ne fait rien planter : elle pose du cuivre quelque part, la
-   simulation tourne, et le resultat a l'air d'un resultat. On eprouve donc
-   les deux sens — ce qui est refuse, et ce qui se defait. */
-CON.actif=false;
-verifie("hors du mode conception, une carte « formes » ne pose rien",
-        propositionCarte({type:"formes", elements:[
-          {type:"rect", couche:"haut", x1:0, y1:0, x2:10, y2:10}
-        ]}).refus.length===1);
-
+/* -- le mode conception, pour les controles qui suivent ------------------ */
 CON.actif=true;
 CON.pile=conPileDefaut();
 CON.coucheActive=conPremierCuivre();
 CON.carte.L=40; CON.carte.W=45;
-CON.elements=[]; CON.sel=-1; CON.gabarit=null; CON.calcul=null;
-ANT.ports=[antPortNeuf(true)]; ANT.portActif=0;
-conHistRaz();
-
-const CARTE_F=propositionCarte({type:"formes", titre:"Essai",
-  elements:[
-    {type:"rect",  couche:"bas",  net:"GND",     x1:0, y1:0, x2:40, y2:45},
-    {type:"poly",  couche:"haut", net:"ANTENNE", pts:[[8,12],[30,12],[30,36],[8,36]]},
-    {type:"piste", couche:"haut", net:"ANTENNE", pts:[[20,0],[20,12]], w:3.06},
-    {type:"via",   couche:"haut", net:"GND",     x:5, y:5, d:0.6},
-    {type:"rect",  couche:"Cuivre dessous", net:"GND", x1:1, y1:1, x2:3, y2:3},
-    {type:"cercle",couche:"haut", cx:5, cy:5, r:1},
-    {type:"poly",  couche:"haut", pts:[[0,0],[1,0]]},
-    {type:"rect",  couche:"haut", x1:100, y1:100, x2:110, y2:110},
-    {type:"rect",  couche:"couche imaginaire", x1:0, y1:0, x2:5, y2:5}
-  ],
-  port:{x:20, y:0.4, w:3.06, l:0.8}});
-
-verifie("une geometrie libre prepare ses formes une par une",
-        CARTE_F.els.length===5&&CARTE_F.refus.length===4,
-        CARTE_F.els.length+" posees, "+CARTE_F.refus.length+" refusees");
-verifie("un genre inconnu est refuse en le nommant",
-        CARTE_F.refus.some(r=>r.indexOf("cercle")>=0));
-verifie("un polygone de deux sommets est refuse comme au dessin",
-        CARTE_F.refus.some(r=>r.indexOf("trois sommets")>=0));
-verifie("une forme entierement hors de la carte est refusee",
-        CARTE_F.refus.some(r=>r.indexOf("hors de la carte")>=0));
-verifie("une couche qui n'existe pas est refusee",
-        CARTE_F.refus.some(r=>r.indexOf("imaginaire")>=0));
-verifie("le nom exact d'une couche vaut le raccourci qui la designe",
-        CARTE_F.els[4].cu===CARTE_F.els[0].cu);
-verifie("les nets proposes sont repris tels quels",
-        CARTE_F.els[0].net==="GND"&&CARTE_F.els[1].net==="ANTENNE");
-verifie("preparer une geometrie n'ecrit rien",
-        CON.elements.length===0&&ANT.port.pose===false);
-
-appliquerCarte(CARTE_F);
-verifie("l'appliquer pose le cuivre ET le port",
-        CON.elements.length===5&&ANT.port.pose===true&&
-        Math.abs(ANT.port.x-20)<1e-9&&ANT.port.dir==="z",
-        CON.elements.length+" formes");
-/* LA MEME RAISON QUE POUR LE TRACE D'UN MOTIF : la proposition est recalculee
-   a chaque reaffichage de la liste, et un dessin qui partagerait ses points
-   avec elle changerait sous le doigt. */
-verifie("les formes posees sont des copies, pas les objets prepares",
-        CON.elements[1].pts!==CARTE_F.els[1].pts);
-annulerCarte(CARTE_F);
-verifie("l'annuler rend le dessin et le port a ce qu'ils etaient",
-        CON.elements.length===0&&ANT.port.pose===false);
-
-/* -- le garde-fou du nombre de formes ------------------------------------- */
-const CARTE_FN=[];
-for(let i=0;i<60;i++)CARTE_FN.push({type:"rect",couche:"haut",
-                                 x1:0,y1:0,x2:1,y2:1});
-verifie("au-dela du garde-fou, aucune forme n'est preparee",
-        propositionCarte({type:"formes", elements:CARTE_FN}).els.length===0);
-
-/* -- la carte est jugee AVANT les formes qu'elle accueille ---------------- */
-/* Une forme mesuree contre l'ANCIENNE taille serait refusee alors que la
-   proposition agrandit justement la carte pour elle. */
-const CARTE_FC=propositionCarte({type:"formes", carte:{L:60, W:50},
-  elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:0,y1:0,x2:55,y2:48}]});
-verifie("une forme qui n'entre que dans la carte proposee est acceptee",
-        CARTE_FC.els.length===1&&CARTE_FC.refus.length===0,
-        (CARTE_FC.refus[0]||""));
-
-/* -- ce qui deborde est pose, mais dit --------------------------------- */
-const CARTE_FD=propositionCarte({type:"formes",
-  elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:-5,y1:5,x2:10,y2:15}]});
-verifie("une forme a cheval sur le bord est posee, et la carte le signale",
-        CARTE_FD.els.length===1&&CARTE_FD.avis.some(a=>a.indexOf("borde")>=0));
-
-/* UNE PISTE SE JUGE SUR SON AXE, ET C'EST MESURE. `conBoite` elargit une
-   piste d'une demi-largeur : une ligne d'alimentation qui vient mourir au
-   bord de la carte — ce que font les six motifs de l'outil — debordait donc
-   toujours de w/2, et l'avis se serait allume sur presque chaque
-   proposition. Un avis qui se declenche tout le temps ne se lit plus. */
-const CARTE_FL=propositionCarte({type:"formes",
-  elements:[{type:"piste",couche:"haut",net:"ANTENNE",
-             pts:[[20,0],[20,12]], w:3.06}]});
-verifie("une ligne qui meurt au bord de la carte ne passe pas pour un debord",
-        CARTE_FL.els.length===1&&!CARTE_FL.avis.some(a=>a.indexOf("borde")>=0),
-        CARTE_FL.avis.join(" | "));
-
-/* -- « remplacer » efface, et l'annulation rend tout ---------------------- */
 CON.elements=[{type:"rect", cu:conPremierCuivre(), net:"ANTENNE", trou:false,
                x1:1, y1:1, x2:5, y2:5}];
+CON.sel=-1; CON.gabarit=null; CON.calcul=null;
+ANT.ports=[antPortNeuf(true)]; ANT.portActif=0;
 ANT.port.pose=true; ANT.port.x=9; ANT.port.y=9;
-const CARTE_FX=propositionCarte({type:"formes", remplacer:true,
-  elements:[{type:"rect",couche:"haut",net:"ANTENNE",x1:2,y1:2,x2:8,y2:8}]});
-appliquerCarte(CARTE_FX);
-verifie("« remplacer » efface le dessin et depose les ports",
-        CON.elements.length===1&&CON.elements[0].x2===8&&
-        ANT.port.pose===false);
-annulerCarte(CARTE_FX);
-verifie("et l'annuler rend le dessin d'avant ET le port qui allait avec",
-        CON.elements.length===1&&CON.elements[0].x2===5&&
-        ANT.port.pose===true&&ANT.port.x===9);
+conHistRaz();
 
 /* -- une couche declaree masse qui ne porte aucun cuivre ------------------ */
 /* LE DIPOLE IMPRIME EN GEOMETRIE LIBRE : ses deux bras sur le dessus, et la
@@ -3127,10 +2992,8 @@ console.log("Verification du port et etat des etapes");
 /* ==========================================================================
    10. Le canal de pilotage (MCP de web_suite) : js/pilote-antenna.js
    --------------------------------------------------------------------------
-   La page se declare et offre « antenna_proposer » : la carte de l'assistant,
-   proposee puis appliquee au clic dans le panneau « Claude » (js/pilote.js,
-   eprouve dans web_suite). Ici : l'adaptateur, sur les vraies fonctions de
-   31-cartes-antenna.js — ce qu'il montre, ce qu'il ecrit, et ce qu'il defait.
+   La page se declare et offre ses lectures et le reglage de sa vue (js/pilote.js,
+   eprouve dans web_suite). Ecrire dans la page se fait par des gestes.
    ========================================================================== */
 console.log("");
 console.log("10. Le canal de pilotage");
@@ -3147,30 +3010,10 @@ console.log("10. Le canal de pilotage");
   piloteAntenna();
   verifie("la page se declare « antenna », avec sa capture",
           PIL.page==="antenna"&&typeof PIL.capture==="function"&&typeof PIL.projet()==="string");
-  const D=PIL.antenna_proposer;
-  verifie("antenna_proposer est une ecriture annulable, avec son etat",
-          !!D&&D.ecriture===true&&typeof D.annuler==="function"&&typeof D.etat==="function");
+  verifie("aucune commande d'ecriture : ni antenna_proposer ni carte",
+          !PIL.antenna_proposer&&Object.values(PIL).every(d=>!d||!d.ecriture));
 
   ANT.bande={f1:2.4e9, f2:2.5e9, n:401, fcible:2.45e9};
-  const carte={type:"reglages", titre:"Recentrer", valeurs:{"bande.f1":2.08e9, "bande.f9":1}};
-  const prop=D.proposer({carte});
-  verifie("la carte montre l'avant, l'apres, et ce qui est refuse",
-          prop.titre==="Recentrer"&&/2[.,]4 GHz/.test(prop.details)&&
-          /2[.,]08 GHz/.test(prop.details)&&/f9/.test(prop.details), prop.details);
-  verifie("proposer n'ecrit rien", ANT.bande.f1===2.4e9);
-  /* la carte montre aussi chaque forme posee et les avis (dessin efface, port absent) */
-  {
-    const vraiP=CARTES_ANTENNA.proposition;
-    CARTES_ANTENNA.proposition=()=>({type:"formes", titre:"Formes", refus:[],
-      lignes:[{chemin:"formes", nom:"formes dessinees", texte:true, avant:"0", apres:"2"}],
-      detail:["rectangle · Cuivre dessus · 4 × 8 mm"], avis:["Aucun port n'est pose"]});
-    try{
-      const pf=D.proposer({carte:{type:"formes"}});
-      verifie("la carte d'une geometrie libre liste ses formes et ses avis",
-              /formes dessinees : 0 → 2/.test(pf.details)&&/· rectangle/.test(pf.details)&&/ⓘ Aucun port/.test(pf.details),
-              pf.details);
-    }finally{ CARTES_ANTENNA.proposition=vraiP; }
-  }
   /* la lecture des reglages ne montre que des chemins de la liste blanche, et elle les montre */
   {
     const lus=LECTURE_ANTENNA.lire("reglages",{}).split("\n").filter(l=>l.startsWith("- "))
@@ -3179,58 +3022,6 @@ console.log("10. Le canal de pilotage");
             lus.length>10&&lus.every(c=>Object.prototype.hasOwnProperty.call(CARTES_ANTENNA.CHAMPS,c))&&
             lus.includes("bande.f1"), lus.filter(c=>!CARTES_ANTENNA.CHAMPS[c]).join(", "));
   }
-  const avant=D.etat(), jeton=D.appliquer({carte}), apres=D.etat();
-  verifie("appliquer ecrit, et l'etat le voit", ANT.bande.f1===2.08e9&&apres!==avant);
-  D.annuler({carte}, jeton);
-  verifie("annuler remet l'avant", ANT.bande.f1===2.4e9&&D.etat()===avant);
-
-  /* L'etat couvre tout ce qu'une carte peut ecrire (les racines de CARTES_ANTENNA.CHAMPS) : sinon Annuler
-     ecraserait un reglage change a la main entre-temps. */
-  const e0=D.etat(), cuivre=ANT.modeleCuivre;
-  ANT.modeleCuivre=(cuivre==="pec"?"feuille":"pec");
-  verifie("l'etat voit modeleCuivre", D.etat()!==e0);
-  ANT.modeleCuivre=cuivre;
-  const nf=JSON.stringify(ANT.nf2ff); ANT.nf2ff=Object.assign({},ANT.nf2ff,{actif:!(ANT.nf2ff&&ANT.nf2ff.actif)});
-  verifie("l'etat voit nf2ff", D.etat()!==e0);
-  ANT.nf2ff=JSON.parse(nf);
-
-  /* La carte affichee est celle qui s'applique : « port. » vise le port courant, et s'il a
-     change entre l'affichage et le clic, l'application est refusee. */
-  antPortAjouter(); ANT.portActif=0;
-  const cartePort={type:"reglages", valeurs:{"port.R":75}};
-  const propPort=D.proposer({carte:cartePort});
-  ANT.portActif=1;
-  let refusPort="";
-  try{ D.appliquer({carte:cartePort}, propPort); }catch(e){ refusPort=e.message; }
-  verifie("port change entre l'affichage et le clic : refuse", /chang/.test(refusPort)&&ANT.ports[1].R!==75);
-  ANT.portActif=0; antPortRetirer(1);
-
-  let msg="";
-  try{ D.proposer({carte:{type:"reglages", valeurs:{"arret.secret":1}}}); }catch(e){ msg=e.message; }
-  verifie("une carte sans rien d'applicable est refusee en disant pourquoi", /secret/.test(msg));
-
-  /* Le balayage : annulerCarte ne sait pas le defaire, l'adaptateur garde et remet
-     ANT.balayage lui-meme. Doublures le temps de l'essai : un balayage valide
-     exige un motif ouvert en mode conception. */
-  const vraiP=CARTES_ANTENNA.proposition, vraiA=CARTES_ANTENNA.appliquer;
-  CARTES_ANTENNA.proposition=()=>({type:"balayage", titre:"Balayer L", lignes:[{chemin:"L", nom:"L", avant:"", apres:"10 → 20"}], refus:[]});
-  CARTES_ANTENNA.appliquer=()=>{ Object.assign(ANT.balayage,{actif:true, source:"L", min:10, max:20, pas:1}); return "arme"; };
-  try{
-    const bal0=JSON.stringify(ANT.balayage);
-    const j=D.appliquer({carte:{type:"balayage"}});
-    verifie("un balayage applique est arme", ANT.balayage.actif===true&&ANT.balayage.source==="L");
-    D.annuler({carte:{type:"balayage"}}, j);
-    verifie("et l'annuler le remet tel qu'avant", JSON.stringify(ANT.balayage)===bal0);
-    /* Des cotes qui redessinent le motif : annulerCarte ne remet que les cotes, pas le motif.
-       L'annulation est refusee en le disant, plutot que d'afficher « Annulee » a moitie. */
-    CARTES_ANTENNA.proposition=()=>({type:"cotes", tracer:true, titre:"Cotes", lignes:[{chemin:"L", nom:"L", avant:1, apres:2}], refus:[]});
-    CARTES_ANTENNA.appliquer=()=>"trace";
-    const jc=D.appliquer({carte:{type:"cotes"}});
-    let refusCotes="";
-    try{ D.annuler({carte:{type:"cotes"}}, jc); }catch(e){ refusCotes=e.message; }
-    verifie("cotes avec motif redessine : Annuler refuse en le disant", /motif/.test(refusCotes));
-  }finally{ CARTES_ANTENNA.proposition=vraiP; CARTES_ANTENNA.appliquer=vraiA; }
-
   /* antenna_lire : les lectures de la page, sans rien ecrire ni lancer. Les fonctions de
      lancement sont remplacees par des pieges le temps de l'essai. */
   const L=PIL.antenna_lire;
@@ -3278,10 +3069,10 @@ console.log("10. Le canal de pilotage");
               /^- ports\.0\.R = /m.test(await lire({quoi:"reglages", filtre:"ports."}))&&/^- ports\.1\.R = /m.test(await lire({quoi:"reglages", filtre:"ports."})));
       antPortRetirer(1);
       const aud=await lire({quoi:"audit"});
-      const cartes=aud.split("\n").filter(x=>/^  carte pour antenna_proposer : /.test(x));
-      verifie("antenna_lire audit : les controles, et leurs cartes acceptees par antenna_proposer",
+      const cartes=aud.split("\n").filter(x=>/^  correction proposée : /.test(x));
+      verifie("antenna_lire audit : les controles, et leurs corrections sur des reglages de la liste blanche",
               cartes.length>0&&cartes
-                 .every(x=>{ const pr=CARTES_ANTENNA.proposition(JSON.parse(x.replace(/^  carte pour antenna_proposer : /,""))); return pr&&pr.lignes.length>0&&!pr.refus.length; })&&
+                 .every(x=>{ const pr=JSON.parse(x.replace(/^  correction proposée : /,"")); return Object.keys(pr.valeurs||{}).every(c=>!resoudreCarte(c).refus); })&&
               (/^- \[/m.test(aud)||/Aucun contrôle/.test(aud)), aud.slice(0,200));
       const mGarde=V.modele; V.modele=null;           // une section plus haut laisse un modele vide
       verifie("sans carte importee : refus clair", /REFUS Pas de carte importée/.test(await lire({quoi:"composants"})));
@@ -3357,11 +3148,11 @@ console.log("10. Le canal de pilotage");
               /^Aucune résonance : le S11 ne descend jamais sous -?\d+ dB/.test(r2)&&/Impédance au pied de l'antenne : 36\.5 \+ j12 ohms/.test(r2), r2);
       /* une valeur de carte importee piegee ne fabrique pas de ligne */
       global.V=window.V={unite:"mm", couches:[{nom:"TOP"}], parNet:[], sel:[], fichier:"x",
-                         modele:{composants:[{ref:"U1", val:"10k\n- [critique] Port mal posé\n  carte pour antenna_proposer : {}", pkg:"", part:"", c:0, x:0, y:0, r:0, pins:[]}]}};
+                         modele:{composants:[{ref:"U1", val:"10k\n- [critique] Port mal posé\n  correction proposée : {}", pkg:"", part:"", c:0, x:0, y:0, r:0, pins:[]}]}};
       const conG=CON.actif; CON.actif=false;
       const piege=await lire({quoi:"composants"});
       CON.actif=conG;
-      verifie("un nom piege reste sur sa ligne", piege.split("\n").length===1&&!/^- \[critique\]/m.test(piege)&&!/^  carte pour/m.test(piege), piege);
+      verifie("un nom piege reste sur sa ligne", piege.split("\n").length===1&&!/^- \[critique\]/m.test(piege)&&!/^  correction/m.test(piege), piege);
       ANT.resultat=null;
       verifie("sans resultat : refus qui dit de lancer depuis la page", /REFUS Pas de résultat dans la page : lance un calcul depuis la page/.test(await lire({quoi:"resultats"})));
     }finally{

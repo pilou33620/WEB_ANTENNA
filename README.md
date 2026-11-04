@@ -121,7 +121,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── 27-apercu-motif.js  le dessin coté d'un motif d'antenne, avant de le poser
 │   ├── 28-projet.js        capturer la séance, et la reprendre
 │   ├── 29-tableau-s.js     le tableau S complet, et son fichier Touchstone
-│   ├── 31-cartes-antenna.js les cartes d'action (liste blanche) et l'audit des réglages, pour le canal de pilotage
+│   ├── 31-cartes-antenna.js la liste des réglages et l'audit, pour les lectures du canal de pilotage
 │   ├── 31-rapport.js       le rapport d'ingénierie (avec charge cellules × nmax et localisation de la plus petite cellule)
 │   ├── 32-visionneuse.js   la carte de champ animée, lue dans les .vtr
 │   ├── 33-pieces.js        les pièces importées (STEP, STL) : boîtier, piles, une matière par corps
@@ -147,7 +147,7 @@ essais figure dans l'état renvoyé à la page.
 │   ├── carte-antenne.py    fabrique une carte d'essai IPC-2581
 │   ├── patch-2450.xml      … celle qu'elle produit
 │   ├── banc-polygones.js   le découpage des découpes, cas dégénérés compris
-│   └── banc-interface.js   ports, balayage, unités, liste blanche des cartes d'action, classification nets, robustesse
+│   └── banc-interface.js   ports, balayage, unités, liste des réglages, audit, classification nets, robustesse
 ├── env/                    l'environnement virtuel Python (dépendances pip)
 └── openEMS/                les binaires du solveur (à télécharger, voir « Installation »)
 ```
@@ -1586,7 +1586,7 @@ que votre patch ne s'adapte pas ».
 Claude Code, par le serveur MCP de
 [web_suite](https://github.com/pilou33620/web_suite) (`lanceur/docs/DETAILS.md`),
 sait le dire. Il ne décide de rien : il lit la page (`antenna_lire`), il explique,
-il propose une carte (`antenna_proposer`) qui s'affiche dans le panneau
+il agit dans la page par les mêmes gestes que vous, chacun en carte dans le panneau
 « Claude » — et **aucune valeur ne s'écrit sans un clic**, sauf si l'on allume
 l'interrupteur de l'onglet. Il remplace l'ancien assistant IA intégré, retiré.
 
@@ -1613,47 +1613,15 @@ requête, et aucune donnée ne sort du poste**. Claude le lit par `antenna_lire`
 | le dernier résultat | une résonance au bord de la bande ; un écart à la cible, avec le sens de la correction ; une désadaptation, en séparant ce qui vient de la réactance de ce qui vient de la partie réelle |
 | un balayage terminé | le meilleur point — jugé par son S₁₁ **à la fréquence visée**, pas par son creux le plus profond où qu'il tombe —, chiffres à l'appui, et s'il est **au bord** de la plage, cote par cote — coin compris sur un croisement : un optimum de bord n'est que le meilleur des points essayés. La règle lit et n'écrit rien : prolonger une plage, ce sont des simulations de plus, et cela se décide au devis |
 
-Chaque remarque porte sa correction sous forme de carte prête pour
-`antenna_proposer` : une correction de l'audit et une correction imaginée par
-Claude passent par la même barrière, et rien d'autre n'écrit dans l'état.
+Chaque remarque porte sa correction (`antenna_lire` audit), que Claude ou vous
+appliquez par les champs de l'assistant.
 
-### La liste blanche, et pourquoi elle est étroite
+### La liste des réglages
 
-C'est la seule barrière entre une carte proposée de l'extérieur et l'état de la
-simulation, et c'est le seul endroit de l'outil où une faute **ne se verrait
-pas** : le réglage changerait, la simulation tournerait, et le résultat aurait
-l'air d'un résultat.
-
-Une proposition arrive en carte — que Claude écrit, ou que l'audit local
-produit. La page la relit, valide **chemin par chemin** contre la liste blanche
-(`CHAMPS`, `js/31-cartes-antenna.js`), borne chaque valeur, et affiche l'avant en
-face de l'après :
-
-```
-⚡ Affiner le maillage
-   pas de maillage dans le diélectrique : 0 (au mailleur de décider) → 0,78 mm
-   cellules de PML                      : 8 → 10
-   ⚠ « arret.energie » : en dessous de la borne basse (-80).
-                                                      [ ⚡ Appliquer ]
-```
-
-Ce qui est **refusé est affiché aussi** : une proposition à moitié valable dont
-la moitié fautive disparaîtrait donnerait une carte qui ne fait pas ce que le
-texte à côté vient d'expliquer. Ce qui est appliqué **reste annulable** par le
-bouton « Annuler » de la carte, tant que rien n'a bougé depuis — un
-réglage de simulation n'a pas d'historique comme le dessin, et sans ce bouton
-il faudrait retrouver la valeur d'avant à la main.
-
-Quatre genres de cartes, et rien d'autre : des **réglages** (bande, boîte,
-maillage, arrêt, pertes, ports), des **cotes de motif** du mode conception,
-l'**armement d'un balayage**, et de la **géométrie libre** dans le dessin.
-Jamais la sélection de cuivre, jamais l'empilage lu dans le fichier, jamais un
-chemin qui ferait disparaître un travail.
-
-La lecture `antenna_lire` (reglages) **est engendrée depuis cette liste** : une
-liste recopiée à la main aurait dérivé dès le premier champ ajouté, et Claude
-aurait proposé des réglages que la page refuse. Le banc d'essai éprouve la
-barrière (`test/banc-interface.js`, section 9).
+`CHAMPS` (`js/31-cartes-antenna.js`) est la liste des réglages que `antenna_lire` montre à Claude,
+avec leurs unités, bornes et choix, et les seuls que l'audit propose de corriger : des nombres
+qu'un humain taperait dans un champ, jamais la sélection de cuivre, jamais l'empilage lu dans le
+fichier. Claude les change par les champs de l'assistant, comme vous, une carte par geste.
 
 ### La géométrie libre — quand aucun motif ne trace l'antenne
 
@@ -1662,48 +1630,10 @@ IFA, MIFA, dipôle, ligne étalon. Une fente, un anneau, un patch à coins coup�
 un motif qu'on a en tête — rien de tout cela n'a de gabarit, et une liste de
 cotes à reporter à la main serait exactement le travail qu'on voulait confier.
 
-Une carte `formes` pose donc du cuivre. Elle donne une liste de primitives en
-millimètres — `rect`, `disque`, `poly`, `piste`, `via`, et `trou` pour une
-**découpe** —, chacune sur une couche désignée par « haut », « bas » ou son nom
-exact ; plus, en option, la **taille de carte** et le **port** qui vont avec —
-sans port, rien ne se simule, et la liste blanche sait *déplacer* un port mais
-pas en *poser* un.
-
-La carte **liste chaque forme** avant de rien écrire, parce qu'une carte qui
-annoncerait « 12 formes » demanderait de presser pour savoir ce qu'on pose :
-
-```
-⚡ Patch à coins coupés — géométrie libre
-   formes dessinées   : 0 → 5  (le dessin en cours est effacé)
-   port d'excitation  : non posé → 20 ; 0,4, empreinte 3,06 × 0,8 mm,
-                        de « Cuivre dessus » à « Cuivre dessous »
-   · rectangle · Cuivre dessous · GND · 40 × 45 mm, coin en (0 ; 0)
-   · polygone  · Cuivre dessus  · ANTENNE · 6 sommets, encombrement 24 × 24 mm
-   · piste     · Cuivre dessus  · ANTENNE · large de 3,06 mm, longue de 12 mm
-   · découpe rectangle · Cuivre dessus · 4 × 8 mm, coin en (18 ; 20)
-   · via       · Cuivre dessus  · GND · Ø 0,6 mm en (36 ; 41)
-   ⚠ forme 6 : genre « trapeze » inconnu ; les genres sont rect, disque,
-     poly, piste, via.
-                                                      [ ⚡ Appliquer ]
-```
-
-La barrière est de même nature que la liste blanche, mais elle porte sur des
-formes : un genre connu, une couche de cuivre qui **existe**, des coordonnées
-finies et bornées, une étendue dessinable, au plus 40 formes et 200 sommets,
-et rien d'entièrement hors carte — **du cuivre hors substrat flotte dans l'air
-du volume de calcul, il rayonne, et rien sur la courbe ne dira d'où vient ce
-qu'on lit**. Ce qui n'est pas refusé mais qu'on regretterait de ne pas avoir lu
-— du cuivre qui affleure le bord, un dessin qui va être effacé, un port absent
-— est dit dans un avis (ⓘ), distinct du refus. Une piste, elle, se juge
-sur son **axe** et non sur sa largeur : une ligne d'alimentation qui vient
-mourir au bord de carte — ce que font les six motifs — aurait sinon débordé de
-w/2 à chaque fois, et un avis qui se déclenche toujours ne se lit plus.
-
-Appliquer garde l'état d'avant **en entier** — les formes, la carte, la fiche
-de motif, et la pose de tous les ports — pour que le bouton « Annuler » de la
-carte le remette. Il refuse si le dessin a bougé depuis : remettre l'état
-d'avant effacerait ce qui a été fait entre-temps, et le Ctrl+Z du mode
-conception reste là pour défaire à la main.
+Les outils de dessin du mode conception posent donc du cuivre : rectangle, disque, polygone,
+piste, via, et une découpe, chaque forme sur une couche ; sans port, rien ne se simule.
+**Du cuivre hors substrat flotte dans l'air du volume de calcul, il rayonne, et rien sur la
+courbe ne dira d'où vient ce qu'on lit** : à garder dans la carte.
 
 **Un motif reste préférable dès qu'il en existe un**, et le savoir métier de
 Claude le dit dans ces termes : un motif calcule ses cotes, tient une fiche, se repose et se
@@ -1891,10 +1821,8 @@ colonnes d'un tableau S et le résultat complet que chacune garde, la calibratio
 de la durée sur le débit du poste, la facture du maillage et la plus petite
 cellule (« pincée »), le calcul qui ne rend rien et son diagnostic d'énergie,
 le désembedage d'une ligne d'alimentation, le port court-circuité par le cuivre
-lui-même, et les refus d'un nom de projet — et la **liste blanche des cartes d'action**,
-qui sont les deux seuls endroits de l'outil où une chaîne venue du réseau touche
-quelque chose : le système de fichiers pour l'un, l'état de la simulation pour
-l'autre.
+lui-même, et les refus d'un nom de projet — le seul endroit de l'outil où une chaîne
+venue du réseau touche le système de fichiers — et la **liste des réglages**.
 
 Cinq de ces sections méritent d'être signalées parce qu'elles n'éprouvent pas
 du code de ce dépôt au sens ordinaire :
@@ -1921,14 +1849,8 @@ du code de ce dépôt au sens ordinaire :
    du net d'antenne recopiée sur le plan de masse sous le port (le cas vu sur
    `P01x274PCB-C.xml`) et vérifie qu'un avis grave bloque le calcul, tout en
    laissant passer une sonde normale ou une pastille fondue dans la masse.
-5. **La liste blanche des cartes d'action** : éprouve une *barrière* et non un calcul : un
-   calcul faux rend un mauvais nombre et finit par se voir, une barrière qui
-   laisse passer ne se voit jamais — le réglage change, la simulation tourne, et
-   le résultat a l'air d'un résultat. Elle vérifie donc qu'un chemin hors liste
-   est refusé, qu'une valeur hors bornes l'est en disant laquelle, qu'aller puis
-   revenir remet exactement ce qui était là, que la consigne envoyée au modèle ne
-   peut pas s'écarter de la liste que la page applique, et que ce qui revient du
-   réseau est échappé avant d'être affiché.
+5. **La liste des réglages et l'audit** : un chemin hors liste est refusé, chaque contrôle se lève
+   quand il le doit, et ses corrections restent dans la liste.
 
 Le **serveur** a son propre banc (`python python/test/banc-serveur.py`,
 quelques secondes) : il ne sert que `index.html`, `css/` et `js/` —
@@ -2097,7 +2019,7 @@ découpes de versement l'ont toujours été.
   dans la bonne direction. « Rien à redire » veut dire « rien ne m'alerte »,
   pas « c'est bon ».
 * **Un modèle de langage se trompe, et il se trompe avec aplomb.** Ce qu'il
-  propose passe par une liste blanche bornée et ne s'applique qu'au clic, mais
+  fait passe par les champs bornés de l'assistant, au clic, mais
   aucune borne ne rattrape un raisonnement faux : la valeur sera dans les
   limites, et elle pourra être la mauvaise. Ce qu'il dit se relit, et se
   vérifie par une simulation — c'est-à-dire par l'outil, pas par lui.
@@ -2189,7 +2111,6 @@ de **WEB_CAO** (<https://github.com/pilou33620/WEB_CAO>), sous licence MIT.
 propres à ce dépôt-là (profils d'utilisateur, dossiers de projet, reprise de
 session d'un outil à l'autre) : ici il n'y a qu'un outil.
 
-Les **cartes d'action** (`js/31-cartes-antenna.js`) viennent de l'ancien
-assistant IA, repris de WEB_CAO puis retiré quand Claude, par le MCP de
-web_suite, l'a remplacé : seuls la liste blanche, l'audit et les cartes sont
-restés.
+La **liste des réglages et l'audit** (`js/31-cartes-antenna.js`) viennent de
+l'ancien assistant IA, repris de WEB_CAO puis retiré quand Claude, par le MCP de
+web_suite, l'a remplacé.

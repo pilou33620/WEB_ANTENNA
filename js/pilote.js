@@ -367,7 +367,7 @@
                    faire: () => { e.value = o.value; changer(e); return lib + " = « " + o.text.trim() + " »."; } };
         }
         if (!/^(INPUT|TEXTAREA)$/.test(e.tagName) && !e.isContentEditable) throw new Error(lib + " n'est pas un champ à remplir.");
-        return { titre: "Interface : " + lib, avant: e.isContentEditable ? e.innerText : e.value, apres: String(v), faire: () => {
+        return { titre: "Interface : " + lib, avant: String(e.isContentEditable ? e.innerText : e.value).slice(0, 200), apres: String(v).slice(0, 200), faire: () => {
           if (typeof e.focus === "function") e.focus();
           if (e.isContentEditable) e.textContent = String(v);
           // le setter natif : une valeur posée par e.value = … échappe aux composants qui le surchargent

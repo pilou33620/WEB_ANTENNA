@@ -11,7 +11,7 @@
 const LECTURE_ANTENNA = (function(){
   /* Un texte venu d'un fichier (carte importée, projet, notes du serveur) sur une seule ligne et
      borné : un nom ne doit pas pouvoir fabriquer d'autres lignes (une fausse section, une fausse
-     carte d'action) dans ce que lit le modèle. Sans effet sur un nom ordinaire. */
+     correction proposée) dans ce que lit le modèle. Sans effet sur un nom ordinaire. */
   const propre = (t, n) => String(t == null ? "" : t).replace(/[\x00-\x1f\x7f\u2028\u2029]/g, " ").slice(0, n || 120);
   /* ==========================================================================
      Écrire les nombres
@@ -547,7 +547,7 @@ const LECTURE_ANTENNA = (function(){
     const L = [];
     for(const a of c.slice(0, 60)){                  // par contrôle entier : un titre ne se sépare pas de sa carte
       L.push("- [" + propre(a.rang) + "] " + propre(a.titre, 300) + " : " + propre(a.texte, 2000));
-      if(a.prop) L.push("  carte pour antenna_proposer : " + JSON.stringify(a.prop));
+      if(a.prop) L.push("  correction proposée : " + JSON.stringify(a.prop));
     }
     if(c.length > 60) L.push("... (" + (c.length - 60) + " contrôles de plus)");
     return L;
