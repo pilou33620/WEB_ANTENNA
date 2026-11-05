@@ -6,6 +6,8 @@
   position: fixed; right: 12px; bottom: 12px; z-index: 2147483000;
   max-width: min(360px, calc(100vw - 24px));
   font: 13px/1.4 system-ui, sans-serif; color: #e8e8ea;
+  /* une page peut styler tous ses aside (éditeur PCB) : le panneau n'en prend ni la taille ni le fond */
+  display: block; width: auto; background: none; border: none;
 }
 /* La tête se glisse pour déplacer le panneau ; × la réduit en pastille, qu'un clic rouvre */
 .pilote.masque .pilote-masquer { display: none; }
