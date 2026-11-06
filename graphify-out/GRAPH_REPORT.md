@@ -1,25 +1,25 @@
 # Graph Report - WEB_ANTENNA  (2026-11-06)
 
 ## Corpus Check
-- 80 files · ~407,534 words
+- 80 files · ~407,822 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 11 file(s) not represented in the graph (top: .css 7, (none) 2, .wasm 1)
 
 ## Summary
-- 4346 nodes · 9271 edges · 179 communities (123 shown, 56 thin omitted)
-- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 315 edges (avg confidence: 0.86)
+- 4348 nodes · 9280 edges · 172 communities (103 shown, 69 thin omitted)
+- Extraction: 97% EXTRACTED · 3% INFERRED · 0% AMBIGUOUS · INFERRED: 317 edges (avg confidence: 0.86)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `32c9c7c3`
+- Built from commit: `d5174aca`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - banc-interface.js
 - three.min.js
-- ErreurProjet
-- Oi
+- 22-antennes.js
+- Kn
 - 33-pieces.js
 - 34-placement.js
 - 02-modele.js
@@ -27,27 +27,27 @@
 - 05-panneaux.js
 - projet.py
 - zt
-- .multiplyScalar
+- copy
 - appairage.py
 - openems_modele.py
 - openems_champs.py
 - _c
 - ra
 - 28-projet.js
-- .setAttribute
-- _config_ecrire
+- en
+- es
 - ln
 - 13-assistant.js
 - yt
 - 32-visionneuse.js
 - 14-apercu3d.js
+- qo
 - ko
-- openems_run.py
 - openems_pieces.py
 - rn
 - ErreurModele
 - openems_script.py
-- 22-antennes.js
+- 23-panneau-conception.js
 - normaliser
 - Ye
 - ipc2581_parser.py
@@ -58,11 +58,11 @@
 - Mt
 - Ct
 - web_antenna.py
-- de
+- qs
 - 16-resultats.js
 - 10-etat.js
 - pc
-- copy
+- Eh
 - Ot
 - banc-openems.py
 - 03-rendu.js
@@ -71,38 +71,36 @@
 - _maillage
 - creer
 - Nt
-- gi
+- yn
 - xh
 - ._tag
-- .constructor
-- ltArc
-- Tache
+- fils
+- openems_run.py
 - Pilote
 - ._process_polyline
 - .toArray
-- mdlCheminsDe
-- rendreModalNets
+- bo
+- vh
 - 21-dessin.js
 - gh
 - telephone.js
-- fils
+- _estimation
 - 29-tableau-s.js
-- Kn
+- preparer
 - xl
 - xt
-- pilote.py
+- getValue
 - 15-overlay2d.js
 - 31-rapport.js
 - 37-port-auto.js
 - i
 - mo
-- bi
 - 24-balayage.js
 - vi
 - na
 - 04-interaction.js
-- tc
-- ho
+- cn
+- .toJSON
 - Go
 - Poste
 - 11-geometrie.js
@@ -117,28 +115,28 @@
 - banc-polygones.js
 - ec
 - cc
-- ai
+- rh
 - 25-polygones.js
 - createWasm
-- g
-- Eh
+- 1. Ce qui manque, et qui se voit à l'usage
+- be
 - _ponts_couche
 - Appairage
 - pt
-- dispose
+- dn
 - Point
-- requirements.txt
-- xc
+- fn
+- gn
 - index.html page principale
 - 38-tuto.js
 - .mmap
 - _masse_cachee
 - 01-api.js
 - abort
-- banc-champs.py
-- 2. Les limites connues, et ce qu'on en fait
+- hn
+- mn
 - README Antenne openEMS
-- .add
+- Ha
 - 17-objets.js
 - postRun
 - bh
@@ -147,24 +145,19 @@
 - 26-exemple.js
 - 27-apercu-motif.js
 - Pieces STEP: boitier et piles
-- _coupable_cellule
-- _SansRun
-- _Seau
-- qs
+- pn
+- un
 - clone
 - Lt
-- C
 - travailleur-occt.js
 - craftInvokerFunction
 - getCallstack
 - ___syscall_ioctl
-- we
 - _ligne_alim
 - write
 - registerType
 - syncfs
 - syscallGetVarargI
-- H
 - 00-espace-config.js
 - close
 - allocate
@@ -179,8 +172,6 @@
 - rmdir
 - symlink
 - unlink
-- nr
-- A-FAIRE: travaux restants
 - dossier_calculs
 - Les sept etapes de l'assistant
 - Serveur web_antenna.py (stdlib seule)
@@ -203,12 +194,12 @@
   HISTORIQUE.md → js/vendor/three.min.js
 - `La correction du gabarit — quatre cas mesurés, une loi pour L, deux strates pour y₀` --references--> `patchCorrLongueur()`  [INFERRED]
   HISTORIQUE.md → js/22-antennes.js
+- `L'adaptation du patch — la mesure a tranché, et ce n'est pas ce qu'on croyait` --references--> `g()`  [INFERRED]
+  HISTORIQUE.md → js/vendor/three.min.js
+- `La correction du gabarit — quatre cas mesurés, une loi pour L, deux strates pour y₀` --references--> `g()`  [INFERRED]
+  HISTORIQUE.md → js/vendor/three.min.js
 - `Plans de mesure — arrêtés le 21/10/2026` --references--> `wr()`  [INFERRED]
   HISTORIQUE.md → js/vendor/three.min.js
-- `Ce qui est déjà en travaux, plus haut` --references--> `patchCorrRbord()`  [INFERRED]
-  HISTORIQUE.md → js/22-antennes.js
-- `La correction du gabarit — quatre cas mesurés, une loi pour L, deux strates pour y₀` --references--> `patchCorrRbord()`  [INFERRED]
-  HISTORIQUE.md → js/22-antennes.js
 
 ## Import Cycles
 - None detected.
@@ -217,7 +208,7 @@
 - **Reglage mesure du patch** — a_faire_patch_adaptation, a_faire_croisement_g_y0, a_faire_correction_gabarit [EXTRACTED 0.95]
 - **Pipeline de simulation en sept etapes** — readme_sept_etapes, readme_nettoyage_geometrique, readme_pertes_debye, readme_revetements_exterieurs, readme_port_localise [INFERRED 0.85]
 
-## Communities (179 total, 56 thin omitted)
+## Communities (172 total, 69 thin omitted)
 
 ### Community 0 - "banc-interface.js"
 Cohesion: 0.01
@@ -225,15 +216,15 @@ Nodes (154): AJOUT7, avantMasque, ax9, BAL3, BAL9, barre, barre2, barre3 (+146 m
 
 ### Community 2 - "three.min.js"
 Cohesion: 0.04
-Nodes (40): Ar(), as(), y(), br(), Cr(), cs(), ds(), er() (+32 more)
+Nodes (41): Ar(), br(), co, Cr(), el(), er(), Et, fr() (+33 more)
 
-### Community 3 - "ErreurProjet"
-Cohesion: 0.13
-Nodes (11): _dossier(), _ecrire_json(), enregistrer(), ErreurProjet, etat(), liste(), ouvert(), ouvrir_explorateur() (+3 more)
+### Community 3 - "22-antennes.js"
+Cohesion: 0.09
+Nodes (34): CON_GABARITS, CON_MOTIF_DIPOLE, CON_MOTIF_IFA, CON_MOTIF_LIGNE, CON_MOTIF_MIFA, CON_MOTIF_MONOPOLE, CON_MOTIF_PATCH, CON_MOTIF_RESEAU (+26 more)
 
-### Community 4 - "Oi"
-Cohesion: 0.20
-Nodes (3): ki(), Oi, Wn
+### Community 4 - "Kn"
+Cohesion: 0.09
+Nodes (6): ki(), Kn, Oi, Sc, tc, xi()
 
 ### Community 5 - "33-pieces.js"
 Cohesion: 0.07
@@ -244,56 +235,56 @@ Cohesion: 0.08
 Nodes (69): antCarte3d(), antPlaceAccrocher(), antPlaceAnnuler(), antPlaceApres(), antPlaceAvantRendu(), antPlaceBarre(), antPlaceCadrer(), antPlaceChoisir() (+61 more)
 
 ### Community 7 - "02-modele.js"
-Cohesion: 0.08
-Nodes (40): CU_PALETTE, GENRE_COULEUR, LT, ltAire(), ltAutoRole(), ltCleGap(), ltEstPlan(), ltPreparer() (+32 more)
+Cohesion: 0.06
+Nodes (63): CU_PALETTE, GENRE_COULEUR, LT, ltAire(), ltArc(), ltAutoRole(), ltCleGap(), ltEeff() (+55 more)
 
 ### Community 8 - "20-conception.js"
 Cohesion: 0.07
 Nodes (64): CON, CON_CONDUCTEURS, CON_DIELECTRIQUES, CON_EP_CUIVRE, CON_GENRES, CON_HIST, CON_MODELES, CON_SORTES (+56 more)
 
 ### Community 9 - "05-panneaux.js"
-Cohesion: 0.11
-Nodes (40): mdlCoucheNom(), mdlEsc(), BOUTON_AFF, ELEMENTS, fermerModalNets(), l3(), LT_TOPO, ltC() (+32 more)
+Cohesion: 0.10
+Nodes (47): mdlCoucheNom(), mdlEsc(), BOUTON_AFF, ELEMENTS, fermerModalNets(), l3(), LT_TOPO, ltC() (+39 more)
 
 ### Community 10 - "projet.py"
-Cohesion: 0.13
-Nodes (13): calculs(), dossier_calculs(), _entrees_calcul(), importer_calcul(), lire(), _lire_json(), _mtime(), ouvrir() (+5 more)
+Cohesion: 0.06
+Nodes (34): banc_lu(), banc_noter(), calculs(), _config_ecrire(), _config_lire(), debit_fils_lu(), debit_lu(), debit_noter() (+26 more)
 
-### Community 12 - ".multiplyScalar"
-Cohesion: 0.07
-Nodes (4): S(), No, ue, Vc
+### Community 12 - "copy"
+Cohesion: 0.06
+Nodes (11): _a(), ai, bs(), copy(), S(), y(), setFromCamera(), ue (+3 more)
 
 ### Community 13 - "appairage.py"
-Cohesion: 0.08
-Nodes (21): _a_refaire(), adresses_poste(), appairer(), _ca_a_refaire(), _cnf(), contexte_tls(), dossier_tls(), empreinte_ca() (+13 more)
+Cohesion: 0.06
+Nodes (26): _a_refaire(), adresses_poste(), appairer(), C, _ca_a_refaire(), _cnf(), contexte_tls(), CS (+18 more)
 
 ### Community 14 - "openems_modele.py"
-Cohesion: 0.06
-Nodes (21): _avis(), _avis_coax_contacts(), _avis_ecarts_ouverts(), _avis_ponts_de_maille(), _avis_ports_court_circuit(), _cause_cellule(), _coax_z0(), _cuivre_sous() (+13 more)
+Cohesion: 0.05
+Nodes (25): _appliquer(), _avis(), _avis_coax_contacts(), _avis_ecarts_ouverts(), _avis_ponts_de_maille(), _avis_ports_court_circuit(), _cause_cellule(), _coax_z0() (+17 more)
 
 ### Community 15 - "openems_champs.py"
-Cohesion: 0.09
-Nodes (18): _amplitude_max(), _axe_par_defaut(), _champ_de(), _decouper(), entete_vtr(), ErreurChamps, _etiquette(), _hertz() (+10 more)
+Cohesion: 0.07
+Nodes (26): _amplitude_max(), _axe_par_defaut(), _b64(), _base64_octets(), _bloc_binaire(), _champ_de(), _decouper(), entete_vtr() (+18 more)
+
+### Community 16 - "_c"
+Cohesion: 0.07
+Nodes (3): bi, _c, xc
 
 ### Community 17 - "ra"
-Cohesion: 0.08
-Nodes (6): jh(), Nh, ra, setFromCamera(), update(), Zi()
+Cohesion: 0.06
+Nodes (5): _i(), h(), jn(), ra, ro()
 
 ### Community 18 - "28-projet.js"
 Cohesion: 0.10
-Nodes (50): PRJ, prjAccueilRendre(), prjAffichage(), prjAntAppliquer(), prjAntenne(), prjAppel(), prjAppliquer(), prjArchivable() (+42 more)
+Nodes (52): PRJ, prjAccueilRendre(), prjAffichage(), prjAntAppliquer(), prjAntenne(), prjAppel(), prjAppliquer(), prjArchivable() (+44 more)
 
-### Community 19 - ".setAttribute"
-Cohesion: 0.07
-Nodes (14): co, constructor(), el(), t(), Ga, v(), _l, m() (+6 more)
+### Community 19 - "en"
+Cohesion: 0.06
+Nodes (22): v(), bt(), o(), constructor(), d(), u(), en(), t() (+14 more)
 
-### Community 20 - "_config_ecrire"
-Cohesion: 0.16
-Nodes (10): banc_lu(), banc_noter(), _config_ecrire(), _config_lire(), debit_fils_lu(), debit_lu(), debit_noter(), definir_racine() (+2 more)
-
-### Community 21 - "ln"
-Cohesion: 0.05
-Nodes (9): cn, dn, fn, gn, hn, ln, mn, pn (+1 more)
+### Community 20 - "es"
+Cohesion: 0.12
+Nodes (14): as(), cs(), ds(), es(), fs(), hs(), ms(), ns() (+6 more)
 
 ### Community 22 - "13-assistant.js"
 Cohesion: 0.11
@@ -307,33 +298,33 @@ Nodes (45): CHP, CHP_LUT, CHP_MG, CHP_NOMS, CHP_PALETTES, chpAccueil(), chpArret
 Cohesion: 0.10
 Nodes (44): ANT3D, ANT3D_MAILLE, ANT3D_MAILLE_PLANS, ANT3D_NAV, ant3dAnimer(), ant3dBoites(), ant3dCadrer(), ant3dClef() (+36 more)
 
-### Community 26 - "ko"
-Cohesion: 0.08
-Nodes (16): al(), cl(), dl(), il(), jo(), ko, nl(), qo() (+8 more)
+### Community 26 - "qo"
+Cohesion: 0.09
+Nodes (14): al(), cl(), dl(), il(), jo(), nl(), qo(), rl() (+6 more)
 
-### Community 27 - "openems_run.py"
-Cohesion: 0.06
-Nodes (27): liste(), banc_en_cours(), _base_calculs(), _base_temporaire(), dossier_de(), _dossier_neuf(), dossier_openems(), _en_cours() (+19 more)
+### Community 27 - "ko"
+Cohesion: 0.14
+Nodes (10): bind(), bindSkeletons(), ko, parseAnimations(), parseAsync(), parseGeometries(), parseShapes(), parseSkeletons() (+2 more)
 
 ### Community 28 - "openems_pieces.py"
-Cohesion: 0.08
-Nodes (23): _analyser(), _bords(), corps_inclus(), emprises(), ErreurPiece, _matrice(), _nb(), pieces() (+15 more)
+Cohesion: 0.09
+Nodes (20): _analyser(), _bords(), ErreurPiece, _matrice(), _nb(), pieces(), _place(), _plans() (+12 more)
 
 ### Community 29 - "rn"
 Cohesion: 0.05
-Nodes (8): dt(), nn(), rn, $s, ta, tn(), ut(), Wc
+Nodes (7): dt(), nn(), rn, $s, ta, tn(), Wc
 
 ### Community 30 - "ErreurModele"
-Cohesion: 0.07
-Nodes (26): archiver_calcul(), arreter(), balayage(), champ(), champs(), _champs_module(), dossier(), identifiant_neuf() (+18 more)
+Cohesion: 0.06
+Nodes (29): archiver_calcul(), arreter(), balayage(), champ(), champs(), _champs_module(), dossier(), identifiant_neuf() (+21 more)
 
 ### Community 31 - "openems_script.py"
 Cohesion: 0.08
 Nodes (21): faces_b64(), _bloc_calcport(), _bloc_debye(), _bloc_dumps(), _bloc_fils(), _bloc_ligne(), _bloc_pieces(), _bloc_ports() (+13 more)
 
-### Community 32 - "22-antennes.js"
-Cohesion: 0.06
-Nodes (75): CON_GABARITS, CON_MOTIF_DIPOLE, CON_MOTIF_IFA, CON_MOTIF_LIGNE, CON_MOTIF_MIFA, CON_MOTIF_MONOPOLE, CON_MOTIF_PATCH, CON_MOTIF_RESEAU (+67 more)
+### Community 32 - "23-panneau-conception.js"
+Cohesion: 0.13
+Nodes (41): CON_DEC_F, CON_ROLES_CU, CON_UNITES, conAff(), conApercuBloc(), conApercuLier(), conApercuMaj(), conBarreRendre() (+33 more)
 
 ### Community 33 - "normaliser"
 Cohesion: 0.10
@@ -351,21 +342,25 @@ Nodes (15): charger_octets(), _contour(), _contre_percage(), design_en_dict(), _
 Cohesion: 0.14
 Nodes (38): WS, WS_DOCKS, wsApply(), wsCanvasSync(), wsClose(), wsDefault(), wsDrag, wsEl (+30 more)
 
+### Community 38 - "Fe"
+Cohesion: 0.05
+Nodes (9): Ca, ea, Fe, getInput(), mc, parseObject(), qn, wa (+1 more)
+
 ### Community 39 - "39-campagne.js"
 Cohesion: 0.18
 Nodes (20): CAMP, CAMP_BASE, CAMP_CHAMPS, CAMP_PLANS, campArreter(), campChiffrer(), campDerouler(), campDocument() (+12 more)
 
 ### Community 40 - "Mt"
-Cohesion: 0.12
-Nodes (28): Is(), ks(), j(), k(), U(), W(), mt(), J() (+20 more)
+Cohesion: 0.06
+Nodes (43): dispose(), ir(), s(), Is(), o(), ks(), j(), k() (+35 more)
 
 ### Community 42 - "web_antenna.py"
-Cohesion: 0.07
-Nodes (13): banc_au_demarrage(), ip_reseau(), _ipv4_libre(), _lisible(), main(), ouvrir_socket(), _pourquoi(), redemarrer_application() (+5 more)
+Cohesion: 0.04
+Nodes (20): battement(), commander(), H, req(), demarrer(), FauxLanceur, req(), banc_au_demarrage() (+12 more)
 
-### Community 43 - "de"
-Cohesion: 0.06
-Nodes (6): bs(), de, en(), ws(), zs(), n()
+### Community 43 - "qs"
+Cohesion: 0.05
+Nodes (14): de, M(), hi(), C(), D(), Ls(), qs, Bt() (+6 more)
 
 ### Community 44 - "16-resultats.js"
 Cohesion: 0.14
@@ -375,65 +370,45 @@ Nodes (34): ANT_BAL_TIRETS, ANT_COURBE_ETAT, ANT_ONGLETS, antBal(), antBalAxes()
 Cohesion: 0.09
 Nodes (25): ANT, ANT_ETAPES, ANT_UNITES_F, antAjouterFormes(), antDevinerCouches(), antDevinerMasse(), antDocument(), antEmpilage() (+17 more)
 
-### Community 46 - "pc"
-Cohesion: 0.15
-Nodes (3): mc, pc, rc
-
-### Community 47 - "copy"
-Cohesion: 0.07
-Nodes (7): _a(), ci, copy(), ie, jn(), ro(), wa
+### Community 47 - "Eh"
+Cohesion: 0.05
+Nodes (3): ci, Eh, ie
 
 ### Community 48 - "Ot"
-Cohesion: 0.09
+Cohesion: 0.10
 Nodes (3): Kt(), Ot, Ht()
 
 ### Community 49 - "banc-openems.py"
 Cohesion: 0.08
-Nodes (17): balaye(), _coque(), _court(), croise(), document(), _pastille_dans_reserve(), _pastille_decalee(), _pave() (+9 more)
+Nodes (18): balaye(), _coque(), _court(), croise(), document(), _pastille_dans_reserve(), _pastille_decalee(), _pave() (+10 more)
 
 ### Community 50 - "03-rendu.js"
 Cohesion: 0.09
 Nodes (45): bcx(), CACHE, centrerSur(), ctx, cv, dansFenetre(), dessiner(), fenetre() (+37 more)
 
 ### Community 53 - "_maillage"
-Cohesion: 0.08
-Nodes (15): _bande_lignes(), _coller(), _coller_ports(), _emprise_primitive(), _fusionner(), _grouper(), _lignes(), _lisser() (+7 more)
+Cohesion: 0.07
+Nodes (17): _bande_lignes(), _coller(), _coller_ports(), _emprise_primitive(), _fusionner(), _grouper(), _lignes(), _lisser() (+9 more)
 
 ### Community 54 - "creer"
 Cohesion: 0.08
 Nodes (58): creer(), afficher(), ajouter(), annoncer(), annuler(), appliquer(), base64(), battre() (+50 more)
 
-### Community 56 - "gi"
-Cohesion: 0.12
-Nodes (9): di, gi(), p(), ni, qn, ti, Xn(), yn (+1 more)
+### Community 59 - "fils"
+Cohesion: 0.11
+Nodes (11): banc_noter(), etat(), fils(), regler_fils(), banc(), banc_meilleur(), etat(), fils_effectif() (+3 more)
 
-### Community 59 - ".constructor"
-Cohesion: 0.12
-Nodes (7): ea, C(), D(), C(), N(), xs(), ys()
-
-### Community 60 - "ltArc"
-Cohesion: 0.27
-Nodes (12): ltArc(), ltEeff(), ltEntre(), ltGeom(), ltNet(), ajouterMorceau(), ltPiste(), ltWeff() (+4 more)
-
-### Community 61 - "Tache"
-Cohesion: 0.06
-Nodes (9): _chiffre(), interprete(), lancer_balayage(), _ordonnee(), _pente(), _resume(), Tache, TacheBalayage (+1 more)
+### Community 61 - "openems_run.py"
+Cohesion: 0.04
+Nodes (29): banc_en_cours(), _chiffre(), _dossier_neuf(), dossier_openems(), _en_cours(), _epilogue(), etat(), _exiger_libre() (+21 more)
 
 ### Community 62 - "Pilote"
 Cohesion: 0.07
 Nodes (26): oeAppel(), oeArreter(), oeBalayage(), oeBase(), oeDocBalayage(), oeErreur(), oeEtat(), oeLancer() (+18 more)
 
 ### Community 64 - ".toArray"
-Cohesion: 0.08
-Nodes (8): ao, ei, lo, oo, Qh, Lt(), rr, so
-
-### Community 65 - "mdlCheminsDe"
-Cohesion: 0.25
-Nodes (11): mdlArc(), mdlCheminPlan(), mdlChemins(), mdlCheminsDe(), mdlCheminsNet(), mdlForme(), mdlPadDans(), mdlPlansDans() (+3 more)
-
-### Community 66 - "rendreModalNets"
-Cohesion: 0.57
-Nodes (7): mettreAJourApercuPrereglages(), mettreAJourBoutonsFiltreModale(), mettreAJourKpiModaleNets(), ouvrirModalNets(), reinitialiserAutoDetectionModaleNets(), rendreModalNets(), toutSignalModaleNets()
+Cohesion: 0.07
+Nodes (11): ao, ei, lo, oo, Pa, parseImagesAsync(), parseTextures(), Qh (+3 more)
 
 ### Community 67 - "21-dessin.js"
 Cohesion: 0.13
@@ -443,25 +418,17 @@ Nodes (14): CON_GRILLE_CHEMIN, CON_MULTIPLES, CON_OUTILS, conGrilleChemin(), con
 Cohesion: 0.38
 Nodes (9): appliquer(), construire(), mesurer(), ouvrir(), panneaux(), redimensionner(), remplir(), rendre() (+1 more)
 
-### Community 70 - "fils"
-Cohesion: 0.06
-Nodes (22): banc_noter(), debit(), debit_noter(), etat(), fils(), regler_fils(), banc(), _banc_a() (+14 more)
+### Community 70 - "_estimation"
+Cohesion: 0.11
+Nodes (11): debit(), debit_noter(), _banc_a(), debit_fils(), debit_mesure(), debit_n(), debit_suppose(), _estimation() (+3 more)
 
 ### Community 71 - "29-tableau-s.js"
 Cohesion: 0.17
 Nodes (16): antExportSnp(), antTableauSHtml(), antTs(), antTsCase(), antTsColonne(), antTsComplet(), antTsCouleur(), antTsDb() (+8 more)
 
 ### Community 73 - "xl"
-Cohesion: 0.13
-Nodes (3): jl, Kl, xl
-
-### Community 74 - "xt"
-Cohesion: 0.06
-Nodes (4): be, _i(), h(), xt
-
-### Community 75 - "pilote.py"
-Cohesion: 0.08
-Nodes (7): battement(), commander(), H, req(), demarrer(), FauxLanceur, req()
+Cohesion: 0.12
+Nodes (4): jl, Kl, ql, xl
 
 ### Community 76 - "15-overlay2d.js"
 Cohesion: 0.17
@@ -476,32 +443,32 @@ Cohesion: 0.16
 Nodes (15): ANT_SEAUX_BLOC, antCuivreRetenuEn(), antPortBornesPlan(), antPortVerdict(), antPortVerdictCoax(), antPortVerdictHtml(), antSeauxBloc(), ANT_PORT_AUTO (+7 more)
 
 ### Community 79 - "i"
-Cohesion: 0.12
-Nodes (21): c(), l(), o(), o(), hi(), r(), lc, load() (+13 more)
+Cohesion: 0.07
+Nodes (25): ac, c(), l(), dc, p(), hc, o(), r() (+17 more)
 
 ### Community 80 - "mo"
-Cohesion: 0.14
-Nodes (5): gl(), ml, mo, po, l()
+Cohesion: 0.12
+Nodes (6): fl(), gl(), ml, mo, po, l()
 
 ### Community 82 - "24-balayage.js"
 Cohesion: 0.28
 Nodes (15): antBalayageHtml(), antBalayageLier(), antBalayageSpec(), antBalDuree(), balCombien(), balDiff(), balDocumentPour(), balEtiquette() (+7 more)
 
 ### Community 83 - "vi"
-Cohesion: 0.15
-Nodes (15): v(), d(), u(), y(), x(), ji(), R(), h() (+7 more)
+Cohesion: 0.14
+Nodes (13): y(), ji(), a(), R(), h(), a(), qi(), vi() (+5 more)
 
 ### Community 84 - "na"
-Cohesion: 0.12
-Nodes (6): bt(), Ca, ht(), na, ui(), i()
+Cohesion: 0.14
+Nodes (4): ft(), ht(), na, ui()
 
 ### Community 85 - "04-interaction.js"
 Cohesion: 0.18
 Nodes (10): boitePiste(), choisirComp(), choisirRien(), couchesDesignation(), designer(), distSegment(), fin(), POINTEURS (+2 more)
 
-### Community 87 - "ho"
-Cohesion: 0.10
-Nodes (5): r(), ho, ll(), Mh, uo
+### Community 87 - ".toJSON"
+Cohesion: 0.15
+Nodes (3): r(), ll(), Mh
 
 ### Community 89 - "Poste"
 Cohesion: 0.05
@@ -516,12 +483,8 @@ Cohesion: 0.19
 Nodes (13): ANT_CALC, ANT_CHAMPS, ANT_REGIONS, antCalcCharger(), antCalcDate(), antCalcHtml(), antCalcLier(), antCalcLigneHtml() (+5 more)
 
 ### Community 92 - "_o"
-Cohesion: 0.07
-Nodes (5): bo, Do, Fo, io, _o
-
-### Community 93 - "vl"
-Cohesion: 0.14
-Nodes (3): ql, vl, wl
+Cohesion: 0.05
+Nodes (7): Do, Fo, ho, io, No, _o, uo
 
 ### Community 94 - "_ouvrir_ecarts"
 Cohesion: 0.16
@@ -536,20 +499,12 @@ Cohesion: 0.35
 Nodes (14): ANT_FILS, antFilsBanc(), antFilsEnCours(), antFilsEtat(), antFilsHtml(), antFilsLier(), antFilsMeilleur(), antFilsMesures() (+6 more)
 
 ### Community 98 - "Ze"
-Cohesion: 0.05
-Nodes (13): bl, fl(), hl(), hs(), Ka, ol(), pl(), sa (+5 more)
+Cohesion: 0.07
+Nodes (10): bl, hl(), Ka, ol(), pl(), sa, sn, ul() (+2 more)
 
 ### Community 99 - "banc-polygones.js"
 Cohesion: 0.15
 Nodes (10): aire(), aireTotale(), disque, fs, ko, L, r, src (+2 more)
-
-### Community 101 - "cc"
-Cohesion: 0.07
-Nodes (12): ac, cc, dc, ft(), hc, kc, Pa, parseImages() (+4 more)
-
-### Community 102 - "ai"
-Cohesion: 0.06
-Nodes (3): ai, getOutput(), rh
 
 ### Community 103 - "25-polygones.js"
 Cohesion: 0.30
@@ -559,33 +514,21 @@ Nodes (10): polyAire(), polyCompte(), polyCroise(), polyDedans(), polyInserer(),
 Cohesion: 0.20
 Nodes (12): addOnInit(), addRunDependency(), createWasm(), receiveInstance(), receiveInstantiationResult(), findWasmBinary(), getWasmImports(), locateFile() (+4 more)
 
-### Community 105 - "g"
-Cohesion: 0.21
-Nodes (12): 1. Ce qui manque, et qui se voit à l'usage, Campagne du 22/10/2026 — ce que les six plans ont tranché, Ce qui est déjà en travaux, plus haut, L'adaptation du patch — la mesure a tranché, et ce n'est pas ce qu'on croyait, La correction du gabarit — quatre cas mesurés, une loi pour L, deux strates pour y₀, Le port microruban désembedé (`AddMSLPort`) — le prix, désormais chiffré, Les cartes d'action et l'audit — ce qu'il leur manque, Plans de mesure — arrêtés le 21/10/2026 (+4 more)
-
-### Community 106 - "Eh"
-Cohesion: 0.08
-Nodes (3): Eh, Ls(), updateMatrixWorld()
+### Community 105 - "1. Ce qui manque, et qui se voit à l'usage"
+Cohesion: 0.15
+Nodes (15): 1. Ce qui manque, et qui se voit à l'usage, 2. Les limites connues, et ce qu'on en fait, Campagne du 22/10/2026 — ce que les six plans ont tranché, Ce qui est déjà en travaux, plus haut, Ce qui est une limite du monde, pas de l'outil, Ce qui ne se rouvre pas, Historique — le carnet de mesures et de travaux (jusqu'au 22/10/2026), L'adaptation du patch — la mesure a tranché, et ce n'est pas ce qu'on croyait (+7 more)
 
 ### Community 107 - "_ponts_couche"
-Cohesion: 0.21
-Nodes (6): _couper_seg(), _ponts_couche(), dedans(), dist(), _proches_seg_seg(), _proj_point_seg()
-
-### Community 110 - "dispose"
-Cohesion: 0.11
-Nodes (10): dispose(), s(), It, a(), Et(), Ut(), rt, G() (+2 more)
+Cohesion: 0.10
+Nodes (11): _couper_seg(), _divise(), _pas_local(), pas(), _ponts_couche(), dedans(), dist(), ranger() (+3 more)
 
 ### Community 111 - "Point"
 Cohesion: 0.19
 Nodes (3): Point, UserShape, arc()
 
-### Community 112 - "requirements.txt"
-Cohesion: 0.29
-Nodes (6): Solveur openEMS FDTD, CSXCAD, h5py, numpy, openEMS bindings, Python 3.10/3.11 requis (roues Windows)
-
 ### Community 114 - "index.html page principale"
-Cohesion: 0.22
-Nodes (9): index.html page principale, Ecran d'accueil: ouvrir, concevoir, exemples, Exemples Patch, IFA, Reseau 3x3, Panneaux detachables (assistant, conception, IA), Scripts js/00..38 charges, three.js vendor, Vues 2D / 3D / maillage superposees, Assistant IA (+1 more)
+Cohesion: 0.33
+Nodes (6): index.html page principale, Ecran d'accueil: ouvrir, concevoir, exemples, Exemples Patch, IFA, Reseau 3x3, Scripts js/00..38 charges, three.js vendor, Vues 2D / 3D / maillage superposees
 
 ### Community 115 - "38-tuto.js"
 Cohesion: 0.44
@@ -607,21 +550,9 @@ Nodes (8): apiCandidats(), apiCharger(), apiConnecter(), apiErreur(), apiImporte
 Cohesion: 0.25
 Nodes (8): abort(), assert(), getBinaryPromise(), getBinarySync(), instantiateArrayBuffer(), instantiateAsync(), lookup_name(), ___syscall_unlinkat()
 
-### Community 120 - "banc-champs.py"
-Cohesion: 0.17
-Nodes (8): _b64(), _base64_octets(), _bloc_binaire(), _tableau(), _b64(), _decoder(), _binaire(), ecrire_vtr()
-
-### Community 121 - "2. Les limites connues, et ce qu'on en fait"
-Cohesion: 0.40
-Nodes (4): 2. Les limites connues, et ce qu'on en fait, Ce qui est une limite du monde, pas de l'outil, Ce qui ne se rouvre pas, Historique — le carnet de mesures et de travaux (jusqu'au 22/10/2026)
-
 ### Community 122 - "README Antenne openEMS"
-Cohesion: 0.43
-Nodes (7): Barre d'outils (ouvrir, projet, concevoir, exemples, lancer), README Antenne openEMS, Classification des nets GND/PWR/Signal, Import IPC-2581, Mode conception, Projets sur disque, Visionneuse de champs
-
-### Community 123 - ".add"
-Cohesion: 0.08
-Nodes (16): bind(), bindSkeletons(), getValue(), Ha, Ic, parse(), parseAnimations(), parseAsync() (+8 more)
+Cohesion: 0.21
+Nodes (14): A-FAIRE: travaux restants, Correction du gabarit patch (loi L, strates y0), Croisements g x y0 et L x y0, Motifs dipole/monopole/IFA/MIFA mesures, Limites connues triees, MIFA reste ouvert, Adaptation du patch: y0 dominant, Barre d'outils (ouvrir, projet, concevoir, exemples, lancer) (+6 more)
 
 ### Community 124 - "17-objets.js"
 Cohesion: 0.43
@@ -647,21 +578,9 @@ Nodes (5): APM_COULEURS, apmBoite(), apmPlanche(), apmSVG(), apmVignette()
 Cohesion: 0.33
 Nodes (6): Licence OpenCascade (LGPL 2.1), Licence occt-import-js, LGPL 2.1, LGPL 2.1 OpenCascade, Pieces STEP: boitier et piles, WEB_3D
 
-### Community 135 - "_Seau"
-Cohesion: 0.20
-Nodes (5): _divise(), _pas_local(), pas(), ranger(), _Seau
-
-### Community 137 - "qs"
-Cohesion: 0.14
-Nodes (11): Et, M(), o(), qs, Bt(), Ft(), Nt(), Ot() (+3 more)
-
 ### Community 138 - "clone"
-Cohesion: 0.17
-Nodes (4): clone(), gs(), A(), yc
-
-### Community 140 - "C"
-Cohesion: 0.40
-Nodes (3): C, CS, S
+Cohesion: 0.08
+Nodes (12): clone(), di, gi(), gs(), It, ti, updateMatrixWorld(), p() (+4 more)
 
 ### Community 142 - "craftInvokerFunction"
 Cohesion: 0.67
@@ -695,31 +614,23 @@ Nodes (3): syncfs(), doCallback(), done()
 Cohesion: 0.67
 Nodes (3): ___syscall_fcntl64(), ___syscall_openat(), syscallGetVarargI()
 
-### Community 171 - "nr"
-Cohesion: 0.25
-Nodes (4): nr(), setValue(), tr(), zh()
-
-### Community 174 - "A-FAIRE: travaux restants"
-Cohesion: 0.33
-Nodes (7): A-FAIRE: travaux restants, Correction du gabarit patch (loi L, strates y0), Croisements g x y0 et L x y0, Motifs dipole/monopole/IFA/MIFA mesures, Limites connues triees, MIFA reste ouvert, Adaptation du patch: y0 dominant
-
 ### Community 179 - "Les sept etapes de l'assistant"
-Cohesion: 0.22
-Nodes (9): MSLPort: cout du prolongement, Desembedage ligne d'alimentation, Port microruban MSLPort (experimental), Nettoyage geometrique et masse cachee, Pertes dielectriques: conductivite vs Debye, Port colle sur la grille, Port localise en ligne, Revetements exterieurs (masque) hors maillage (+1 more)
+Cohesion: 0.17
+Nodes (12): MSLPort: cout du prolongement, Panneaux detachables (assistant, conception, IA), Desembedage ligne d'alimentation, Assistant IA, Port microruban MSLPort (experimental), Nettoyage geometrique et masse cachee, Pertes dielectriques: conductivite vs Debye, Port colle sur la grille (+4 more)
 
 ### Community 181 - "Serveur web_antenna.py (stdlib seule)"
-Cohesion: 0.25
-Nodes (8): CI banc d'essai workflow, Banc relai GitHub, Banc principal banc-openems.py, Banc serveur, Le port et le piege Windows, Choix de l'interpreteur Python, Serveur web_antenna.py (stdlib seule), WEB_SUITE lanceur
+Cohesion: 0.13
+Nodes (14): CI banc d'essai workflow, Banc relai GitHub, Banc principal banc-openems.py, Banc serveur, Solveur openEMS FDTD, Le port et le piege Windows, Choix de l'interpreteur Python, Serveur web_antenna.py (stdlib seule) (+6 more)
 
 ## Knowledge Gaps
-- **20 isolated node(s):** `CSXCAD`, `h5py`, `numpy`, `Python 3.10/3.11 requis (roues Windows)`, `Nettoyage geometrique et masse cachee` (+15 more)
+- **20 isolated node(s):** `CSXCAD`, `h5py`, `numpy`, `Python 3.10/3.11 requis (roues Windows)`, `Exemples Patch, IFA, Reseau 3x3` (+15 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 1480 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **56 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **69 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `t()` connect `.setAttribute` to `banc-interface.js`, `Mt`, `zt`, `i`, `ln`, `ho`, `.add`?**
+- **Why does `t()` connect `en` to `banc-interface.js`, `ec`, `Fe`, `Mt`, `zt`, `i`, `ln`, `.toJSON`, `ko`?**
   _High betweenness centrality (0.053) - this node is a cross-community bridge._
 - **Are the 17 inferred relationships involving `IPC2581Parser` (e.g. with `Arc` and `Component`) actually correct?**
   _`IPC2581Parser` has 17 INFERRED edges - model-reasoned connections that need verification._
@@ -727,9 +638,9 @@ _Questions this graph is uniquely positioned to answer:_
   _20 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `banc-interface.js` be split into smaller, more focused modules?**
   _Cohesion score 0.010638297872340425 - nodes in this community are weakly interconnected._
-- **Why does `g()` connect `g` to `.setAttribute`, `banc-interface.js`, `clone`, `vi`?**
-  _High betweenness centrality (0.037) - this node is a cross-community bridge._
+- **Why does `g()` connect `vi` to `banc-interface.js`, `1. Ce qui manque, et qui se voit à l'usage`, `clone`, `copy`, `en`?**
+  _High betweenness centrality (0.035) - this node is a cross-community bridge._
 - **Should `occt-import-js.js` be split into smaller, more focused modules?**
   _Cohesion score 0.017699115044247787 - nodes in this community are weakly interconnected._
-- **Why does `antMatiereDevinee()` connect `33-pieces.js` to `banc-interface.js`?**
-  _High betweenness centrality (0.019) - this node is a cross-community bridge._
+- **Why does `de` connect `qs` to `three.min.js`, `clone`, `zt`, `copy`, `be`, `Eh`, `ra`, `en`, `rn`?**
+  _High betweenness centrality (0.020) - this node is a cross-community bridge._

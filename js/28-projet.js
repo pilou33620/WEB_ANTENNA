@@ -660,7 +660,7 @@ async function prjFermer(){
 async function prjEnregistrerGeste(nom){
   let r=null;
   try{
-    r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(nom));
+    r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(nom),prjCopieTelecharger);
   }catch(e){ prjRendre(); return null; }
   if(!r){ hint("Enregistrement annulé : rien n'est écrit."); prjRendre(); return null; }
   const calcul=prjDireCalcul(r.calcul);
@@ -735,7 +735,7 @@ async function prjEnregistrerGithub(nom){
                               "(Annuler = enregistrer sans envoyer) :",defaut);
   let r;
   try{
-    r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(cible));
+    r=await prjGeste("Enregistrer le projet",prjEnregistrerTout(cible),prjCopieTelecharger);
   }catch(e){ prjRendre(); return; }
   if(!r){ hint("Enregistrement annulé : rien n'est écrit."); prjRendre(); return; }
   const dit="Projet « "+r.projet.nom+" » enregistré."+prjDireCalcul(r.calcul);
@@ -799,7 +799,7 @@ function prjDernierEnvoi(nom){
    pas tout), "info", "encours", "erreur" (rouge, reste jusqu'à ce qu'on le
    touche).
    ========================================================================== */
-function prjAvis(etat,titre,detail){
+function prjAvis(etat,titre,detail,action){
   if(typeof document==="undefined"||!document.body)return;
   let a=document.getElementById("prjAvis");
   if(!a){
@@ -816,6 +816,14 @@ function prjAvis(etat,titre,detail){
               '<span class="pa-txt"><b></b><small></small></span>';
   a.querySelector("b").textContent=titre||"";
   a.querySelector("small").textContent=detail||"";
+  if(action){
+    const b=document.createElement("button");
+    b.type="button";
+    b.className="pa-action";
+    b.textContent=action.libelle;
+    b.onclick=action.faire;
+    a.querySelector(".pa-txt").appendChild(b);
+  }
   clearTimeout(prjAvis.minuterie);
   if(etat!=="erreur"&&etat!=="encours")
     prjAvis.minuterie=setTimeout(function(){ a.classList.remove("on"); },
@@ -994,7 +1002,7 @@ function prjBoutonEtat(){
 
 /* Attendre, dire, et ne pas laisser un bouton muet : écrire un projet qui
    porte une carte de fabrication prend une seconde ou deux. */
-async function prjGeste(quoi,promesse){
+async function prjGeste(quoi,promesse,secours){
   try{
     hint(quoi+"…");
     const out=await promesse;
@@ -1004,9 +1012,42 @@ async function prjGeste(quoi,promesse){
     hint("Échec : "+t.split("\n")[0]);
     /* L'avis reste jusqu'à ce qu'on le touche, et se lit en entier : la
        barre d'état coupe la raison, surtout sur une tablette. */
-    prjAvis("erreur",quoi+" : impossible",t);
+    /* fetch rejette par un TypeError quand le serveur ne répond pas ; ses
+       refus, eux, passent par prjAppel et sont de simples Error. */
+    if(secours&&e instanceof TypeError)
+      prjAvis("erreur","Serveur injoignable : rien n'est enregistré",
+        "Votre travail reste dans cette page, ne la rechargez pas. Téléchargez une copie, ou relancez le serveur et enregistrez de nouveau.",
+        {libelle:"Télécharger une copie",faire:secours});
+    else prjAvis("erreur",quoi+" : impossible",t);
     throw e;
   }
+}
+
+/* LA COPIE DE SECOURS, quand le serveur ne répond plus. « Exporter .json » ne
+   garde que la carte : ici, tout le document, carte comprise même si celle du
+   dossier est à jour, car ce fichier doit se suffire. Elle ne compte pas comme
+   enregistrée : le projet reste « modifié ». */
+function prjCopieTelecharger(){
+  const doc=prjCapturer(PRJ.nom);
+  if(prjSource()!=="dessin")doc.carte=prjCarte();
+  doc.copieProjet=true;
+  const nom=(PRJ.nom||nomBase())+".copie.json";
+  telecharger(new Blob([JSON.stringify(doc)],{type:"application/json"}),nom);
+  hint("Copie téléchargée ("+nom+") : elle se rouvre par « Ouvrir un fichier ».");
+}
+
+/* Rouverte, elle n'est rattachée à aucun projet : l'enregistrer demande un nom,
+   et un nom déjà pris demande confirmation (prjEnregistrer). */
+async function prjReprendreCopie(doc){
+  await prjAppliquer(doc);
+  PRJ.nom="";
+  PRJ.enregistre=0;
+  PRJ.modifie=true;
+  PRJ.carteAEcrire=true;
+  document.getElementById("accueil").hidden=true;
+  prjRendre();
+  hint("Copie reprise"+(doc.nom?" (projet « "+doc.nom+" »)":"")+
+       " : enregistrez-la sous ce nom pour remettre le projet à jour.");
 }
 
 function prjLier(corps){

@@ -101,7 +101,7 @@ async function apiLireJson(fichier){
   let modele;
   try{ modele=JSON.parse(await fichier.text()); }
   catch(e){ throw new Error("Ce .json est illisible : "+e.message); }
-  if(!modele||typeof modele!=="object"||!Array.isArray(modele.couches))
+  if(!modele||typeof modele!=="object"||(!Array.isArray(modele.couches)&&!modele.copieProjet))
     throw new Error("Ce .json n'est pas un modèle de carte "+
                     "(exportez-le depuis cette page).");
   return modele;

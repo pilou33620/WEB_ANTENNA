@@ -3295,6 +3295,42 @@ verifie("le projet ouvert et un nom neuf ne demandent rien",
         question===""&&envois.length===3&&envois[1].ecraser===true&&!envois[2].ecraser);
 delete window.confirm;
 
+/* SERVEUR ARRÊTÉ : l'avis offre une copie complète, qui se rouvre ; un refus
+   du serveur n'en offre pas. */
+extraire("28-projet.js","prjGeste");
+extraire("28-projet.js","prjCopieTelecharger");
+extraire("28-projet.js","prjReprendreCopie");
+extraire("01-api.js","apiLireJson");
+const avisVus=[];
+global.prjAvis=(etat,titre,detail,action)=>avisVus.push({titre,action});
+const secours=()=>{};
+await prjGeste("Enregistrer",Promise.reject(new TypeError("Failed to fetch")),secours).catch(()=>{});
+await prjGeste("Enregistrer",Promise.reject(new Error("refus")),secours).catch(()=>{});
+verifie("serveur injoignable : l'avis offre la copie, un refus ne l'offre pas",
+        avisVus[0].action&&avisVus[0].action.faire===secours&&/injoignable/.test(avisVus[0].titre)&&
+        !avisVus[1].action&&/impossible/.test(avisVus[1].titre));
+let copie=null;
+const telechargerG=global.telecharger, BlobG=global.Blob;
+global.telecharger=(b,nom)=>{ copie={b,nom}; };
+global.Blob=function(p){ this.txt=p[0]; };
+global.nomBase=()=>"carte";
+global.prjSource=()=>"import";
+global.prjCarte=()=>({couches:[]});
+global.prjCapturer=nom=>({nom:nom, outil:"x"});
+PRJ.nom="A"; PRJ.modifie=true;
+prjCopieTelecharger();
+const relu=JSON.parse(copie.b.txt);
+verifie("la copie porte la carte, sans marquer le projet enregistre",
+        copie.nom==="A.copie.json"&&relu.copieProjet&&Array.isArray(relu.carte.couches)&&PRJ.modifie);
+const rouverte=await apiLireJson({text:async()=>copie.b.txt});
+let applique=null;
+global.prjAppliquer=async d=>{ applique=d; };
+global.prjRendre=function(){};
+await prjReprendreCopie(rouverte);
+verifie("rouverte : appliquee, rattachee a aucun projet, a enregistrer",
+        applique&&applique.nom==="A"&&PRJ.nom===""&&PRJ.modifie&&PRJ.carteAEcrire);
+global.telecharger=telechargerG; global.Blob=BlobG;
+
 }).then(()=>{
 console.log("");
 console.log(ok+" verifications, "+(ko.length?ko.length+" RATEES : "+ko.join(" | ")

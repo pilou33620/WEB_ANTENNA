@@ -118,6 +118,7 @@ async function charger(fichier){
   hint("Lecture de "+fichier.name+"…");
   try{
     const modele=await apiCharger(fichier);
+    if(modele.copieProjet){ await prjReprendreCopie(modele); return; }
     poser(modele,fichier.name);
     let dit="« "+V.fichier+" » ouvert : "+mdlEntier(modele.stats.composants)
       +" composant(s), "+mdlEntier(modele.stats.pistes)+" piste(s).";
