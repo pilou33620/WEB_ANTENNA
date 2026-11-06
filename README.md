@@ -17,7 +17,7 @@ Interface en HTML / CSS / JavaScript, traitement en Python.
 
 ## Prérequis & Démarrage rapide
 
-L'outil nécessite deux éléments essentiels :
+La page, la lecture d'un fichier IPC-2581, la préparation du modèle et l'export du script ne demandent qu'un Python : sans solveur, seul le bouton « Lancer » reste éteint. Pour lancer des simulations sous Windows, il faut deux éléments (ailleurs, voir [Installer selon le poste](#installer-selon-le-poste)) :
 1. **Les binaires openEMS (`openEMS/`)** contenant le solveur, ses DLL (`CSXCAD.dll`, `openEMS.exe`) et les roues Python dans `openEMS/python/`.
 2. **L'environnement virtuel Python (`env/`)** créé impérativement avec **Python 3.10 ou 3.11 (64 bits)** avec les dépendances (`pip install -r requirements.txt`).
 
@@ -44,10 +44,6 @@ toujours 8000** : voir « Le port » ci-dessous.
 | `--sans-banc` | Ne mesure pas la vitesse du poste (les fils du dernier banc restent en vigueur) |
 | `--projets DIR` | Racine des projets pour ce lancement seulement, sans toucher au réglage retenu dans `~/.antenne-openems.json` ([WEB·SUITE](https://github.com/pilou33620/WEB_SUITE) y passe `PROJETS/ANTENNA`, synchronisé avec GitHub) |
 
-Depuis un autre appareil du réseau (tablette), la page demande une fois un **code d'appairage** à 6 chiffres, affiché dans le terminal du serveur (ou dans les logs de WEB_ANTENNA, dans WEB·SUITE). L'appareil s'en souvient ensuite, pour tous les web tools de ce poste (`appairage.py`, commun aux web tools) ; le poste lui-même n'en a jamais besoin.
-
-En mode réseau, la connexion est **chiffrée (HTTPS)** quand la commande `openssl` est présente sur le poste (Raspberry Pi, Linux, macOS ; sous Windows, celle de Git) : une autorité propre au poste, créée une fois dans `~/.web_tools/tls/`, signe le certificat du serveur. Chaque appareil l'installe une fois, depuis le lien de la page du code (`/appairage/ca.pem`) ; sur iPad : Réglages › Profil téléchargé › Installer, puis Général › Informations › Réglages des certificats › activer. Comparer son empreinte SHA-256 avec celle du terminal. Sans `openssl` (ou avec `WEB_TOOLS_HTTP=1`), tout reste en HTTP et le terminal le dit.
-
 Sans carte sous la main :
 
 ```bash
@@ -57,6 +53,14 @@ python test/carte-antenne.py
 écrit `test/patch-2450.xml`, un patch 2,45 GHz sur FR-4 de 1,6 mm dont la
 résonance se calcule à la main — de quoi essayer l'outil et savoir d'avance ce
 qu'on doit trouver.
+
+### Utiliser depuis un autre appareil
+
+Sans `--local`, le serveur écoute aussi sur le réseau. Le terminal affiche, sous l'adresse du poste, l'adresse **Réseau** à ouvrir depuis l'autre appareil (`https://<adresse>:<port>`, en `http://` sans `openssl`), celle de Tailscale s'il y en a une, et le code d'appairage. Lancé par WEB·SUITE, l'outil reçoit `--local`, sauf si le lanceur est lui-même en mode réseau (`--reseau`, le défaut sur Raspberry Pi et Termux).
+
+Depuis un autre appareil du réseau (tablette), la page demande une fois un **code d'appairage** à 6 chiffres, affiché dans le terminal du serveur (ou dans les logs de WEB_ANTENNA, dans WEB·SUITE). L'appareil s'en souvient ensuite, pour tous les web tools de ce poste (`appairage.py`, commun aux web tools) ; le poste lui-même n'en a jamais besoin.
+
+En mode réseau, la connexion est **chiffrée (HTTPS)** quand la commande `openssl` est présente sur le poste (Raspberry Pi, Linux, macOS ; sous Windows, celle de Git) : une autorité propre au poste, créée une fois dans `~/.web_tools/tls/`, signe le certificat du serveur. Chaque appareil l'installe une fois, depuis le lien de la page du code (`/appairage/ca.pem`) ; sur iPad : Réglages › Profil téléchargé › Installer, puis Général › Informations › Réglages des certificats › activer. Comparer son empreinte SHA-256 avec celle du terminal. Sans `openssl` (ou avec `WEB_TOOLS_HTTP=1`), tout reste en HTTP et le terminal le dit.
 
 ### Le port
 
@@ -88,8 +92,9 @@ serveur qui **démarre en annonçant une adresse qui n'est pas la sienne** :
 
 ### Quel Python
 
-`web_antenna.py` n'a **aucune dépendance** : il démarre sous le Python du système.
-openEMS, numpy et h5py, eux, vivent presque toujours dans un environnement
+Aujourd'hui, `web_antenna.py` n'utilise que la bibliothèque standard : il démarre
+sous le Python du système. openEMS, numpy et h5py, eux, ne servent qu'aux
+simulations et vivent presque toujours dans un environnement
 virtuel à côté — et un `python web_antenna.py` lancé depuis une invite ordinaire
 ne l'utiliserait pas : le bouton « Lancer » resterait éteint sur un poste où
 tout est pourtant installé.
@@ -99,15 +104,42 @@ celui qui le fait tourner d'abord, puis `env/`, `.venv/`, `venv/` à côté de
 `web_antenna.py`. Celui qui est retenu est annoncé au démarrage, et la liste des
 essais figure dans l'état renvoyé à la page.
 
+### Les mises à jour
+
+Au démarrage, sauf avec `--sans-maj`, le serveur regarde si le dépôt a avancé sur
+GitHub, avant même de choisir son Python :
+
+1. sans `git`, ou hors d'un dépôt, il démarre sans rien dire ;
+2. `git fetch --quiet origin`, 10 s au plus et sans jamais demander de mot de
+   passe : si GitHub ne répond pas, il le dit et démarre normalement ;
+3. s'il y a de nouveaux commits (branche amont, à défaut `origin/main`),
+   `git pull --ff-only`, 120 s au plus. Un historique réécrit ou divergent est
+   refusé, et l'outil garde sa version. Les fichiers suivis modifiés sont mis en
+   réserve (`git stash`) puis réappliqués ; en cas de conflit, le terminal le dit
+   et ils restent dans la réserve (`git stash list`) ;
+4. après une mise à jour, il se relance avec les mêmes arguments
+   (`WEB_ANTENNA_DEJA_MAJ=1` évite la boucle).
+
+Lancé par WEB·SUITE, c'est le lanceur qui vérifie, et il passe `--sans-maj` quand
+il vient de le faire. Les projets sont hors du dépôt (voir « Où vivent les
+données ») : une mise à jour n'y touche pas.
+
 ## Arborescence
 
 ```
-├── web_antenna.py          le serveur : trois choses qu'un navigateur ne sait pas faire
+├── web_antenna.py          le serveur : ce qu'un navigateur ne sait pas faire
+├── appairage.py            jeton, code d'appairage, HTTPS (copie de web_suite/lanceur)
+├── pilote.py               le canal de pilotage du MCP de web_suite (copie de web_suite/lanceur)
 ├── index.html              la page, avec la modale de classification des nets (PWR, GND, Signal)
+├── A-FAIRE.md, HISTORIQUE.md  ce qui reste à faire, et le carnet de mesures ; les relevés *.json sont à côté
 ├── css/
 │   ├── theme.css           le thème « dashboard nocturne » et les styles des modales / badges
 │   ├── workspace.css       les panneaux détachables
-│   └── antenne.css         ce que cet outil ajoute
+│   ├── antenne.css         ce que cet outil ajoute
+│   ├── rapport.css         le rapport d'ingénierie
+│   ├── tuto.css            le mode tuto
+│   ├── telephone.css       la disposition sur petit écran (copie de WEB_CAO)
+│   └── pilote.css          le panneau « Claude » (copie de web_suite/lanceur)
 ├── js/
 │   ├── 00 … 06             lire, afficher et classifier la carte IPC-2581 (GND, PWR, Signal)
 │   ├── 10 … 16             l'outil : état, géométrie, assistant, 3D, surimpression 2D accélérée Path2D
@@ -121,13 +153,21 @@ essais figure dans l'état renvoyé à la page.
 │   ├── 27-apercu-motif.js  le dessin coté d'un motif d'antenne, avant de le poser
 │   ├── 28-projet.js        capturer la séance, et la reprendre
 │   ├── 29-tableau-s.js     le tableau S complet, et son fichier Touchstone
+│   ├── 29-lecture-antenna.js les lectures de la page, servies au canal de pilotage
 │   ├── 31-cartes-antenna.js la liste des réglages et l'audit, pour les lectures du canal de pilotage
 │   ├── 31-rapport.js       le rapport d'ingénierie (avec charge cellules × nmax et localisation de la plus petite cellule)
 │   ├── 32-visionneuse.js   la carte de champ animée, lue dans les .vtr
 │   ├── 33-pieces.js        les pièces importées (STEP, STL) : boîtier, piles, une matière par corps
 │   ├── 34-placement.js     les placer à la souris en 3D : choisir, glisser, accrocher face contre face
+│   ├── 35-fils.js          les fils de calcul, et le banc de vitesse qui dit combien en mettre
+│   ├── 36-port-verdict.js  ce que touche chaque borne d'un port, avant le solveur
+│   ├── 37-port-auto.js     un clic sur l'antenne, et le port se pose là où il est juste
+│   ├── 38-tuto.js          le mode tuto
+│   ├── 39-campagne.js      la campagne de mesures (provisoire)
 │   ├── travailleur-occt.js le lecteur STEP/IGES/BREP, dans un fil à part
 │   ├── 90-workspace.js     les panneaux détachables
+│   ├── pilote.js, pilote-antenna.js  le canal de pilotage (copie de web_suite/lanceur), et son branchement ici
+│   ├── telephone.js        la disposition sur petit écran (copie de WEB_CAO)
 │   ├── vendor/three.min.js three.js r134, posé ici et non pris sur un CDN
 │   └── vendor/occt/        OpenCascade en WebAssembly (occt-import-js), repris de WEB_3D
 ├── python/
@@ -142,12 +182,14 @@ essais figure dans l'état renvoyé à la page.
 │   └── test/
 │       ├── banc-openems.py   le banc principal : sans solveur, 23 sections
 │       ├── banc-champs.py    le format .vtr, l'inventaire, le découpage
+│       ├── banc-github-relai.py  le relai « Enregistrer + GitHub »
 │       └── banc-serveur.py   ce que le serveur sert et refuse (.git, chemins Windows, Host)
 ├── test/
 │   ├── carte-antenne.py    fabrique une carte d'essai IPC-2581
 │   ├── patch-2450.xml      … celle qu'elle produit
 │   ├── banc-polygones.js   le découpage des découpes, cas dégénérés compris
-│   └── banc-interface.js   ports, balayage, unités, liste des réglages, audit, classification nets, robustesse
+│   ├── banc-interface.js   ports, balayage, unités, liste des réglages, audit, classification nets, robustesse
+│   └── releve-lecture-antenna.json  le relevé auquel ce banc compare les lectures de la page
 ├── env/                    l'environnement virtuel Python (dépendances pip)
 └── openEMS/                les binaires du solveur (à télécharger, voir « Installation »)
 ```
@@ -156,8 +198,8 @@ essais figure dans l'état renvoyé à la page.
 
 Il ne sert que ce **qu'un navigateur ne sait pas faire** :
 
-1. **lire un fichier IPC-2581.** Le parseur est en Python, il fait soixante-dix
-   kilo-octets de code, et aucun navigateur ne l'exécutera. La page envoie le
+1. **lire un fichier IPC-2581.** Le parseur est en Python, il fait près de deux
+   cents kilo-octets de code, et aucun navigateur ne l'exécutera. La page envoie le
    fichier tel quel, le modèle traduit revient en JSON, et à partir de là tout
    se passe dans le navigateur ;
 2. **appeler openEMS.** Le solveur est un binaire C++ piloté par des liaisons
@@ -165,13 +207,15 @@ Il ne sert que ce **qu'un navigateur ne sait pas faire** :
 3. **écrire sur le disque, et relire.** Un projet est un dossier que vous
    choisissez — voir « Les projets » ci-dessous. Une page web n'écrit pas là
    où on lui dit, et le stockage local d'un navigateur n'est ni un dossier,
-   ni sauvegardable, ni partageable.
+   ni sauvegardable, ni partageable ;
+4. **relayer l'envoi sur GitHub**, quand WEB·SUITE l'a lancé : voir « Enregistrer
+   + GitHub » plus bas.
 
 Tout le reste — l'affichage, la désignation du cuivre, l'assistant, la 3D, les
 courbes — est dans le navigateur et n'a besoin de personne.
 
-`web_antenna.py` n'a **aucune dépendance externe** : bibliothèque standard
-seulement.
+Aujourd'hui, `web_antenna.py` n'importe que la bibliothèque standard et les
+modules du dépôt ; openEMS, numpy et h5py ne servent qu'aux simulations.
 
 ## Les projets — choisir où ranger, et reprendre où l'on s'était arrêté
 
@@ -231,7 +275,7 @@ le plus courant — on nomme son travail quand il a donné quelque chose.
 « Enregistrer » **déplace alors le dossier de calcul du `TEMP` vers le
 projet**, champs compris : les courbes et les `.vtr` partent ensemble, en un
 seul geste, et il n'y a rien de plus à faire. Le bouton
-**« 💾 Tout enregistrer dans le projet »**, à la fin de l'étape « Le calcul »,
+**« 💾 Tout enregistrer dans « nom du projet » »**, à la fin de l'étape « Le calcul »,
 fait exactement la même chose à l'endroit où l'on regarde quand la simulation
 vient de finir.
 
@@ -318,9 +362,25 @@ des dizaines de méga-octets ; changer une fréquence ne doit pas les renvoyer.
 Il n'y a **aucune route de suppression**. Le serveur ne crée que des
 sous-dossiers dont le nom a passé une liste de ce qui est *permis* — pas de
 séparateur, pas de `..`, pas de nom réservé par Windows, quatre-vingts
-caractères au plus — et il n'écrit que les trois fichiers nommés ci-dessus. Un
+caractères au plus — et il n'écrit que les trois fichiers nommés ci-dessus, et
+les dossiers de calcul sous `calculs/`. Un
 outil qui écrit dans un dossier choisi à la main ne doit pas avoir de moyen
 d'en détruire le contenu par une requête.
+
+La seule exception est bornée : enregistrer retire `carte.json` ou
+`resultats.json` quand la page les déclare vides (un projet qui repart d'un
+dessin) ; dans un autre projet que celui qui est ouvert, il faut en plus l'accord
+demandé par la page.
+
+### Où vivent les données
+
+| quoi | où |
+|---|---|
+| les projets | le dossier de travail : par défaut `~/Documents/Antennes openEMS` (`~/Antennes openEMS` sans dossier Documents), ou celui de `--projets DIR` (`PROJETS/ANTENNA` sous WEB·SUITE, un dépôt à part) |
+| un calcul sans projet ouvert | `openems_antenne/` dans le dossier temporaire du système |
+| le dossier de travail retenu, le débit mesuré, les fils de calcul, le dernier banc de vitesse | `~/.antenne-openems.json` |
+| le jeton réseau, l'autorité et le certificat HTTPS, communs aux web tools du poste | `~/.web_tools/` |
+| la disposition des panneaux et les préférences d'affichage | le stockage local du navigateur, sur chaque appareil |
 
 ## Les sept étapes, et pourquoi elles existent
 
@@ -1132,8 +1192,9 @@ tout en augmentant le maillage. La facture se paie donc **deux fois**.
   d'ingénierie Markdown (ex: $4{,}2\times 10^6 \times 190\,000 = 8{,}2\times 10^{11}$ mises à jour).
 * **Durée annoncée réaliste** : elle se base sur le plafond $n_\text{max}$ entier
   (et non une fraction optimiste), exprimée en clair (« 3 h 26 », « 45 min », « 70 s »).
-  Au-delà de deux heures de calcul estimées au débit mesuré du poste, un avertissement
-  préventif « *Ce calcul prendra un moment* » s'affiche avant tout lancement.
+  Dès une demi-heure estimée au débit du poste, un avis préventif s'affiche avant tout
+  lancement : « *Ce calcul prendra un moment* », puis « *Ce calcul se comptera en heures* »
+  au-delà d'une heure, au rang d'avertissement à partir de deux heures.
 
 #### Le diagnostic d'un calcul qui ne rend rien
 
@@ -1439,7 +1500,7 @@ construction. Une largeur tapée à la main au-delà de la borne n'est pas
 rabotée, elle est signalée. Champ vide : aucune borne.
 
 **TOUTE longueur réglable est portée sur le dessin, et elle y porte la lettre
-de son champ.** Neuf cotes pour un F inversé, dix pour un MIFA : les grandes
+de son champ.** Onze cotes pour un F inversé, douze pour un MIFA : les grandes
 en ligne de cote — deux tirets, un trait, un nom, comme sur un plan —, et
 celles qu'une ligne de cote ne saurait porter (une largeur de piste, une
 largeur d'encoche, un diamètre de via font deux pixels à cette échelle) en
@@ -1465,12 +1526,12 @@ résonance** — soit 120 MHz à 2,45 GHz, la largeur de toute la bande ISM. Sur
 un MIFA serré, compter davantage : les brins repliés se couplent, et la fiche
 prévient dès que leur écartement descend sous deux largeurs de bras.
 
-**Sur le patch, c'est l'encastrement qui est le plus faux, et de loin.** La
-résonance tombe à quelques pour cent ; l'*adaptation*, elle, est manquée. Le
-calcul de `y₀` part de la résistance de bord du modèle de cavité, qui suppose
+**Sur le patch, l'encastrement était le plus faux, et de loin.** La résonance
+tombait à quelques pour cent ; l'*adaptation*, elle, était manquée. Le calcul de
+`y₀` part de la résistance de bord du modèle de cavité, qui suppose
 un patch **nu** — ni la ligne qui entre, ni les deux fentes qui l'isolent n'y
 figurent. Un croisement `g` × `y₀` de neuf simulations, sur FR-4 1,6 mm à
-2,45 GHz, le chiffre :
+2,45 GHz, mené avant que le gabarit ne la corrige, le chiffre :
 
 | S₁₁ minimal | y₀ = 8,51 mm | y₀ = 11,51 mm *(calculé)* | y₀ = 14,51 mm |
 |---|---|---|---|
@@ -1481,9 +1542,10 @@ figurent. Un croisement `g` × `y₀` de neuf simulations, sur FR-4 1,6 mm à
 Soit une résistance de bord surestimée d'un facteur trois et demi, et un
 encastrement trop profond d'un bon quart. Les fentes comptent aussi, dans le
 sens attendu — elles ajoutent une capacité, et plus serrées valent mieux — mais
-au second rang. Les deux cotes le **disent** maintenant dans leur aide, et la
-fiche marque l'impédance de bord comme surestimée : c'est le balayage qui
-tranche, et l'écart n'est pas corrigé en douce sur la foi d'un seul relevé.
+au second rang. Le gabarit corrige depuis la longueur et la résistance de bord
+par une loi mesurée sur quatre stratifiés (voir « Limites connues ») ; les deux
+cotes le **disent** dans leur aide, et sur un autre stratifié c'est le balayage
+qui tranche.
 
 Un motif n'est donc pas une antenne : c'est un dessin qui tombe assez près
 pour que la **première** simulation soit exploitable. Sans lui, elle part d'un
@@ -1609,7 +1671,7 @@ du panneau Assistant l'affiche ; Claude le lit par `antenna_lire` (audit) :
 | les ports | aucun port posé ; un port qui relie une couche à elle-même ; un coaxial qui ne fait pas son impédance de référence |
 | l'arrêt | un garde-fou qui coupera avant que l'énergie soit descendue — ce qui rend une descente tronquée, et une transformée sur une descente tronquée n'est pas une mesure |
 | le maillage | moins de trois cellules en travers de la ligne d'alimentation : le cas exact qui fait disparaître la résonance du patch de cet outil |
-| le motif patch | un encastrement `y₀` laissé au calcul du gabarit, dont **on sait qu'il est faux** (voir plus bas) |
+| le motif patch | un encastrement `y₀` laissé au calcul du gabarit sur un stratifié autre que les quatre mesurés : **il y est interpolé, pas mesuré** (voir « Limites connues ») |
 | le dernier résultat | une résonance au bord de la bande ; un écart à la cible, avec le sens de la correction ; une désadaptation, en séparant ce qui vient de la réactance de ce qui vient de la partie réelle |
 | un balayage terminé | le meilleur point — jugé par son S₁₁ **à la fréquence visée**, pas par son creux le plus profond où qu'il tombe —, chiffres à l'appui, et s'il est **au bord** de la plage, cote par cote — coin compris sur un croisement : un optimum de bord n'est que le meilleur des points essayés. La règle lit et n'écrit rien : prolonger une plage, ce sont des simulations de plus, et cela se décide au devis |
 
@@ -1644,8 +1706,9 @@ et l'outil ne peut en dire que ce qu'il mesure.
 
 Le skill `web-suite` de web_suite (fiche `antenne.md`, lisible aussi par l'outil
 MCP `savoir_lire`) porte ce que les mesures de ce dépôt ont tranché, et qu'on ne lit
-nulle part ailleurs : que le gabarit patch surestime la résistance de bord d'un
-facteur 3,5 et propose donc un encastrement trop profond d'un quart ; que
+nulle part ailleurs : que le modèle de cavité surestime la longueur du patch et
+sa résistance de bord, que le gabarit corrige (0,17 fois la conductance de fente
+sur FR-4, 0,72 sur RO4350B) ; que
 resserrer les encoches gagne 8 dB ; que λ/20 dans le diélectrique ne suffit pas
 face à une ligne étroite ; qu'allonger une ligne d'alimentation **n'adapte
 pas**, elle fait tourner Γ sans changer son module. Un modèle générique
@@ -1822,9 +1885,9 @@ de la durée sur le débit du poste, la facture du maillage et la plus petite
 cellule (« pincée »), le calcul qui ne rend rien et son diagnostic d'énergie,
 le désembedage d'une ligne d'alimentation, le port court-circuité par le cuivre
 lui-même, et les refus d'un nom de projet — le seul endroit de l'outil où une chaîne
-venue du réseau touche le système de fichiers — et la **liste des réglages**.
+venue du réseau touche le système de fichiers.
 
-Cinq de ces sections méritent d'être signalées parce qu'elles n'éprouvent pas
+Quatre de ces sections méritent d'être signalées parce qu'elles n'éprouvent pas
 du code de ce dépôt au sens ordinaire :
 
 1. **La facture du maillage et la plus petite cellule** (section 17) : vérifie
@@ -1849,8 +1912,6 @@ du code de ce dépôt au sens ordinaire :
    du net d'antenne recopiée sur le plan de masse sous le port (le cas vu sur
    `P01x274PCB-C.xml`) et vérifie qu'un avis grave bloque le calcul, tout en
    laissant passer une sonde normale ou une pastille fondue dans la masse.
-5. **La liste des réglages et l'audit** : un chemin hors liste est refusé, chaque contrôle se lève
-   quand il le doit, et ses corrections restent dans la liste.
 
 Le **serveur** a son propre banc (`python python/test/banc-serveur.py`,
 quelques secondes) : il ne sert que `index.html`, `css/` et `js/` —
@@ -1859,6 +1920,13 @@ ni `.git/`, ni `env/`, ni un chemin Windows comme
 `localhost`, ni le nom du poste (DNS rebinding). Les trois routes qui désignent un
 chemin du disque (racine des projets, import d'un calcul, ouverture de
 l'explorateur) ne répondent qu'à ce poste.
+
+Le relai **« Enregistrer + GitHub »** a le sien
+(`python python/test/banc-github-relai.py`) : un faux lanceur note ce qu'il
+reçoit, rien n'est poussé, et un autre appareil ne passe qu'avec le jeton du
+lanceur. Les copies communes se vérifient elles-mêmes : `python appairage.py`,
+`python pilote.py`. La CI (`.github/workflows/ci.yml`) lance le banc principal,
+celui du serveur et celui du relai, sans openEMS.
 
 Un bloc à part éprouve le **lecteur de champs** (`python/test/banc-champs.py`,
 appelé lui aussi par le banc principal). Il n'a besoin ni
@@ -1882,6 +1950,7 @@ banc appelle lui-même quand il est installé : le découpage des découpes
 (`test/banc-polygones.js`, cas dégénérés compris) et la logique
 de la page (`test/banc-interface.js`) :
 - la classification des nets (GND, PWR, Signal), l'auto-détection, les filtres et les préréglages ;
+- la **liste des réglages et l'audit** : un chemin hors liste est refusé, chaque contrôle se lève quand il le doit, et ses corrections restent dans la liste ;
 - la mise en cache vectorielle `Path2D` du cuivre, de la grille Yee FDTD et du quadrillage ;
 - la fidélité stricte des champs (`antChampsFideles`) neutralisant les valeurs fantômes du navigateur ;
 - la génération du rapport Markdown enrichi avec la plus petite cellule ("pincée" bornée) et la charge globale $\text{cellules} \times n_\text{max}$ ;
@@ -1971,23 +2040,28 @@ découpes de versement l'ont toujours été.
   sur la résonance, davantage sur substrat épais ou εᵣ élevé. C'est un point
   de départ que la simulation corrige, jamais un résultat — et c'est
   exactement ce que le balayage sert à rattraper.
-* **La correction du patch n'est mesurée que sur deux stratifiés.** Le modèle
+* **La correction du patch n'est mesurée que sur quatre stratifiés.** Le modèle
   de cavité seul pose un encastrement trop profond de 40 % (FR-4 1,6 mm,
   2,45 GHz : −2,5 dB au lieu de −40). Le gabarit corrige depuis le 03/10/2026
   la longueur, par une loi qui tient quatre cas à 0,2 % de fréquence près
   (`patchCorrLongueur`), et la résistance de bord, d'où sort l'encastrement,
-  par un rapport mesuré sur FR-4 et sur RO4350B (`patchCorrRbord`,
-  js/22-antennes.js). Entre les deux, ce rapport est interpolé en tan δ ; en
-  dehors, il est borné à l'un ou l'autre. Sur un autre stratifié, c'est une
-  hypothèse, pas une mesure : l'aide de la cote dit de balayer `y₀`.
+  par un rapport mesuré sur FR-4, FR-4 haute fréquence, RO4003C 1,524 mm et
+  RO4350B 0,762 mm (`patchCorrRbord`, js/22-antennes.js). Ailleurs, ce rapport
+  est interpolé en tan δ et en épaisseur, et borné aux valeurs mesurées (tan δ de
+  0,0027 à 0,02, h de 0,762 à 1,53 mm). Sur un autre stratifié, c'est une
+  hypothèse, pas une mesure : l'aide de la cote dit de balayer `y₀`. Ces lois
+  restent à recaler sur le maillage fin du ruban ([A-FAIRE.md](A-FAIRE.md)) :
+  d'ici là, un patch y tombe environ 0,7 % au-dessus de sa cible.
 * **Un méandre serré sort du modèle** : le MIFA pose le développé du quart
   d'onde, mais deux brins repliés plus proches que deux largeurs de piste se
   couplent, et la résonance remonte au-dessus du calcul — mesuré : au-dessus
   de 3,5 GHz pour 2,45 visés. La cote `kd` (développé visé, en % du quart
-  d'onde, 100 par défaut) allonge les dents à empreinte fixe. Ce qu'il faut y
-  mettre n'est pas encore mesuré : le croisement `kd` × `n` reste à mener
-  (plan dans [HISTORIQUE.md](HISTORIQUE.md), « Plans de mesure »). Tant qu'il ne l'est pas, `kd` vaut 100 et
-  le décalage reste.
+  d'onde, 100 par défaut) allonge les dents à empreinte fixe. Le croisement
+  `kd` × `n` du 22/10/2026 (`croisement-mifa-kd-n.json`, bilan dans
+  [HISTORIQUE.md](HISTORIQUE.md)) : avec un repli, `kd` ≈ 137 % donne 2,45 GHz,
+  mal adapté (−5 dB) ; avec deux ou trois, rien ne résonne sous 2,82 GHz jusqu'à
+  160 %. Aucune seconde campagne n'a été lancée : `kd` vaut toujours 100, et le
+  décalage reste.
 * **La résonance annoncée par une fiche de motif n'est pas une mesure** : elle
   sort de la même formule que les cotes, relue à l'envers. Elle dit dans quel
   sens une cote retouchée déplace l'antenne, pas où l'antenne résonne.
@@ -2045,7 +2119,17 @@ découpes de versement l'ont toujours été.
 
 ## Installation complète des prérequis
 
-Le solveur et l'outil s'articulent autour de trois briques qu'il convient de mettre en place dans l'ordre suivant :
+### Installer selon le poste
+
+| Poste | L'outil | Les simulations |
+|---|---|---|
+| Raspberry Pi, Linux | `git clone https://github.com/pilou33620/WEB_ANTENNA.git`, puis `python3 web_antenna.py` | aucune installation automatique : le module Python et les binaires d'openEMS s'installent à part, dans `env/`, `.venv/` ou `venv/` (voir « Quel Python » et l'en-tête de `requirements.txt`). Sans eux, « Lancer » reste éteint et le reste marche |
+| Windows | le même `git clone`, puis `python web_antenna.py` | l'archive binaire et `env/` : les deux points ci-dessous, ou le bouton « Installer openEMS » de WEB·SUITE |
+| Android (Termux) | `pkg install python git`, puis comme sur un Pi | comme sur un Pi ; garder `termux-wake-lock` actif |
+
+Par WEB·SUITE (`installer.sh`, `installer.cmd`), l'outil se télécharge avec les autres et écoute sur le port 8732.
+
+Sous Windows, le solveur et l'outil s'articulent autour de deux briques qu'il convient de mettre en place dans l'ordre suivant :
 
 ### 1. Les binaires openEMS (`openEMS/`)
 
@@ -2053,7 +2137,7 @@ L'archive officielle openEMS pour Windows contient **à la fois** les binaires C
 
 1. **Télécharger l'archive binaire openEMS pour Windows (64-bit)** :
    - Disponible sur le site officiel : [openems.de/download](https://www.openems.de/download/)
-   - Ou depuis les releases GitHub du projet : [openEMS-project Releases](https://github.com/thliebig/openEMS-project/releases) (ex. `openEMS-v0.0.36-win64.zip`)
+   - Ou depuis les releases GitHub du projet : [openEMS-project Releases](https://github.com/thliebig/openEMS-project/releases) (ex. `openEMS_v0.0.36.zip`)
 2. **Extraire l'archive** dans un dossier nommé `openEMS/` placé **directement à la racine du projet** (à côté de `web_antenna.py`).
 3. **Vérifier l'arborescence** : le dossier `openEMS/` doit contenir directement :
    ```

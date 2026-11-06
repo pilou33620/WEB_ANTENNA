@@ -348,9 +348,9 @@
     "semantic_hash": ""
   },
   "python/test/banc-serveur.py": {
-    "mtime": 1793794472.893455,
-    "seen": 1793797950.5776665,
-    "ast_hash": "c00bdf30be06d1120afcd6a2e3470916",
+    "mtime": 1793812781.5847678,
+    "seen": 1793963844.6594288,
+    "ast_hash": "b7fdea49b1befe76a1004ca548b8b247",
     "semantic_hash": ""
   },
   "test/banc-interface.js": {
@@ -372,9 +372,9 @@
     "semantic_hash": "fcd9e3d46759830cdb66b21e3d366d0c"
   },
   "web_antenna.py": {
-    "mtime": 1793794458.6523771,
-    "seen": 1793797950.577711,
-    "ast_hash": "b448657f00eb24087bc52d1a438c7103",
+    "mtime": 1793812774.90354,
+    "seen": 1793963844.6594791,
+    "ast_hash": "68c365763943af4bd708c60ca81bb661",
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
@@ -390,9 +390,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1793794458.659055,
-    "seen": 1793797950.5777416,
-    "ast_hash": "a80b3ce53859b764d65a82ac3daba693",
+    "mtime": 1793960773.4218674,
+    "seen": 1793963844.6595104,
+    "ast_hash": "4f507a7f31f7becac56a6b9dfd1c5217",
     "semantic_hash": ""
   },
   "index.html": {
