@@ -38,7 +38,7 @@
 # 1. Télécharger l'archive binaire Windows (64-bit) :
 #    - Site officiel : https://www.openems.de/download/
 #    - Ou GitHub     : https://github.com/thliebig/openEMS-project/releases
-#      (Exemple d'archive : openEMS-v0.0.36-win64.zip)
+#      (Exemple d'archive : openEMS_v0.0.36.zip)
 #
 # 2. Extraire l'archive DIRECTEMENT dans le dossier « openEMS » à la racine du projet :
 #

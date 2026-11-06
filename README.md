@@ -40,6 +40,7 @@ toujours 8000** : voir « Le port » ci-dessous.
 | `--port N` | Port d'écoute (défaut 8000, replis décrits plus bas) |
 | `--local` | N'écoute que sur 127.0.0.1 : aucun accès réseau |
 | `--sans-navigateur` | N'ouvre pas le navigateur au démarrage |
+| `--sans-pause` | Sans effet : le serveur n'attend jamais de touche (option commune aux web tools) |
 | `--sans-maj` | Ne vérifie pas les mises à jour GitHub au démarrage |
 | `--sans-banc` | Ne mesure pas la vitesse du poste (les fils du dernier banc restent en vigueur) |
 | `--projets DIR` | Racine des projets pour ce lancement seulement, sans toucher au réglage retenu dans `~/.antenne-openems.json` ([WEB·SUITE](https://github.com/pilou33620/WEB_SUITE) y passe `PROJETS/ANTENNA`, synchronisé avec GitHub) |

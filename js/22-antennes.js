@@ -365,15 +365,11 @@ const CON_MOTIF_PATCH={
           ["Allongement des bords ΔL", conLong(dL,3)+" (×2)"],
           /* LA RÉSISTANCE DE BORD EST LE TERME LE PLUS FRAGILE DU MOTIF, et
              c'est celui dont dépend l'encastrement. Elle sort du modèle de
-             cavité, qui suppose un patch NU : ni la ligne qui entre, ni les
-             deux fentes qui l'isolent n'y figurent. Mesurée sur le patch de
-             ce gabarit — FR-4 1,6 mm, 2,45 GHz —, elle est surestimée d'un
-             facteur trois et demi, et l'encastrement s'en trouve trop
-             profond d'un bon quart. On l'affiche donc avec ce qu'elle vaut
-             plutôt que de la corriger : un relevé sur un substrat ne fait
-             pas une loi, et c'est le balayage qui tranche. */
-          ["Impédance au bord", Rin.toFixed(0)+" Ω  (modèle de cavité, "+
-                                "surestimé — balayez y₀)"],
+             cavité, recalé par patchCorrRbord sur quatre stratifiés mesurés :
+             hors de cette plage la correction est extrapolée, et c'est le
+             balayage qui tranche. */
+          ["Impédance au bord", Rin.toFixed(0)+" Ω  (modèle de cavité recalé "+
+                                "sur mesures — balayez y₀)"],
           ["Impédance à l'encastrement", Zin.toFixed(1)+" Ω"],
           ["Ligne d'alimentation", conLong(p.wf,3)+" → "+
            conZ0Microruban(c.er,c.h,p.wf).toFixed(1)+" Ω"],

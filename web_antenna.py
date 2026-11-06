@@ -1391,6 +1391,9 @@ def main(argv=None):
     ap.add_argument("--sans-navigateur", dest="navigateur",
                     action="store_false",
                     help="ne pas ouvrir le navigateur au demarrage")
+    ap.add_argument("--sans-pause", action="store_true",
+                    help="sans effet : ce serveur n'attend jamais de touche"
+                         " (option commune aux web tools)")
     ap.add_argument("--sans-maj", dest="verifier_maj", action="store_false",
                     default=True,
                     help="ne pas verifier les mises a jour GitHub au demarrage")
