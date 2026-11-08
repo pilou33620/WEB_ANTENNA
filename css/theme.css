@@ -77,11 +77,16 @@ main{flex:1;display:flex;min-height:0}
 
 /* ---------- page d'accueil, tant qu'aucun fichier n'est ouvert ---------- */
 #accueil{
-  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  position:absolute;inset:0;display:flex;flex-direction:column;overflow:auto;
   padding:24px;background:var(--bg);z-index:3;
 }
 #accueil[hidden]{display:none}
-.vide{max-width:640px;width:100%}
+/* margin:auto centre sans couper le haut quand l'accueil dépasse (iPad, docks ouverts) */
+.vide{max-width:640px;width:100%;margin:auto}
+/* pas de carte, rien à voir : la barre 2D/3D/Maillage ne recouvre pas l'accueil */
+:has(>#accueil:not([hidden]))>.vues{display:none}
+/* « Mode tuto » au-dessus du titre, dans le flux : posé en absolu, il recouvrait le titre */
+#accueil>.tuto-ligne{position:static;order:-1;align-self:flex-end;flex:none}
 .vide h2{margin:0 0 6px;font-size:15px;letter-spacing:.12em;text-transform:uppercase}
 .vide p{margin:0 0 14px;font-size:12.5px;color:var(--txt-dim);line-height:1.6}
 .vide code{font-family:var(--mono);color:var(--blue)}
