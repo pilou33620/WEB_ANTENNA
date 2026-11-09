@@ -149,8 +149,9 @@
       envoyer("battement", { navigateur: nav, onglets }).catch(e => { dernierEnvoi = ""; console.warn(e.message); });
     }
 
+    // Après `arreter` (pagehide) le canal est fermé, mais visibilitychange et le long-poll en vol appellent encore
     function annoncer() {
-      if (canal) canal.postMessage({ t: "present", onglet: vue() });
+      if (canal && actif) canal.postMessage({ t: "present", onglet: vue() });
     }
 
     async function boucle() {
@@ -185,7 +186,7 @@
 
     function livrer(c) {
       if (c.onglet === P.id) recevoir(c);
-      else if (canal) canal.postMessage({ t: "commande", c });
+      else if (canal && actif) canal.postMessage({ t: "commande", c });
     }
 
     // -- onglet visé : exécuter --------------------------------------------
