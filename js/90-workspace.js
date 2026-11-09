@@ -649,6 +649,11 @@ function wsMenuBuild(){
      '<button class="mi" data-cmd="all"><span class="ck"></span>Tout afficher</button>'+
      '<button class="mi" data-cmd="cols"><span class="ck"></span>Disposition en colonnes</button>'+
      '<button class="mi" data-cmd="reset"><span class="ck"></span>Réinitialiser la disposition</button>';
+  /* L'interrupteur du tuto vit sur l'accueil, masqué dès qu'une carte est ouverte :
+     sans cette entrée, finir la visite laissait les « ? » sans moyen de les couper. */
+  const tuto=document.querySelector(".tuto-interrupteur");
+  if(tuto)h+='<div class="msep"></div><button class="mi" data-cmd="tuto"><span class="ck">'+
+    (tuto.classList.contains("on")?"✓":"")+'</span>🎓 Mode tuto</button>';
   m.innerHTML=h;
   m.querySelectorAll("[data-tgl]").forEach(function(b){
     b.onclick=function(){
@@ -672,6 +677,8 @@ function wsMenuBuild(){
         wsApply();wsHint("Disposition remise en colonnes.");
       }else if(c==="reset"){
         WS=wsDefault();wsApply();wsHint("Espace de travail réinitialisé.");
+      }else if(c==="tuto"&&tuto){
+        tuto.click();
       }
       wsMenuClose();
     };

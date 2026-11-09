@@ -11,7 +11,11 @@
   display:flex;align-items:center;gap:6px;
   background:rgba(23,24,27,.88);border:1px solid var(--border2);
   border-radius:6px;padding:4px 8px;
+  /* jamais plus large que la carte : en colonne étroite, le texte de la coupe s'empilait sur
+     cinq lignes et la barre masquait le haut de la vue ; elle passe à la ligne par blocs */
+  max-width:calc(100% - 20px);flex-wrap:wrap;
 }
+.vues .vhint{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%}
 .vb{
   background:transparent;color:var(--txt-dim);border:1px solid transparent;
   border-radius:4px;padding:3px 10px;font-size:11.5px;cursor:pointer;
@@ -22,7 +26,7 @@
 .vsep{width:1px;height:16px;background:var(--border2)}
 .vhint{font-size:10.5px;color:var(--txt-dim);font-family:var(--mono)}
 /* les coupes du maillage en 3D : la couleur d'un plan est celle de sa normale */
-.maille3d{display:flex;align-items:center;gap:4px;padding-left:6px;border-left:1px solid var(--border2)}
+.maille3d{display:flex;align-items:center;gap:4px;padding-left:6px;border-left:1px solid var(--border2);flex-wrap:wrap;min-width:0}
 .maille3d[hidden]{display:none}
 .maille3d .vb{padding:2px 7px;font-size:11px}
 .maille3d .vb[disabled]{opacity:.35;cursor:default}
@@ -68,7 +72,9 @@ body.pose-port #carte{cursor:cell}
 .etp .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ---------- le corps d'une étape ---------- */
-#assistantCorps{padding:12px 14px}
+/* Toujours quelques lignes au corps : dans un dock chargé, le bilan (46 %) et les
+   étapes le réduisaient à une ligne coupée. Le bilan, lui, défile. */
+#assistantCorps{padding:12px 14px;min-height:84px}
 .intro{
   margin:0 0 14px;font-size:12px;color:var(--txt-dim);line-height:1.65;
   border-left:2px solid var(--yellow);padding-left:10px;
@@ -180,6 +186,18 @@ table.empilage th{
 table.empilage td{padding:3px 6px;border-bottom:1px solid var(--border);
   vertical-align:middle;font-family:var(--mono)}
 table.empilage td input{max-width:84px;display:inline-block}
+/* Champ et unité sur une ligne, et une liste « Rôle » assez large pour « signal » / « masse » :
+   dans un dock de 400 px, elles se lisaient « sigr », « mas: », et « mm » passait sous le champ. */
+table.empilage td:has(>input[data-lt]){white-space:nowrap}
+table.empilage td input[data-lt]{width:4.6em}
+table.empilage td select[data-lt-role]{min-width:6.8em;max-width:100%}
+table.empilage td{padding-left:4px;padding-right:4px}
+/* Dock étroit : la colonne « Nature » (conducteur, diélectrique) se devine au nom et à la
+   couleur de la couche ; sans elle, champs, sources et rôles tiennent dans la largeur. */
+#assistantCorps{container-type:inline-size}
+@container (max-width:430px){
+  table.empilage th:nth-child(2),table.empilage td:nth-child(2){display:none}
+}
 table.empilage tr.cu td.nom{color:var(--yellow)}
 table.empilage tr.gap td.nom{color:var(--txt-dim);font-size:10.5px}
 table.empilage tr.manque{background:rgba(232,68,58,.10)}
@@ -201,7 +219,7 @@ table.empilage tr.rev td input[type=checkbox]{max-width:none}
 .bilan{
   flex-direction:column;align-items:stretch;gap:8px;
   border-top:1px solid var(--border2);background:var(--panel2);
-  padding:8px 12px;max-height:46%;overflow-y:auto;
+  padding:8px 12px;max-height:46%;overflow-y:auto;min-height:0;
 }
 .bilan .chiffres{
   display:flex;flex-wrap:wrap;gap:4px 18px;font-family:var(--mono);
@@ -957,3 +975,21 @@ input.oeil{accent-color:var(--cyan);cursor:pointer;margin:0}
 #campagne .campPlan .tb.mini{margin-left:6px;padding:1px 6px;font-size:10px}
 #campagne .campDevis{font-size:11px;white-space:pre-wrap;background:var(--panel2);padding:6px;border-radius:4px}
 #campagne .campBoutons{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+
+/* La pastille « Claude » (pilote.css) est fixe en bas à droite : le pied de page
+   lui laisse sa place au lieu de passer dessous. */
+body>footer{padding-right:130px}
+/* Elle dépasse d'une vingtaine de pixels au-dessus du pied : le bas du dock droit
+   (barre « Quitter le mode » du panneau Conception) lui laisse cette hauteur. */
+#dockR{box-sizing:border-box;padding-bottom:24px}
+body.tel #dockR{padding-bottom:0}
+/* Fenêtre étroite (800 px) : les docks gardaient leur largeur de grand écran et
+   la carte tombait à 190 px, sous la barre 2D/3D/Maillage. Plafonnés ici, sans
+   toucher aux largeurs retenues dans l'espace de travail. */
+@media (max-width:1100px){
+  #dockL,#dockR{max-width:28vw}
+}
+/* Fenêtre basse : le dock du bas (résultats, journal) ne mange plus la carte. */
+@media (max-height:700px){
+  #dockB{max-height:24vh}
+}

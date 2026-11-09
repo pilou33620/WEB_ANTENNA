@@ -903,7 +903,7 @@ function ant3dMailleUI(){
     if(c){
       const mm=c.v*(m.unite_mm||1);
       s+=" · "+plan.toUpperCase()+" à "+ANT3D_MAILLE_PLANS[plan].axe+" = "+
-         (+mm.toFixed(4))+" mm ("+(c.k+1)+"/"+c.n+")";
+         mdlNb(mm,4)+" mm ("+(c.k+1)+"/"+c.n+")";      // la virgule, comme partout ailleurs
     }
     if(ANT3D_MAILLE.vol&&ANT3D.grillePas>1)s+=" · volume 1 ligne sur "+ANT3D.grillePas;
     t.textContent=s;

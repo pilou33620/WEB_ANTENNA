@@ -296,6 +296,11 @@ function antBasculerVueMaillage(force){
 function antPeindrePort(c,dpr){
   /* Pixels CSS : voir la note de `antPeindreBoite`. */
   c.setTransform(dpr,0,0,dpr,0,0);
+  /* Les étiquettes déjà écrites : neuf ports d'un réseau 3×3 écrivaient chacun
+     « port n Cuivre dessus → Cuivre dessous » par-dessus le voisin. */
+  // les croix de tous les ports d'abord : une étiquette ne passe pas sur un port voisin
+  const pris=ANT.ports.filter(p=>p.pose).map(p=>{const q=w2s(p.x,p.y);return [q.x-13,q.y-13,26,26];});
+  const largeur=c.canvas.width/dpr;
   ANT.ports.forEach(function(p,i){
     if(!p.pose)return;
     const s=w2s(p.x,p.y);
@@ -387,7 +392,12 @@ function antPeindrePort(c,dpr){
            : p.de+" → "+p.a)+
          (p.excite?"":" (en charge)"))
       : (nom+"(couches à choisir)");
-    c.fillText(txt,s.x+R*1.9,s.y+4);
+    const x0=s.x+R*1.9, y0=s.y+4, h=13;
+    const libre=w=>x0+w<=largeur&&!pris.some(r=>x0<r[0]+r[2]&&x0+w>r[0]&&y0<r[1]+r[3]&&y0+h>r[1]);
+    // « port n » seul quand la place manque : le détail des couches est dans l'assistant
+    const court=nom.trim();
+    const t=libre(c.measureText(txt).width)?txt:libre(c.measureText(court).width)?court:"";
+    if(t){c.fillText(t,x0,y0);pris.push([x0,y0,c.measureText(t).width,h]);}
     c.restore();
   });
 }
