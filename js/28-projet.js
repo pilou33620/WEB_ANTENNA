@@ -682,7 +682,7 @@ async function prjEnregistrerGeste(nom){
    Le même geste que dans WEB_CAO (commun/projet-disque.js). Lancé par
    WEB_SUITE, web_antenna.py relaie au lanceur l'envoi de PROJETS sur GitHub
    (commit + pull + push, routes /api/github*) : la page enregistre et envoie
-   d'un seul geste. Depuis une tablette reliée à un téléphone (Termux) ou à un
+   d'un seul geste. Depuis une tablette reliée à un
    Raspberry Pi, le lanceur est dans un autre onglet, et l'on ne pensait pas
    à y aller.
    Les dossiers de calcul ne partent pas : PROJETS les ignore (ils pèsent des

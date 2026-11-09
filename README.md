@@ -57,7 +57,7 @@ qu'on doit trouver.
 
 ### Utiliser depuis un autre appareil
 
-Sans `--local`, le serveur écoute aussi sur le réseau. Le terminal affiche, sous l'adresse du poste, l'adresse **Réseau** à ouvrir depuis l'autre appareil (`https://<adresse>:<port>`, en `http://` sans `openssl`), celle de Tailscale s'il y en a une, et le code d'appairage. Lancé par WEB·SUITE, l'outil reçoit `--local`, sauf si le lanceur est lui-même en mode réseau (`--reseau`, le défaut sur Raspberry Pi et Termux).
+Sans `--local`, le serveur écoute aussi sur le réseau. Le terminal affiche, sous l'adresse du poste, l'adresse **Réseau** à ouvrir depuis l'autre appareil (`https://<adresse>:<port>`, en `http://` sans `openssl`), celle de Tailscale s'il y en a une, et le code d'appairage. Lancé par WEB·SUITE, l'outil reçoit `--local`, sauf si le lanceur est lui-même en mode réseau (`--reseau`, le défaut sur Raspberry Pi).
 
 Depuis un autre appareil du réseau (tablette), la page demande une fois un **code d'appairage** à 6 chiffres, affiché dans le terminal du serveur (ou dans les logs de WEB_ANTENNA, dans WEB·SUITE). L'appareil s'en souvient ensuite, pour tous les web tools de ce poste (`appairage.py`, commun aux web tools) ; le poste lui-même n'en a jamais besoin.
 
@@ -2127,7 +2127,6 @@ découpes de versement l'ont toujours été.
 |---|---|---|
 | Raspberry Pi, Linux | `git clone https://github.com/pilou33620/WEB_ANTENNA.git`, puis `python3 web_antenna.py` | aucune installation automatique : le module Python et les binaires d'openEMS s'installent à part, dans `env/`, `.venv/` ou `venv/` (voir « Quel Python » et l'en-tête de `requirements.txt`). Sans eux, « Lancer » reste éteint et le reste marche |
 | Windows | le même `git clone`, puis `python web_antenna.py` | l'archive binaire et `env/` : les deux points ci-dessous, ou le bouton « Installer openEMS » de WEB·SUITE |
-| Android (Termux) | `pkg install python git`, puis comme sur un Pi | comme sur un Pi ; garder `termux-wake-lock` actif |
 
 Par WEB·SUITE (`installer.sh`, `installer.cmd`), l'outil se télécharge avec les autres et écoute sur le port 8732.
 
