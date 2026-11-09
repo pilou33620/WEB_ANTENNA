@@ -296,6 +296,10 @@ class Poste(http.server.SimpleHTTPRequestHandler):
         except Refus as exc:
             self.close_connection = True   # le corps n'a peut-etre pas ete lu
             self._json({"detail": exc.message}, exc.code)
+        except ConnectionError:
+            # page fermee pendant la reponse : une ligne, pas une trace suivie d'un 500 impossible a envoyer
+            self.close_connection = True
+            sys.stderr.write("  %s : la page s'est fermee avant la reponse\n" % self.path.split("?")[0])
         except Exception as exc:                       # noqa: BLE001
             self.close_connection = True
             # La trace au terminal, pas au client : elle porte des chemins.

@@ -218,7 +218,10 @@ function antMaj(immediat){
     if(!V.modele)return;
     try{ await oePreparer(); }
     catch(e){ /* le refus est déjà dans ANT.refus */ }
-    antAssistantRendre(false);
+    /* Une action immédiate (clic, pose du port, liste) refait l'étape entière :
+       sinon jetons, coordonnées du port et champs restaient d'avant. Un champ en
+       cours de saisie est épargné par antAssistantRendre lui-même. */
+    antAssistantRendre(!!immediat);
     antReglagesEcrire();
     redessiner();
     if(ANT.vue==="3d"&&typeof ant3dMaj==="function")ant3dMaj();
@@ -895,17 +898,10 @@ ANT_LIER.bande=function(box){
   antLierNombre(box.querySelector("#antFc"), ANT.bande, "fcible", {facteur: antKf(), min:0});
   antLierNombre(box.querySelector("#antN"), ANT.bande, "n", {min:21, max:4001, defaut:1001, entier:true});
   box.querySelector("#antUF").onchange=function(){
-    /* ON GARDE LE NOMBRE, ON CHANGE L'UNITÉ : 868 écrit en MHz puis passé en
-       GHz vaut 868 GHz. On corrige l'unité de ce qu'on vient de taper sans le
-       retaper. Les champs refaits sont relus comme une saisie, dans la
-       nouvelle unité. */
-    const ids=["antF1","antF2","antFc"];
-    const lus=ids.map(id=>{const el=box.querySelector("#"+id);return el?el.value:null;});
+    /* La fréquence ne change pas, seule son écriture : 2,45 GHz devient
+       2450 MHz. Garder le nombre divisait en silence par mille une bande
+       venue du fichier ou d'un motif. */
     ANT.uniteF=this.value; antAssistantRendre(true);
-    ids.forEach(function(id,i){
-      const el=document.getElementById(id);
-      if(el&&lus[i]!=null&&el.onchange){el.value=lus[i];el.onchange();}
-    });
   };
   box.querySelectorAll("[data-bande]").forEach(function(b){
     b.onclick=function(){

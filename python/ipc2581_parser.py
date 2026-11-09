@@ -444,6 +444,13 @@ class IPC2581Parser:
             self.root = self.tree.getroot()
             logger.info("Fichier XML chargé avec succès.")
 
+            # un XML quelconque s'ouvrait comme une carte vide, sans un mot
+            racine = self.root.tag.split("}")[-1]
+            if racine != "IPC-2581":
+                raise IPC2581ParseError(
+                    f"Ce n'est pas un fichier IPC-2581 : la racine est <{racine}>, "
+                    "il faut <IPC-2581>.")
+
             if self.root.tag.startswith("{"):
                 uri = self.root.tag.split("}")[0].strip("{")
                 self.ns = {'ipc': uri}
@@ -496,6 +503,8 @@ class IPC2581Parser:
             logger.info(f"  - Unités : {self.design.units}")
             return self.design
 
+        except IPC2581ParseError:
+            raise
         except FileNotFoundError as e:
             logger.error(f"Fichier introuvable : {self.xml_file}")
             raise IPC2581ParseError(f"Fichier introuvable : {self.xml_file}") from e

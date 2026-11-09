@@ -746,9 +746,10 @@ courbe là où l'impulsion n'a presque rien mis.
 Les trois champs partagent une **liste d'unités** Hz / kHz / MHz / GHz. Elle
 n'est pas là par confort : écrire `868` dans un champ étiqueté GHz est une
 faute qui ne se voit pas, et qui ne produit ni refus ni champ vide. Changer
-d'unité **garde le nombre écrit** et le relit dans la nouvelle unité, comme une
-saisie : `868` en MHz passé en GHz devient 868 GHz, pas 0,868. On corrige
-l'unité d'un nombre tapé dans la mauvaise, on ne le convertit pas.
+d'unité **ne change pas la fréquence**, seulement son écriture : 2,45 GHz
+devient 2450 MHz. Garder le nombre écrit divisait par mille, sans un mot, une
+bande venue du fichier ou d'un motif ; un nombre tapé dans la mauvaise unité se
+voit tout de suite une fois converti (868 GHz devient 868 000 MHz) et se retape.
 
 ### 5. Les ports — par où l'onde entre, et ce qui en ressort
 

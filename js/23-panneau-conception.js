@@ -515,9 +515,13 @@ function conGabaritRafraichir(){
 function conApercuBloc(g){
   const c=conContexte();
   let t=null;
-  try{ t=g.tracer(c,conGabaritCotes(g,c,CON.gabaritP)); }catch(e){ t=null; }
-  let etat="";
-  if(t){
+  const q=conGabaritCotes(g,c,CON.gabaritP);
+  try{ t=g.tracer(c,q); }catch(e){ t=null; }
+  const nuls=conCotesImpossibles(g,q).map(conSymbole);
+  let etat=nuls.length
+    ? '<div class="apm-etat"><span class="loin">⚠ '+aEsc(nuls.join(", "))+' ≤ 0 : fréquence '+
+      'hors de portée de ce motif, il ne sera pas dessiné</span></div>' : "";
+  if(t&&!nuls.length){
     let f="";
     if(t.calcul.festim>0){
       const ec=100*(t.calcul.festim-c.f)/c.f;
@@ -1099,16 +1103,13 @@ function conPanneauLier(box){
     };
     el.onchange=function(){ conPanneauRendre(); };
   });
-  /* ON GARDE LE NOMBRE, ON CHANGE L'UNITÉ : 868 écrit en MHz puis passé en
-     GHz vaut 868 GHz. Le champ est relu comme une saisie, dans la nouvelle
-     unité. L'assistant est refait avec : c'est SON unité, et son étape
+  /* La fréquence visée ne change pas, seule son écriture (2,45 GHz devient
+     2450 MHz). L'assistant est refait avec : c'est SON unité, et son étape
      « La bande » l'affiche. */
   box.querySelectorAll("[data-con-uf]").forEach(function(el){
     el.onchange=function(){
       if(!ANT_UNITES_F[el.value])return;
       ANT.uniteF=el.value;
-      const champ=box.querySelector("[data-con-f]");
-      if(champ&&champ.oninput)champ.oninput();
       conPanneauRendre();
       if(typeof antAssistantRendre==="function")antAssistantRendre();
     };

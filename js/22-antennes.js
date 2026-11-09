@@ -1335,6 +1335,17 @@ function conGabaritCotes(g,c,p){
   return out;
 }
 
+/* Les cotes que le calcul lui-même rend nulles ou négatives : la fréquence
+   visée est hors de portée du motif (un patch à 100 GHz sur 1,6 mm de FR-4
+   sortait L = −0,048 mm, et « Dessiner » restait permis). */
+function conCotesImpossibles(g,q){
+  return g.champs.filter(function(ch){
+    if(ch.booleen||ch.signe||ch.unite)return false;
+    const v=q[ch.id];
+    return !isFinite(v)||v<0||(v===0&&ch.id!=="y0");
+  });
+}
+
 /* Ce que l'utilisateur a repris à la main, pour que la fiche le dise. Le
    seuil est de deux pour mille : en dessous, c'est l'arrondi de l'affichage,
    pas une décision. */
@@ -1566,6 +1577,12 @@ function conGabaritPoser(id,p){
 
   const c=conContexte();
   const q=conGabaritCotes(g,c,p);
+  const nuls=conCotesImpossibles(g,q);
+  if(nuls.length){
+    hint("Motif non dessiné : "+nuls.map(conSymbole).join(", ")+" nulle(s) ou négative(s) — "+
+         "la fréquence visée est hors de portée de ce motif sur cet empilage.");
+    return false;
+  }
   const r=conGabaritTrace(g,c,q);
   if(!r)return false;
   const t=r.t;

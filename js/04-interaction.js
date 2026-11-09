@@ -431,6 +431,12 @@ cv.addEventListener("contextmenu",function(e){
 document.addEventListener("keydown",function(e){
   const cible=e.target;
   if(cible&&/^(INPUT|TEXTAREA|SELECT)$/.test(cible.tagName))return;
+  /* M seul appartient à la vue maillage FDTD (19-demarrage.js) ; le maillage RWG
+     garde Ctrl+Alt+M, celui qu'annonce son bouton. Les deux partaient ensemble. */
+  if(e.ctrlKey&&e.altKey&&e.code==="KeyM"&&!e.metaKey){
+    if(typeof simBasculerMaillage==="function")simBasculerMaillage();else basculer("maillage","bMaillage");
+    e.preventDefault();return;
+  }
   if(e.ctrlKey||e.metaKey||e.altKey)return;
   const k=e.key.toLowerCase();
   if(k==="f"){fit();}
@@ -440,13 +446,6 @@ document.addEventListener("keydown",function(e){
   else if(k==="p"){basculer("plans","bPlans");}
   else if(k==="j"){
     if(typeof simBasculerJsurf==="function")simBasculerJsurf();
-  }
-  else if(k==="m"){
-    if(typeof simBasculerMaillage==="function"){
-      simBasculerMaillage();
-    }else{
-      basculer("maillage","bMaillage");
-    }
   }
   else if(k==="escape"){choisirRien();}
   else if(k==="+"||k==="="){zoomer(1.25,cv.clientWidth/2,cv.clientHeight/2);}

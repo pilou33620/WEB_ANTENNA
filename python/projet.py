@@ -385,8 +385,12 @@ def lire(nom):
     charge = dict(tete)
     charge["nom"] = nom
     charge["dossier"] = dossier
-    charge["carte"] = _lire_json(os.path.join(dossier, F_CARTE))
-    charge["resultats"] = _lire_json(os.path.join(dossier, F_RESULTATS))
+    for cle, fichier in (("carte", F_CARTE), ("resultats", F_RESULTATS)):
+        charge[cle] = _lire_json(os.path.join(dossier, fichier))
+        # un objet ou rien : une chaine faisait tomber la page a la reprise
+        if charge[cle] is not None and not isinstance(charge[cle], dict):
+            raise ErreurProjet("« %s » n'est pas un objet JSON." % fichier,
+                               "Le fichier a ete modifie a la main ou est corrompu.")
     return charge
 
 
@@ -431,6 +435,9 @@ def enregistrer(charge):
     if not isinstance(charge, dict):
         raise ErreurProjet("Document de projet illisible.")
     nom = _verifier_nom(charge.get("nom"))
+    for cle in ("carte", "resultats"):
+        if charge.get(cle) is not None and not isinstance(charge[cle], dict):
+            raise ErreurProjet("« %s » doit etre un objet JSON." % cle)
     dossier = _dossier(nom, creer=True)
     # « Enregistrer sous » un projet existant : effacer SA carte ou SES
     # resultats demande l'accord que la page envoie (`ecraser`) apres l'avoir
