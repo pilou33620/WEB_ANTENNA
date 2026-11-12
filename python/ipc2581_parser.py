@@ -357,18 +357,20 @@ class IPC2581ParseError(ValueError):
     """Levée lorsque le fichier IPC-2581 ne peut pas être parsé (fichier absent, XML corrompu, etc.)."""
 
 
-def parse_ipc2581_file(xml_file: str) -> IPCDesign:
-    """API courte d'intégration : parse un fichier IPC-2581 et retourne l'IPCDesign.
-
-    Lève IPC2581ParseError en cas d'échec.
-    """
-    return IPC2581Parser(xml_file).parse()
-
-
 # layerFunction IPC-2581 qui designent du cuivre (CONDUCTOR, SIGNAL, PLANE,
 # MIXED, CONDFILM, CONDFOIL, POWER_GROUND...). Meme famille que celle que la
 # page reconnait (js/02-modele.js).
 _RE_FONCTION_CUIVRE = re.compile(r"COND|SIGNAL|PLANE|POWER|GROUND|MIXED")
+# Le type d'un composant d'apres ses proprietes TYPE / CATEGORY / DEVICE (mots entiers)
+_MOTS_TYPE = (
+    ("RESISTOR", {"RES", "RESISTOR", "RESISTORS", "RESISTANCE"}),
+    ("CAPACITOR", {"CAP", "CAPS", "CAPACITOR", "CAPACITORS"}),
+    ("INDUCTOR", {"IND", "INDUCTOR", "INDUCTORS", "COIL", "COILS", "CHOKE", "CHOKES"}),
+    ("DIODE", {"DIODE", "DIODES", "LED", "LEDS"}),
+    ("TRANSISTOR", {"TRANSISTOR", "TRANSISTORS", "MOSFET", "MOSFETS"}),
+    ("IC", {"IC", "ICS", "CIRCUIT", "CIRCUITS"}),
+    ("CONNECTOR", {"CONN", "CONNECTOR", "CONNECTORS", "HEADER", "HEADERS"}),
+)
 
 
 class IPC2581Parser:
@@ -531,6 +533,16 @@ class IPC2581Parser:
         return v if math.isfinite(v) else default
 
     @staticmethod
+    def _fini(value) -> float:
+        """float() qui LEVE sur un non-fini, pour une coordonnee obligatoire :
+        l'appelant ignore alors la forme, au lieu de laisser un « inf » faire
+        tomber l'arrondi de ipc2581_json et la lecture du fichier entier."""
+        v = float(value)
+        if not math.isfinite(v):
+            raise ValueError("coordonnée non finie : %r" % (value,))
+        return v
+
+    @staticmethod
     def _safe_int(value, default: int = 0) -> int:
         """Convertit en int sans lever d'exception."""
         try:
@@ -601,21 +613,14 @@ class IPC2581Parser:
             for k in ("TYPE", "COMPONENT_TYPE", "CATEGORY", "DEVICE"):
                 for prop_k, prop_v in props.items():
                     if prop_k.upper() == k:
-                        pv = prop_v.upper()
-                        if "RES" in pv:
-                            return "RESISTOR"
-                        if "CAP" in pv:
-                            return "CAPACITOR"
-                        if "IND" in pv or "COIL" in pv or "CHOKE" in pv:
-                            return "INDUCTOR"
-                        if "DIODE" in pv or "LED" in pv:
-                            return "DIODE"
-                        if "TRANS" in pv or "MOSFET" in pv:
-                            return "TRANSISTOR"
-                        if "IC" in pv or "CIRCUIT" in pv:
-                            return "IC"
-                        if "CONN" in pv or "HEADER" in pv:
-                            return "CONNECTOR"
+                        # des mots entiers : « Resonators » n'est pas RES, « CERAMIC » pas IC,
+                        # « Transformer » pas TRANS(istor)
+                        mots = set(re.findall(r"[A-Z]+", prop_v.upper()))
+                        if mots & {"TRANSFORMER", "TRANSFORMERS"}:
+                            return "UNKNOWN"     # sinon le préfixe T le ferait transistor
+                        for genre, noms in _MOTS_TYPE:
+                            if mots & noms:
+                                return genre
 
         # 2. Préfixe du RefDes (norme IEEE 315 / ASME Y14.44 / usage CAO)
         m = re.match(r"^([A-Z]+)", rd)
@@ -629,7 +634,7 @@ class IPC2581Parser:
             return "INDUCTOR"
         if pfx in ("D", "CR", "LED", "TVS", "ZD"):
             return "DIODE"
-        if pfx in ("Q", "TR", "MOS", "FET", "T"):
+        if pfx in ("Q", "TR", "MOS", "FET", "T"):    # T : transistor dans l'usage français
             return "TRANSISTOR"
         if pfx in ("U", "IC"):
             return "IC"
@@ -707,14 +712,15 @@ class IPC2581Parser:
             if line_dict is not None and "units" in line_dict.attrib:
                 self.design.units = line_dict.attrib["units"]
                 logger.info(f"Unités trouvées (DictionaryLineDesc): {self.design.units}")
-            ecad = self.root.find(self._tag("Ecad"))
-            # « is not None » et non « if ecad » : un Element sans enfant est
-            # faux au sens booléen, et <Ecad> peut n'en avoir qu'un seul.
-            if ecad is not None:
-                header = ecad.find(self._tag("CadHeader"))
-                if header is not None and "units" in header.attrib:
-                    self.design.units = header.attrib["units"]
-                    logger.info(f"Unités trouvées (CadHeader): {self.design.units}")
+        # hors du « if content » : un fichier en pouces sans <Content> était lu en mm
+        ecad = self.root.find(self._tag("Ecad"))
+        # « is not None » et non « if ecad » : un Element sans enfant est
+        # faux au sens booléen, et <Ecad> peut n'en avoir qu'un seul.
+        if ecad is not None:
+            header = ecad.find(self._tag("CadHeader"))
+            if header is not None and "units" in header.attrib:
+                self.design.units = header.attrib["units"]
+                logger.info(f"Unités trouvées (CadHeader): {self.design.units}")
 
     # ------------------------------------------------------------------
     # Étape 2 : Dictionnaire de lignes
@@ -803,7 +809,7 @@ class IPC2581Parser:
         f = lambda cle: self._safe_float(noeud.attrib.get(cle)) * k
         forme = (noeud.attrib.get("shape") or "ROUND").upper()
         ro, ri = f("outerDiameter") / 2, f("innerDiameter") / 2
-        n = self._safe_int(noeud.attrib.get("spokeCount"), 4)
+        n = min(self._safe_int(noeud.attrib.get("spokeCount"), 4), 360)   # la boucle suit n
         demi = (f("spokeWidth") or f("gap")) / 2
         if n <= 0 or demi <= 0:
             return [(self._anneau(forme, ro), [self._anneau(forme, ri)])]
@@ -997,8 +1003,8 @@ class IPC2581Parser:
 
             for line in entry.iter(self._tag("Line")):
                 try:
-                    p1 = Point(float(line.attrib["startX"]), float(line.attrib["startY"]))
-                    p2 = Point(float(line.attrib["endX"]), float(line.attrib["endY"]))
+                    p1 = Point(self._fini(line.attrib["startX"]), self._fini(line.attrib["startY"]))
+                    p2 = Point(self._fini(line.attrib["endX"]), self._fini(line.attrib["endY"]))
                     width = self._get_width(line)
                     fill_prop = self._get_fill_desc(line)
                     user_shape.tracks.append(Track(width=width, points=[p1, p2], fill_property=fill_prop))
@@ -1014,9 +1020,9 @@ class IPC2581Parser:
 
             for arc in entry.iter(self._tag("Arc")):
                 try:
-                    start = Point(float(arc.attrib["startX"]), float(arc.attrib["startY"]))
-                    end = Point(float(arc.attrib["endX"]), float(arc.attrib["endY"]))
-                    center = Point(float(arc.attrib["centerX"]), float(arc.attrib["centerY"]))
+                    start = Point(self._fini(arc.attrib["startX"]), self._fini(arc.attrib["startY"]))
+                    end = Point(self._fini(arc.attrib["endX"]), self._fini(arc.attrib["endY"]))
+                    center = Point(self._fini(arc.attrib["centerX"]), self._fini(arc.attrib["centerY"]))
                     clockwise = arc.attrib.get("clockwise", "false").lower() == "true"
                     width = self._get_width(arc)
                     fill_prop = self._get_fill_desc(arc)
@@ -1849,7 +1855,10 @@ class IPC2581Parser:
             logger.info(f"  - Couche {layer.sequence:02d} : {layer.name} "
                         f"(Épaisseur: {layer.thickness} {self.design.units}){details_str}")
 
-        step = cad_data.find(self._tag("Step"))
+        # panneau d'abord, carte ensuite : le <Step> utile est celui qui porte le cuivre
+        steps = cad_data.findall(self._tag("Step"))
+        step = next((s for s in steps if s.find(self._tag("LayerFeature")) is not None),
+                    steps[0] if steps else None)
         if step is None:
             logger.warning("Balise <Step> non trouvée.")
             return
@@ -1896,7 +1905,7 @@ class IPC2581Parser:
                 continue
 
             for item_set in layer_feature.findall(self._tag("Set")):
-                net_name = item_set.attrib.get("net", "Non-Net")
+                net_name = item_set.attrib.get("net") or "Non-Net"   # net="" perdait ses pistes
 
                 for pad_node in item_set.iter(self._tag("Pad")):
                     pad_inst = self._process_pad_instance(pad_node, layer_ref, net_name)
@@ -2108,8 +2117,7 @@ class IPC2581Parser:
                          item_set.findall(self._tag("SpecRef"))]
 
             holes = item_set.findall(self._tag("Hole"))
-            features = item_set.find(self._tag("Features"))
-            if features is not None:
+            for features in item_set.findall(self._tag("Features")):
                 holes.extend(features.findall(self._tag("Hole")))
 
             for hole in holes:
@@ -2736,8 +2744,8 @@ class IPC2581Parser:
     def _process_simple_line(self, line_elem: ET.Element, layer: str, default_net: str, xf=None):
         try:
             net = line_elem.attrib.get("net", default_net)
-            p1 = Point(float(line_elem.attrib["startX"]), float(line_elem.attrib["startY"]))
-            p2 = Point(float(line_elem.attrib["endX"]), float(line_elem.attrib["endY"]))
+            p1 = Point(self._fini(line_elem.attrib["startX"]), self._fini(line_elem.attrib["startY"]))
+            p2 = Point(self._fini(line_elem.attrib["endX"]), self._fini(line_elem.attrib["endY"]))
             if xf:
                 p1, p2 = xf(p1), xf(p2)
             width = self._get_width(line_elem)
@@ -2823,9 +2831,9 @@ class IPC2581Parser:
                      xf=None, miroir: bool = False):
         try:
             net = arc_elem.attrib.get("net", default_net)
-            start = Point(float(arc_elem.attrib["startX"]), float(arc_elem.attrib["startY"]))
-            end = Point(float(arc_elem.attrib["endX"]), float(arc_elem.attrib["endY"]))
-            center = Point(float(arc_elem.attrib["centerX"]), float(arc_elem.attrib["centerY"]))
+            start = Point(self._fini(arc_elem.attrib["startX"]), self._fini(arc_elem.attrib["startY"]))
+            end = Point(self._fini(arc_elem.attrib["endX"]), self._fini(arc_elem.attrib["endY"]))
+            center = Point(self._fini(arc_elem.attrib["centerX"]), self._fini(arc_elem.attrib["centerY"]))
             clockwise = arc_elem.attrib.get("clockwise", "false").lower() == "true"
             if xf:
                 start, end, center = xf(start), xf(end), xf(center)
