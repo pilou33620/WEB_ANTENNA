@@ -488,7 +488,7 @@ class Appairage:
             if not self.code or maintenant >= self.expire:
                 self._neuf(maintenant)
                 return False, "Code expiré : un nouveau code est affiché sur le serveur."
-            if len(saisi) == 6 and hmac.compare_digest(saisi, self.code):
+            if len(saisi) == 6 and hmac.compare_digest(saisi.encode(), self.code.encode()):
                 self.code = None                   # usage unique
                 self.grilles = 0
                 self.echecs = 0
@@ -617,7 +617,7 @@ class Garde:
         except CookieError:
             biscuit = {}
         recus = [self._jeton_url(handler), biscuit[BISCUIT].value if BISCUIT in biscuit else ""]
-        return any(r and hmac.compare_digest(r, self.jeton) for r in recus)
+        return any(r and hmac.compare_digest(r.encode(), self.jeton.encode()) for r in recus)
 
     def autorise(self, handler):
         return not self.actif or self.ce_poste(handler) or self.jeton_recu(handler)
