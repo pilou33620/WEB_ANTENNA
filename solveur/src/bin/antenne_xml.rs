@@ -42,7 +42,13 @@ fn main() {
                 let n = |k: &str| m.m["nf2ff"][k].as_liste().map(|l| l.len()).unwrap_or(0);
                 depouillement::lire_nf2ff(&nf, n("theta"), n("phi")).unwrap_or_else(|e| echec(e))
             });
-            for l in &p.journal {
+            let journal_nf = nf.as_ref().map(|nf| {
+                // le XML de nf2ff, tel que le lancement l'ecrit
+                let _ = std::fs::write(dossier.join("nf2ff.xml"), depouillement::xml_nf2ff(&m.m, p.freq[p.i0], &sim.nf2ff));
+                let (p_inc, p_acc) = depouillement::puissances(&m.m, &sim.ports, &p);
+                depouillement::journal_nf2ff(nf, p_inc, p_acc)
+            });
+            for l in p.journal.iter().chain(journal_nf.iter().flatten()) {
                 eprintln!("{l}");
             }
             println!("{}", dumps(&depouillement::resultats(&m.m, &sim.ports, &p, nf.as_ref())));

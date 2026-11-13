@@ -157,3 +157,5 @@ temp/
 target/
 # Les .vtr des essais de la caisse antenne_modele sont suivis.
 !modele/essais/**/*.vtr
+# Les references de la caisse antenne_solveur (sondes de synthese, HDF5 de nf2ff) sont suivies.
+!solveur/essais/**/*.h5
