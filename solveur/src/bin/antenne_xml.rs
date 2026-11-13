@@ -5,7 +5,7 @@
 //!     antenne_xml --depouiller document.json DOSSIER
 //!
 //! `--depouiller` relit les sondes de DOSSIER (et son nf2ff.h5 s'il y est) et rend le JSON
-//! des resultats : c'est aussi l'outil de comparaison avec numpy (essais/outils).
+//! des resultats : c'est aussi l'outil qui a servi a la comparaison avec numpy (essais/LISEZ-MOI.md).
 
 use antenne_modele::{dumps, json_depuis_texte, modele, obj, Json};
 use antenne_solveur::{depouillement, xml};

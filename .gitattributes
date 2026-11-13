@@ -1,0 +1,11 @@
+* text=auto
+*.html text eol=lf
+*.md  text eol=lf
+*.txt text eol=lf
+*.cmd text eol=crlf
+*.sh  text eol=lf
+*.rs  text eol=lf
+*.toml text eol=lf
+# Les références des essais se comparent à l'octet : jamais de conversion de fins de ligne.
+modele/essais/** -text
+solveur/essais/ref/** -text

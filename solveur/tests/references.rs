@@ -1,4 +1,4 @@
-//! Les references figees du Python (essais/ref/, produites par essais/outils/banc_numpy.py) :
+//! Les references figees du Python (essais/ref/ ; d'ou elles viennent : essais/LISEZ-MOI.md) :
 //! pour chaque cas, la structure que le script posait par les liaisons CSXCAD et les vraies
 //! classes de ports d'openEMS 0.0.36, et le resultats.json que numpy tirait de sondes de
 //! synthese. Le XML ecrit ici doit porter la meme structure, cote pour cote, et le
@@ -202,7 +202,7 @@ fn depouillement_de_numpy() {
 
 #[test]
 fn hdf5_de_la_vraie_bibliotheque() {
-    // essais/ref/champ_lointain/nf2ff.h5 est ecrit par libhdf5 (essais/outils/ecrire_nf2ff_h5.py),
+    // essais/ref/champ_lointain/nf2ff.h5 est ecrit par libhdf5 (voir essais/LISEZ-MOI.md),
     // avec les appels de l'ecrivain d'openEMS.
     let h = hdf5::Fichier::ouvrir(Path::new("essais/ref/champ_lointain/nf2ff.h5")).unwrap();
     let theta = h.jeu("/Mesh/theta").unwrap();

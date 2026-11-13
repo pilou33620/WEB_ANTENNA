@@ -7,6 +7,8 @@ description = "WEB_ANTENNA : serveur de l'outil « Antenne openEMS » (IPC-2581,
 [workspace]
 resolver = "2"
 members = ["modele", "solveur"]
+# `cargo test` éprouve aussi les deux caisses ; les scripts binaires.* ne livrent que web_antenna
+default-members = [".", "modele", "solveur"]
 
 [dependencies]
 # Serveur HTTP/HTTPS, appairage et canal de pilotage : communs aux web tools (dépôt web_suite)
