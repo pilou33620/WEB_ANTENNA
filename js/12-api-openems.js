@@ -5,7 +5,7 @@
 
      GET  /api/openems                 ce que ce poste sait faire
      POST /api/openems                 un document -> un modèle vérifié
-     POST /api/openems/script          un document -> un script Python autonome
+     POST /api/openems/script          un document -> le XML d'openEMS, autonome, et son lisez-moi
      POST /api/openems/lancer          un document -> une tâche de calcul
      POST /api/openems/balayage        + une liste de points -> ce qu'elle coûte
      POST /api/openems/balayage/lancer + une liste de points -> N calculs

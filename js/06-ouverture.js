@@ -114,7 +114,7 @@ async function charger(fichier){
   attente(true,"Lecture de "+fichier.name+"…",
           /\.json$/i.test(fichier.name)
             ? "relecture d'un modèle déjà traduit"
-            : "le parseur Python travaille sur le serveur");
+            : "le lecteur IPC-2581 travaille sur le serveur");
   hint("Lecture de "+fichier.name+"…");
   try{
     const modele=await apiCharger(fichier);

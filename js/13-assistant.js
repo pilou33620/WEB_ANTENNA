@@ -753,9 +753,8 @@ ${rev?`<p class="note">Les <b>revêtements extérieurs</b> — vernis épargne,
     le garde à peu près constant.${m?" À la bande actuelle, l'écart aux bords atteint <b>"+aNb(m.pertes.ecart_kappa_pc,0)+" %</b>.":""}</small></label>
   <label class="rd"><input type="radio" name="antPertes" value="debye"${ANT.pertes.mode==="debye"?" checked":""}>
     <b>Pôles de Debye</b> <small>une somme de relaxations qui tient tan&delta; plat sur
-    toute la bande. Les liaisons Python d'openEMS n'exposent pas ce matériau :
-    le script écrit le XML de CSXCAD et le relit, ce qui est écrit et commenté
-    dans le script lui-même.${m&&m.pertes.actif?" Ici : <b>"+m.dielectriques.filter(d=>d.debye).map(d=>d.debye.poles.length).join("/")+" pôles</b>, tan&delta; tenu à <b>"+aNb(m.pertes.ecart_debye_pc,2)+" %</b> près.":""}</small></label>
+    toute la bande. Le fichier XML d'openEMS porte ce matériau tel quel,
+    pôle par pôle.${m&&m.pertes.actif?" Ici : <b>"+m.dielectriques.filter(d=>d.debye).map(d=>d.debye.poles.length).join("/")+" pôles</b>, tan&delta; tenu à <b>"+aNb(m.pertes.ecart_debye_pc,2)+" %</b> près.":""}</small></label>
   ${ANT.pertes.mode==="kappa"?`<div class="ligne">
     <span><label>Fréquence de référence <small>0 = centre de la bande</small></label>
       <input type="text" inputmode="decimal" spellcheck="false" id="antFk" value="${mdlNb(ANT.pertes.f_kappa?ANT.pertes.f_kappa/antKf():0)}"> ${ANT.uniteF}</span>
@@ -1441,7 +1440,7 @@ ${typeof antTableauSHtml==="function"?antTableauSHtml():""}
 ${typeof antFilsHtml==="function"?antFilsHtml():""}
 
 <div class="champ actions">
-  <button class="tb" id="bScript2">⤓ Écrire le script Python</button>
+  <button class="tb" id="bScript2">⤓ Écrire le fichier openEMS (.xml)</button>
   <button class="tb" id="bVerif"${peut?"":" disabled"} title="Un calcul coupé à une minute environ, même géométrie, sans diagramme : il dit si le port est en court-circuit, en circuit ouvert, ou s'il excite bien l'antenne — avant d'engager le grand calcul.">🔎 Vérifier le port</button>
   <button class="tb on" id="bLancer2"${peut?"":" disabled"}>▶ Lancer openEMS</button>
   <button class="tb danger" id="bArret2" style="display:none">■ Arrêter la simulation</button>
@@ -1528,11 +1527,15 @@ ANT_LIER.calcul=function(box){
 async function antTelechargerScript(){
   try{
     const r=await oeScript();
-    const blob=new Blob([r.script],{type:"text/x-python;charset=utf-8"});
+    /* La clé « script » garde son nom : c'est le XML d'openEMS qu'elle porte. */
+    const blob=new Blob([r.script],{type:"application/xml;charset=utf-8"});
     telecharger(blob,r.nom);
-    typeof wsHint==="function"&&wsHint("Script écrit : "+r.nom);
+    if(r.lisez_moi)
+      telecharger(new Blob([r.lisez_moi],{type:"text/plain;charset=utf-8"}),
+                  r.nom.replace(/\.xml$/i,"")+"_LISEZ-MOI.txt");
+    typeof wsHint==="function"&&wsHint("Fichier écrit : "+r.nom);
   }catch(e){
-    typeof wsHint==="function"&&wsHint("Script impossible : "+(e.message||e));
+    typeof wsHint==="function"&&wsHint("Export impossible : "+(e.message||e));
     antAssistantRendre();
   }
 }
