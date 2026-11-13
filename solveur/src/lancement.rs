@@ -1690,7 +1690,20 @@ fn _copier(source: &Path, destination: &Path) -> std::io::Result<()> {
 }
 
 fn _reel(p: &Path) -> PathBuf {
-    p.canonicalize().unwrap_or_else(|_| p.to_path_buf())
+    let reel = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    // Sous Windows, canonicalize rend « \\?\C:\... » : la page afficherait ce prefixe, et le
+    // chemin ne serait plus celui que rend le projet pour le meme dossier.
+    #[cfg(windows)]
+    {
+        let t = reel.to_string_lossy();
+        if let Some(unc) = t.strip_prefix(r"\\?\UNC\") {
+            return PathBuf::from(format!(r"\\{}", unc));
+        }
+        if let Some(reste) = t.strip_prefix(r"\\?\") {
+            return PathBuf::from(reste.to_string());
+        }
+    }
+    reel
 }
 
 /// Range le dossier d'un calcul deja fait sous `base_destination`.
