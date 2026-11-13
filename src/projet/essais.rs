@@ -242,7 +242,7 @@ fn projets() {
     lancement::definir_racine_calculs(&cible);
 
     let l = calculs().unwrap();
-    assert_eq!(noms(&l, "id"), [id.clone()], "la liste rend le calcul archive");
+    assert_eq!(noms(&l, "id"), std::slice::from_ref(&id), "la liste rend le calcul archive");
     // ... avec son compte de champs et son poids, et il n'est pas marque comme importe
     assert_eq!((l[0]["vtr"].as_i64(), l[0]["octets"].as_i64(), &l[0]["importe"]), (Some(1), Some(4096), &Json::Nul));
 
