@@ -1368,7 +1368,8 @@ fn _oublier_les_vieilles() {
     let limite = maintenant() - DUREE_MEMOIRE;
     verrou(&TACHES).retain(|t| {
         let i = t.i();
-        !(matches!(i.etat, "fini" | "echoue" | "arrete") && i.fin < limite)
+        // `fin` nul : une tache arretee dont le processus n'a pas encore rendu la main
+        !(matches!(i.etat, "fini" | "echoue" | "arrete") && i.fin != 0.0 && i.fin < limite)
     });
 }
 
