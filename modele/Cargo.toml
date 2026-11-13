@@ -10,7 +10,7 @@ doctest = false # les schémas indentés des commentaires ne sont pas du code
 [dependencies]
 # Le lecteur IPC-2581 commun : on en prend ici `py` (le JSON et l'arithmétique de Python) et roxmltree.
 ipc2581 = { git = "https://github.com/pilou33620/web_suite", rev = "915bf4fd282b442d23f3e15f59644f89e71175a5" }
-serde_json = { version = "1", features = ["preserve_order"] } # lire le document de la page, clés dans l'ordre
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] } # le document de la page : clés dans l'ordre, flottants exacts
 regex = "1"   # les noms de fichiers .vtr et leur entête
 flate2 = "1"  # zlib : les blocs des .vtr, les sommets des pièces
 
