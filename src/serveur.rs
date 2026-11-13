@@ -247,6 +247,11 @@ pub struct Poste {
 
 impl Poste {
     pub fn servir(&self, r: &mut Requete) -> Reponse {
+        // « //ailleurs.example » en tete d'adresse : une seule barre, comme http.server le
+        // faisait avant toute route (une redirection vers un autre site s'ecrirait ainsi).
+        if r.cible.starts_with("//") {
+            r.cible = format!("/{}", r.cible.trim_start_matches('/'));
+        }
         let rendu = match self.garde.filtrer(r) {
             Some(refus) => refus,
             None => match r.methode.as_str() {

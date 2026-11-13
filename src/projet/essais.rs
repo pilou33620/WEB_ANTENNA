@@ -71,6 +71,13 @@ fn projets() {
     let cles: Vec<&String> = relu.as_objet().unwrap().keys().collect();
     assert_eq!(cles, ["format", "version", "nom", "titre", "cree", "modifie", "outil", "source", "fichier", "dessin", "antenne", "affichage", "dossier", "carte", "resultats"]);
 
+    // lire un projet ne change pas le projet courant
+    enregistrer(&doc(r#"{"nom": "Voisin"}"#)).unwrap();
+    assert_eq!(lire("Patch 2,45 GHz").unwrap()["nom"].as_str(), Some("Patch 2,45 GHz"));
+    assert_eq!(ouvert().map(|(nom, _)| nom).as_deref(), Some("Voisin"));
+    std::fs::remove_dir_all(joindre(&travail, "Voisin")).unwrap();
+    ouvrir("Patch 2,45 GHz").unwrap();
+
     // UNE CARTE ABSENTE N'EST PAS UNE CARTE NULLE, et confondre les deux
     // effacerait des dizaines de mega-octets a chaque changement de frequence.
     enregistrer(&doc(r#"{"nom": "Patch 2,45 GHz", "dessin": {"elements": []}}"#)).unwrap();
