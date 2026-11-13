@@ -9,7 +9,9 @@
 //! tourner et suit son journal ; `depouillement` passe les sondes en frequence (S, Z, ROE)
 //! et pilote `nf2ff` ; `hdf5` relit ce que `nf2ff` ecrit ; `antenne` est la porte du serveur.
 
+pub mod antenne;
 pub mod depouillement;
 pub mod hdf5;
+pub mod lancement;
 pub mod ports;
 pub mod xml;
