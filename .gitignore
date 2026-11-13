@@ -152,3 +152,6 @@ temp/
 /graphify-out/20*/
 /graphify-out/.graphify_python
 /graphify-out/.graphify_root
+
+# Rust : les produits de cargo
+target/

@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = ["modele"]
+
+[profile.release]
+opt-level = "s"
+strip = true

@@ -1,0 +1,18 @@
+[package]
+name = "antenne_modele"
+version = "0.1.0"
+edition = "2021"
+description = "Le modèle d'antenne de WEB_ANTENNA : document de la page -> modèle openEMS vérifié, pièces 3D, champs .vtr"
+
+[lib]
+doctest = false # les schémas indentés des commentaires ne sont pas du code
+
+[dependencies]
+# Le lecteur IPC-2581 commun : on en prend ici `py` (le JSON et l'arithmétique de Python) et roxmltree.
+ipc2581 = { git = "https://github.com/pilou33620/web_suite", rev = "915bf4fd282b442d23f3e15f59644f89e71175a5" }
+serde_json = { version = "1", features = ["preserve_order"] } # lire le document de la page, clés dans l'ordre
+regex = "1"   # les noms de fichiers .vtr et leur entête
+flate2 = "1"  # zlib : les blocs des .vtr, les sommets des pièces
+
+[dev-dependencies]
+sha2 = "0.10" # les sorties de référence trop longues pour le dépôt sont tenues par leur empreinte
