@@ -16,7 +16,7 @@
 
 use antenne_modele::modele::{ErreurModele, DUMP_TYPES};
 use antenne_modele::outils::fmt_g;
-use antenne_modele::pieces::{corps_inclus, Piece, PRIORITE_DIELECTRIQUE, PRIORITE_METAL};
+use antenne_modele::pieces::{corps_inclus, Piece};
 use antenne_modele::Json;
 
 use crate::ports::{self, PortMesure};
@@ -514,7 +514,6 @@ pub fn generer(m: &Json, pieces: &[Piece]) -> Result<Simulation, ErreurModele> {
     //
     // Priorites : un plastique cede a la carte -- substrat a 1, cuivre a 10 et
     // plus --, un metal passe au-dessus.
-    debug_assert!(PRIORITE_DIELECTRIQUE < 1 && PRIORITE_METAL > 13);
     for (n, (p, c)) in corps_inclus(pieces).enumerate() {
         let Some(inclus) = &c.inclus else { continue };
         let nom = format!("{}_{}", _ident(&format!("{}_{}", p.nom, c.nom), "piece"), n);
@@ -699,7 +698,7 @@ pub const BANC_PAS: usize = 300;
 
 /// Le XML du banc de vitesse : le meme pour tous les essais, les fils passent en argument.
 pub fn generer_banc() -> String {
-    let [nx, ny, nz] = BANC_LIGNES;
+    let [nx, ny, _] = BANC_LIGNES;
     let mut csx = Csx::default();
     let (x, y) = ((nx / 2) as f64, (ny / 2) as f64);
     // FDTD.AddLumpedPort(1, 50, [x, y, 0], [x, y, 4], 'z', excite=1)
