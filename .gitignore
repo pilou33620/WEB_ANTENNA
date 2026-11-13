@@ -155,3 +155,5 @@ temp/
 
 # Rust : les produits de cargo
 target/
+# Les .vtr des essais de la caisse antenne_modele sont suivis.
+!modele/essais/**/*.vtr

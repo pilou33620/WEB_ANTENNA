@@ -1144,7 +1144,7 @@ pub fn normaliser(doc: &Json) -> Res<Modele> {
                          "triangles" => n_triangles},
     };
 
-    let (mx, my, mz) = _mailler(&mut modele, &cuivre, &pieces, &bande, res_air, res_die);
+    let (mx, my, mz) = _mailler(&mut modele, &cuivre, &pieces, &bande, res_air, res_die)?;
     poser(&mut modele, "maillage", obj! {"x" => nombres(mx), "y" => nombres(my), "z" => nombres(mz.iter().copied())});
     // LES ECARTS QUE CETTE GRILLE SOUDERAIT, ouverts avant tout le reste : le
     // collage des ports, l'estimation et le pas de temps doivent voir la

@@ -11,25 +11,10 @@
 //! `sommets_b64` et `faces_b64` puis décompressés (le flux zlib, lui, n'est pas comparable).
 //! `--debit`, `--fils` et `--banc` posent l'état du poste avant le calcul.
 
-use antenne_modele::modele::{self, Modele};
-use antenne_modele::{b64, champs, dumps, json_depuis_texte, obj, pieces, Json};
-use std::io::Read;
+use antenne_modele::{champs, comparaison, dumps, json_depuis_texte, modele, obj, Json};
 
 fn refus(message: &str, conseil: &str) -> Json {
     obj! {"erreur" => message, "conseil" => conseil}
-}
-
-/// base64 des octets décompressés d'un `sommets_b64` / `faces_b64`.
-fn brut(texte: &str) -> Json {
-    let mut out = Vec::new();
-    let z = b64::decoder(texte).unwrap_or_default();
-    let _ = flate2::read::ZlibDecoder::new(&z[..]).read_to_end(&mut out);
-    b64::encoder(&out).into()
-}
-
-fn geo(m: &Modele) -> Json {
-    Json::Liste(pieces::corps_inclus(&m.pieces)
-        .map(|(_, c)| obj! {"sommets" => brut(&pieces::sommets_b64(c)), "faces" => brut(&pieces::faces_b64(c))}).collect())
 }
 
 fn main() {
@@ -81,18 +66,7 @@ fn main() {
                 eprintln!("{} : {e}", arg(0));
                 std::process::exit(2);
             });
-            let rendu = match mode {
-                "balayage" => modele::balayage(&doc).map(|s| s.json),
-                "tableau_s" => modele::tableau_s(&doc).map(|s| s.json),
-                _ => modele::normaliser(&doc).map(|m| {
-                    let mut json = pieces::sans_geometrie(&m).clone();
-                    if let (true, Json::Objet(o)) = (avec_geo, &mut json) {
-                        o.insert("_geo".into(), geo(&m));
-                    }
-                    json
-                }),
-            };
-            rendu.unwrap_or_else(|e| refus(&e.message, &e.conseil))
+            comparaison::rendu(mode, &doc, avec_geo)
         }
     };
     println!("{}", dumps(&sortie));

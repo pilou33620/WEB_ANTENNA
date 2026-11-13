@@ -9,10 +9,14 @@
 //! (essais/ garde des sorties de référence). Le pilotage d'openEMS n'est pas ici.
 
 pub mod b64;
+pub mod champs;
+pub mod comparaison;
 pub mod modele;
 pub mod outils;
 pub mod pieces;
 
 pub use ipc2581::py::{dumps, Json, Objet};
 pub use outils::json_depuis_texte;
-pub mod champs;
+
+#[cfg(test)]
+mod essais;

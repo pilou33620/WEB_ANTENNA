@@ -489,6 +489,9 @@ fn _bande_lignes(a: f64, b: f64, pas: f64) -> Vec<f64> {
     out
 }
 
+/// Au-dela de tant de lignes sur un axe, le maillage n'est pas construit (voir `_maillage`).
+pub const LIGNES_MAX_AXE: f64 = 5.0e6;
+
 /// Les trois listes de lignes de maillage.
 ///
 /// Le principe : un fond regulier a la resolution de l'air sur toute la
@@ -521,10 +524,20 @@ fn _bande_lignes(a: f64, b: f64, pas: f64) -> Vec<f64> {
 /// pour le budget qui borne le tout.
 #[allow(clippy::too_many_arguments)]
 fn _maillage(modele: &mut Json, cuivre: &[Bloc], pieces: &[Piece], res_air: f64, res_die: f64, res_fin: f64,
-             bandes: Option<&Bandes>) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+             bandes: Option<&Bandes>) -> Res<(Vec<f64>, Vec<f64>, Vec<f64>)> {
     let boite = &modele["boite"];
     let em = reels(&modele["emprise"]);
     let z_haut = f(&modele["z_haut"]);
+    // UN GARDE-FOU QUE LE PYTHON N'AVAIT PAS : une bande ou une marge absurde (f2 = 1e300) y
+    // demandait des milliards de lignes, et le processus mourait faute de memoire. Ici, un refus.
+    let fin_vise = if 0.0 < res_fin && res_fin < res_die { res_fin } else { res_die };
+    let lignes_axe = |a: &str, b: &str| (f(&boite[b]) - f(&boite[a])) / mini(res_air, fin_vise);
+    let pire = max_de([lignes_axe("x1", "x2"), lignes_axe("y1", "y2"), lignes_axe("z1", "z2")]);
+    if !(pire <= LIGNES_MAX_AXE) {
+        return Err(refus(
+            "Maillage hors de portee : des millions de lignes sur un seul axe.",
+            "Verifiez la bande de frequence, les marges de la boite et le pas de maillage."));
+    }
 
     // UNE BANDE PLUS MINCE QUE LE PAS FIN N'EST PAS UNE BANDE : elle poserait
     // une cellule de sa largeur, laquelle commanderait le pas de temps de tout
@@ -907,7 +920,7 @@ fn _maillage(modele: &mut Json, cuivre: &[Bloc], pieces: &[Piece], res_air: f64,
         "z" => _pincee(&mz, &z_obl, &z_aff),
     });
     poser(modele, "maillage_detail", detail);
-    (mx, my, mz)
+    Ok((mx, my, mz))
 }
 
 /// La plus petite cellule d'une liste de lignes.
@@ -1155,7 +1168,7 @@ fn _bilan_pistes(cuivre: &[Bloc], res_die: f64, fin: f64, bx: &[P], by: &[P]) ->
 /// simulation ». Et le maillage de fond passe toujours : on refuse d'affiner,
 /// jamais de calculer.
 pub(super) fn _mailler(modele: &mut Json, cuivre: &[Bloc], pieces: &[Piece], bande: &Json, res_air: f64,
-                       res_die: f64) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+                       res_die: f64) -> Res<(Vec<f64>, Vec<f64>, Vec<f64>)> {
     fn det(modele: &mut Json) -> &mut Json {
         let d = champ(champ(modele, "resolution"), "detail");
         if !matches!(d, Json::Objet(_)) {
@@ -1171,7 +1184,7 @@ pub(super) fn _mailler(modele: &mut Json, cuivre: &[Bloc], pieces: &[Piece], ban
     poser(det(modele), "cout_fond", 0.0);
     poser(det(modele), "cout", 0.0);
 
-    let fond = _maillage(modele, cuivre, pieces, res_air, res_die, 0.0, None);
+    let fond = _maillage(modele, cuivre, pieces, res_air, res_die, 0.0, None)?;
     let cout_fond = _cout(&_estimation(&fond.0, &fond.1, &fond.2, res_die), bande);
     poser(det(modele), "cout_fond", cout_fond);
     poser(det(modele), "cout", cout_fond);
@@ -1179,13 +1192,13 @@ pub(super) fn _mailler(modele: &mut Json, cuivre: &[Bloc], pieces: &[Piece], ban
         // Le fond resout deja le cuivre le plus etroit : il n'y a rien a
         // affiner, et le chemin reste celui d'avant, ligne pour ligne.
         poser(det(modele), "pistes", _bilan_pistes(cuivre, res_die, 0.0, &[], &[]));
-        return fond;
+        return Ok(fond);
     }
 
     let bandes = _bandes_fines(cuivre, CELLULES_PAR_PISTE * res_die);
     if bandes.x.is_empty() && bandes.y.is_empty() {
         poser(det(modele), "pistes", _bilan_pistes(cuivre, res_die, 0.0, &[], &[]));
-        return fond;
+        return Ok(fond);
     }
 
     let budget = maxi(cout_fond, mini(CELLULES_PAS_MAX, cout_fond * AFFINAGE_COUT_MAX));
@@ -1214,14 +1227,14 @@ pub(super) fn _mailler(modele: &mut Json, cuivre: &[Bloc], pieces: &[Piece], ban
             fin *= AFFINAGE_RECUL;
             continue;
         }
-        let essai = _maillage(modele, cuivre, pieces, res_air, res_die, fin, Some(&bandes));
+        let essai = _maillage(modele, cuivre, pieces, res_air, res_die, fin, Some(&bandes))?;
         let cout = _cout(&_estimation(&essai.0, &essai.1, &essai.2, res_die), bande);
         if cout <= budget {
             poser(det(modele), "fin", fin);
             poser(det(modele), "fin_borne", fin > voulu * 1.001);
             poser(det(modele), "cout", cout);
             poser(det(modele), "pistes", _bilan_pistes(cuivre, res_die, fin, &bx, &by));
-            return essai;
+            return Ok(essai);
         }
         fin *= AFFINAGE_RECUL;
     }

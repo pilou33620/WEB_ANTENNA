@@ -790,3 +790,33 @@ fn _elargir_cellules(m: &Json, cuivre: &[Bloc], lignes: &mut Grille, bilan: &mut
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Noeuds;
+
+    #[test]
+    fn ordre_d_un_set_de_python() {
+        // relevés sur Python 3.13 : list(set((i * 7 % 13, i * 5 % 11) for i in range(40)))
+        let mut s = Noeuds::new();
+        for i in 0..40 {
+            s.add((i * 7 % 13, i * 5 % 11));
+        }
+        let attendu = [(12, 10), (3, 7), (5, 4), (4, 6), (9, 2), (8, 3), (10, 0), (0, 8), (1, 9), (2, 8), (7, 4), (6, 5), (12, 0),
+                       (12, 9), (4, 5), (5, 6), (3, 6), (8, 2), (9, 1), (10, 2), (11, 1), (0, 10), (2, 7), (11, 10), (1, 8), (6, 4),
+                       (7, 3), (4, 7), (3, 8), (5, 5), (8, 4), (9, 3), (0, 0), (11, 0), (10, 1), (0, 9), (2, 9), (1, 10), (7, 5), (6, 3)];
+        assert_eq!(s.iter().collect::<Vec<_>>(), attendu);
+        // ... et set((i, j) for i in range(300) for j in range(250)) : la table grandit autrement au-delà de 50 000
+        let mut s = Noeuds::new();
+        for i in 0..300 {
+            for j in 0..250 {
+                s.add((i, j));
+                s.add((i, j));
+            }
+        }
+        let l: Vec<_> = s.iter().collect();
+        assert_eq!(s.len(), 75000);
+        assert_eq!(&l[..6], &[(165, 216), (113, 26), (206, 217), (247, 26), (16, 93), (90, 42)]);
+        assert_eq!((&l[74997..], l[40000]), (&[(14, 47), (0, 149), (74, 98)][..], (106, 236)));
+    }
+}
