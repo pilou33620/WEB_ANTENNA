@@ -211,6 +211,7 @@ impl Csx {
         self.props.len() - 1
     }
 
+    // à vérifier sur un vrai openEMS : l'attribut ID (celui qu'ecrit CSXCAD, relu sans s'en servir).
     fn prop(&self, genre: &str, nom: &str) -> Elt {
         Elt::new(genre).a("ID", self.props.len().to_string()).a("Name", nom)
     }
@@ -372,6 +373,8 @@ pub fn generer(m: &Json, pieces: &[Piece]) -> Result<Simulation, ErreurModele> {
     for face in ["xmin", "xmax", "ymin", "ymax", "zmin", "zmax"] {
         bords = bords.a(face, pml.clone());
     }
+    // à vérifier sur un vrai openEMS : f_max (ecrit par l'interface Matlab, non relu pour une
+    // impulsion gaussienne) et le PML_n en toutes lettres.
     let fdtd = Elt::new("FDTD").a("NumberOfTimesteps", m["arret"]["nmax"].as_i64().unwrap_or(0).to_string())
         .n("endCriteria", lit_e(10f64.powf(f(&m["arret"]["energie_dB"]) / 10.0), 3)).n("f_max", f0 + fc)
         .e(Elt::new("Excitation").a("Type", "0").n("f0", f0).n("fc", fc)).e(bords);
@@ -592,6 +595,7 @@ pub fn generer(m: &Json, pieces: &[Piece]) -> Result<Simulation, ErreurModele> {
             csx.boite(e, 0, a, b2);
             csx.boite(h, 0, a, b2);
         }
+        // à vérifier sur un vrai openEMS : ces noms de fichiers (SetName(nom, rang) dans openems.cpp).
         nf2ff = (0..6).map(|n| (format!("nf2ff_E_{n}.h5"), format!("nf2ff_H_{n}.h5"))).collect();
     }
 
@@ -619,6 +623,8 @@ pub fn generer(m: &Json, pieces: &[Piece]) -> Result<Simulation, ErreurModele> {
         }
     }
 
+    // à vérifier sur un vrai openEMS : des commentaires XML sous <openEMS> (TinyXML les saute
+    // en cherchant <FDTD> et <ContinuousStructure> par leur nom).
     // -- l'en-tete : ce que l'assistant a choisi, en clair -----------------
     let mut racine = Elt::new("openEMS");
     let nom = _com(txt(&m["nom"]));
@@ -714,6 +720,7 @@ pub fn generer_banc() -> String {
     for face in ["xmin", "xmax", "ymin", "ymax", "zmin", "zmax"] {
         bords = bords.a(face, "PEC");
     }
+    // à vérifier sur un vrai openEMS : que 1e-30 n'arrete jamais le banc avant ses 300 pas.
     // endCriteria : le script passait 0 (« ne jamais s'arreter sur l'energie ») ; dans le XML
     // un zero veut dire « valeur d'usine », d'ou ce seuil qu'aucune energie n'atteint.
     let fdtd = Elt::new("FDTD").a("NumberOfTimesteps", BANC_PAS.to_string()).a("endCriteria", "1e-30").n("f_max", 3e9)

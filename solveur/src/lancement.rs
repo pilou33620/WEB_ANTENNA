@@ -114,6 +114,9 @@ fn commande(programme: &Path, dossier: &Path) -> Command {
 }
 
 /// Lance `openEMS` sans argument : il se presente, donne son usage et sort.
+///
+/// à vérifier sur un vrai openEMS : qu'il rend bien la main sans argument, et la ligne
+/// « openEMS ... version X » dont on tire la version.
 fn sonder(programme: &Path) -> Json {
     let mut c = commande(programme, Path::new("."));
     let sortie = match c.stdout(Stdio::piped()).stderr(Stdio::piped()).output() {
@@ -937,6 +940,8 @@ impl Tache {
         // la vitesse monte : le tatonnement s'arrete souvent a deux ou trois. Le banc de
         // vitesse mesure le bon nombre pour CE poste. -vvv : le journal complet, comme
         // `verbose=3` du script.
+        // à vérifier sur un vrai openEMS : ces trois arguments (main.cpp et global.cpp de 0.0.36),
+        // et que le journal arrive bien ligne a ligne par le tube.
         let mut args = vec!["antenne.xml".to_string()];
         let fils = m["fils"].as_i64().unwrap_or(0);
         if fils > 0 {
@@ -994,6 +999,7 @@ impl Tache {
         let programme = executable("nf2ff").ok_or("l'executable « nf2ff » est introuvable.")?;
         std::fs::write(dossier.join("nf2ff.xml"), depouillement::xml_nf2ff(m, frequence, &la)).map_err(|e| e.to_string())?;
         let _ = std::fs::remove_file(dossier.join("nf2ff.h5"));
+        // à vérifier sur un vrai openEMS : le code de sortie de nf2ff (0 quand tout s'est bien passe).
         let (code, _) = self.executer(&programme, &["nf2ff.xml".to_string()], dossier, false)?;
         if code != 0 {
             return Err(format!("nf2ff s'est arrete (code {code})."));

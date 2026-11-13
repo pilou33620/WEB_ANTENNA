@@ -110,6 +110,8 @@ impl std::ops::Neg for C {
 // ==========================================================================
 /// Une sonde d'openEMS : deux colonnes, le temps en secondes et la valeur. Les lignes
 /// d'en-tete commencent par « % ».
+///
+/// à vérifier sur un vrai openEMS : rien d'autre que ces deux colonnes n'est attendu.
 pub fn lire_sonde(chemin: &Path) -> Result<(Vec<f64>, Vec<f64>), String> {
     let texte = std::fs::read_to_string(chemin).map_err(|e| format!("{} : {e}", chemin.display()))?;
     let (mut t, mut v) = (Vec::new(), Vec::new());
@@ -250,6 +252,10 @@ pub struct ChampLointain {
 /// quel, a cote d'un rayon qui vaut 1 metre par defaut. Un centre donne en millimetres
 /// place le point de phase a des dizaines de metres, hors de la boite d'enregistrement —
 /// et la directivite ressort « nan », sans la moindre erreur pour le dire.
+///
+/// à vérifier sur un vrai openEMS : le XML de nf2ff tout entier (attributs freq, Outfile,
+/// Center, Radius ; angles en radians ; un <Planes> par face) -- le script passait par les
+/// liaisons Python, pas par cet executable ; la forme est celle de nf2ff::AnalyseXMLNode.
 pub fn xml_nf2ff(m: &Json, frequence: f64, plans: &[(String, String)]) -> String {
     let bc = &m["boite_cuivre"];
     let centre = [lit((f(&bc[0]) + f(&bc[2])) / 2.0, DEC) * 1e-3, lit((f(&bc[1]) + f(&bc[3])) / 2.0, DEC) * 1e-3,
@@ -266,6 +272,10 @@ pub fn xml_nf2ff(m: &Json, frequence: f64, plans: &[(String, String)]) -> String
 }
 
 /// Relit le fichier de `nf2ff` : directivite, puissance rayonnee, |E| par plan.
+///
+/// à vérifier sur un vrai openEMS : la forme du fichier (tableaux [phi][theta] f0_real / f0_imag,
+/// attributs Dmax et Prad de /nf2ff) est celle de nf2ff::Write2HDF5 de 0.0.36 ; le lecteur est
+/// essaye sur un fichier ecrit par la vraie libhdf5, pas par nf2ff lui-meme.
 pub fn lire_nf2ff(chemin: &Path, n_theta: usize, n_phi: usize) -> Result<ChampLointain, String> {
     let h = Fichier::ouvrir(chemin)?;
     let (theta, phi) = (h.jeu("/Mesh/theta")?, h.jeu("/Mesh/phi")?);
