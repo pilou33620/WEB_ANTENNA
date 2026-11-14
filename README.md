@@ -19,6 +19,8 @@ Interface en HTML / CSS / JavaScript, traitement en Rust : un seul exécutable, 
 
 L'outil lui-même ne demande **rien sur le poste** : ni Python, ni paquet à installer. Le script de démarrage télécharge l'exécutable `bin/web_antenna` depuis GitHub (publication « binaires », compilée par la CI à chaque envoi sur `main`), ou le compile sur place si `cargo` est installé ([rustup.rs](https://rustup.rs)).
 
+**Sans git ni cargo** : l'archive de production `web_antenna-prod-<système>` (`.tar.gz` ; `.zip` sous Windows) de la [publication « binaires »](https://github.com/pilou33620/WEB_ANTENNA/releases/tag/binaires) contient l'exécutable, les scripts de démarrage et la page, sans les sources. Décompressez-la, puis lancez `demarrer_WEB_ANTENNA` (voir *Lancement* ci-dessous). Elle ne se met pas à jour seule : pour changer de version, reprenez l'archive (le dossier `openEMS/`, s'il y est posé, est à reporter).
+
 La page, la lecture d'un fichier IPC-2581, la préparation du modèle et l'export du fichier openEMS marchent ainsi partout : sans solveur, seul le bouton « Lancer » reste éteint. Pour lancer des simulations il faut **openEMS**, c'est-à-dire ses deux exécutables `openEMS` et `nf2ff` (et leurs bibliothèques) :
 
 - dans un dossier **`openEMS/`** à la racine du dépôt (l'archive binaire officielle, sous Windows) ;

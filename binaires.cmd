@@ -4,6 +4,8 @@ rem Avec cargo sur le poste : compiles ici, toujours a jour avec les sources.
 rem Sinon : telecharges depuis GitHub (publication "binaires", compilee par la CI a chaque
 rem envoi sur main), une fois par version : bin\commit dit de quelle version ils viennent.
 setlocal
+rem archive de production (publication "binaires", sans les sources) : son executable est deja la
+if not exist Cargo.toml if exist bin\web_antenna.exe exit /b 0
 if not exist bin mkdir bin
 where cargo >nul 2>nul
 if not errorlevel 1 (

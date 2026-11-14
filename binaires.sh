@@ -6,6 +6,8 @@
 DEPOT_BINAIRES="https://github.com/pilou33620/WEB_ANTENNA/releases/download/binaires"
 
 obtenir_binaires() {
+  # archive de production (publication « binaires », sans les sources) : son executable est deja la
+  if [ ! -f Cargo.toml ] && [ -x bin/web_antenna ]; then return 0; fi
   mkdir -p bin
   if command -v cargo >/dev/null 2>&1; then
     # web_antenna seul : les outils d'essai des caisses (faux_openems...) restent dans target/
