@@ -12,7 +12,7 @@ default-members = [".", "modele", "solveur"]
 
 [dependencies]
 # Serveur HTTP/HTTPS, appairage et canal de pilotage : communs aux web tools (dépôt web_suite)
-web_tools_commun = { git = "https://github.com/pilou33620/web_suite", rev = "6d482b97c5368434bc5db60ed6ff9878a97348fa" }
+web_tools_commun = { git = "https://github.com/pilou33620/web_suite", rev = "5c79b906e1fcf0e9b8e1589d106b0a92e2236021" }
 # Le lecteur IPC-2581 commun, et `py` (le JSON de Python) : la même révision que modele/
 ipc2581 = { git = "https://github.com/pilou33620/web_suite", rev = "915bf4fd282b442d23f3e15f59644f89e71175a5" }
 antenne_modele = { path = "modele" }
