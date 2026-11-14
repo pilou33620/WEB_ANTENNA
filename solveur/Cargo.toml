@@ -10,7 +10,7 @@ doctest = false # les schémas indentés des commentaires ne sont pas du code
 [dependencies]
 antenne_modele = { path = "../modele" }
 # `obj!` d'antenne_modele nomme ipc2581::py : la même révision que lui.
-ipc2581 = { git = "https://github.com/pilou33620/web_suite", rev = "915bf4fd282b442d23f3e15f59644f89e71175a5" }
+ipc2581 = { git = "https://github.com/pilou33620/web_suite", rev = "e78f42a010aabd64ed3c6d285773b099d4b682ac" }
 regex = "1" # les lignes d'avancement d'openEMS
 
 [target.'cfg(unix)'.dependencies]
