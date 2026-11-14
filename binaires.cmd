@@ -21,13 +21,23 @@ set LA=
 if exist bin\commit set /p LA=<bin\commit
 if exist bin\web_antenna.exe if defined ICI if "%ICI%"=="%LA%" exit /b 0
 echo   Telechargement des executables WEB_ANTENNA (windows-x86_64)...
-curl -fsSL -o bin\.archive.zip https://github.com/pilou33620/WEB_ANTENNA/releases/download/binaires/web_antenna-windows-x86_64.zip
-if not errorlevel 1 tar -xf bin\.archive.zip -C bin
-if not errorlevel 1 (
-  del bin\.archive.zip >nul 2>nul
-  exit /b 0
+curl -fsSL -o bin\.archive.zip https://github.com/pilou33620/WEB_ANTENNA/releases/download/binaires/web_antenna-windows-x86_64.zip || goto echec
+curl -fsSL -o bin\.empreinte https://github.com/pilou33620/WEB_ANTENNA/releases/download/binaires/web_antenna-windows-x86_64.zip.sha256 || goto echec
+rem l'archive doit avoir l'empreinte SHA-256 publiee avec elle : tronquee ou alteree en route, elle est refusee
+set ATTENDU=
+set /p ATTENDU=<bin\.empreinte
+set RECU=
+for /f "skip=1 delims=" %%h in ('certutil -hashfile bin\.archive.zip SHA256') do if not defined RECU set RECU=%%h
+set RECU=%RECU: =%
+if /i not "%RECU%"=="%ATTENDU%" (
+  echo   [!] Empreinte de l'archive incorrecte : archive refusee.
+  goto echec
 )
-del bin\.archive.zip >nul 2>nul
+tar -xf bin\.archive.zip -C bin || goto echec
+del bin\.archive.zip bin\.empreinte >nul 2>nul
+exit /b 0
+:echec
+del bin\.archive.zip bin\.empreinte >nul 2>nul
 if exist bin\web_antenna.exe (
   echo   [!] Telechargement impossible : on garde les executables deja presents.
   exit /b 0
