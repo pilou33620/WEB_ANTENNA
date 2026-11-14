@@ -414,6 +414,8 @@ fn principal(argv: &[String]) -> i32 {
             return 1;
         }
     };
+    // Delai de chaque lecture du socket : un client muet ne tient pas un fil indefiniment.
+    serveur.regler_delai(60);
 
     let port_demande = port;
     let port = serveur.port();

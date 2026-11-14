@@ -296,3 +296,38 @@ fn projets() {
     let _ = std::fs::remove_dir_all(&tmp);
     let _ = std::fs::remove_dir_all(&bac);
 }
+
+/// Un projet piege : des liens symboliques a la place de ses fichiers et de son dossier de calculs.
+#[cfg(unix)]
+#[test]
+fn liens_pieges() {
+    use std::os::unix::fs::symlink;
+    let _v = verrou(&VERROU);
+    let bac = bac("banc-liens");
+    poser_racine(Some(joindre(&bac, "travail")));
+    let dossier = enregistrer(&doc(r#"{"nom": "Piege"}"#)).unwrap()["dossier"].as_str().unwrap().to_string();
+    let cible = joindre(&bac, "bashrc");
+    std::fs::write(&cible, "intact").unwrap();
+    let intact = || std::fs::read_to_string(&cible).unwrap() == "intact";
+
+    // le provisoire est un lien : rien n'est ecrit a travers
+    symlink(&cible, joindre(&dossier, "projet.json.tmp")).unwrap();
+    assert!(enregistrer(&doc(r#"{"nom": "Piege"}"#)).unwrap_err().message.contains("lien symbolique"));
+    assert!(intact());
+    std::fs::remove_file(joindre(&dossier, "projet.json.tmp")).unwrap();
+
+    // le fichier lui-meme est un lien : ni lu, ni remplace
+    symlink(&cible, joindre(&dossier, F_CARTE)).unwrap();
+    assert!(lire("Piege").unwrap_err().message.contains("lien symbolique"));
+    assert!(enregistrer(&doc(r#"{"nom": "Piege", "carte": {"a": 1}}"#)).is_err() && intact());
+    std::fs::remove_file(joindre(&dossier, F_CARTE)).unwrap();
+    lire("Piege").unwrap();
+
+    // « calculs » est un lien : le projet ne s'ouvre pas
+    symlink(&bac, joindre(&dossier, D_CALCULS)).unwrap();
+    assert!(ouvrir("Piege").unwrap_err().message.contains("lien symbolique"));
+
+    fermer();
+    poser_racine(None);
+    let _ = std::fs::remove_dir_all(&bac);
+}

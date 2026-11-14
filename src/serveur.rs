@@ -145,7 +145,7 @@ fn erreur(code: u16, message: &str) -> Reponse {
         404 => "Nothing matches the given URI",
         _ => "Server does not support this operation",
     };
-    eprintln!("  code {}, message {}", code, message);
+    eprintln!("  code {}, message {}", code, sans_controle(message));
     let message = message.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
     let corps = format!(
         "<!DOCTYPE HTML>\n<html lang=\"en\">\n    <head>\n        <meta charset=\"utf-8\">\n        <title>Error response</title>\n    </head>\n    <body>\n        <h1>Error response</h1>\n        <p>Error code: {code}</p>\n        <p>Message: {message}.</p>\n        <p>Error code explanation: {code} - {explication}.</p>\n    </body>\n</html>\n"
@@ -203,7 +203,12 @@ pub fn decoder_chemin(s: &str) -> String {
 
 /// Le journal de http.server, sur la sortie d'erreur, jeton masque.
 fn journal(r: &Requete, code: u16) {
-    eprintln!("  {}", appairage::masquer(&format!("\"{} {}\" {} -", r.methode, r.cible, code)));
+    eprintln!("  {}", sans_controle(&appairage::masquer(&format!("\"{} {}\" {} -", r.methode, r.cible, code))));
+}
+
+/// Les caracteres de controle echappes : une requete ne pilote pas le terminal du poste.
+fn sans_controle(texte: &str) -> String {
+    texte.chars().map(|c| if c.is_control() { c.escape_default().to_string() } else { c.to_string() }).collect()
 }
 
 /// int(texte) d'un parametre de l'adresse.
@@ -368,7 +373,7 @@ impl Poste {
             let _ = std::io::copy(&mut Read::take(r.flux_corps(), taille.min(2 * plafond)), &mut std::io::sink());
             return Err(refus(413, format!("Trop grand : {:.1} Mo, maximum {} Mo", taille as f64 / 1048576.0, plafond / 1048576)));
         }
-        let mut corps = Vec::with_capacity(taille as usize);
+        let mut corps = Vec::new(); // grandit avec ce qui arrive, pas avec ce que Content-Length annonce
         let _ = Read::take(r.flux_corps(), taille).read_to_end(&mut corps); // un envoi coupe rend ce qui est arrive
         Ok(corps)
     }
@@ -481,6 +486,7 @@ impl Poste {
     /// n'atteindrait donc jamais cette route — sans quoi elle ouvrirait
     /// n'importe quel dossier du poste.
     fn oe_voir(r: &Requete) -> Rendu {
+        Self::ce_poste(r)?; // l'explorateur s'ouvre sur l'ecran de ce poste
         antenne::dossier(&Self::identifiant(r)?).map_err(de_modele(404))
     }
 
@@ -875,6 +881,7 @@ mod essais {
         assert_eq!(repr("x'y"), r#""x'y""#);
         assert_eq!(repr("abc"), "'abc'");
         assert_eq!((entier(" 12 "), entier("+3"), entier("-4"), entier("1.5"), entier("")), (Some(12), Some(3), Some(-4), None, None));
+        assert_eq!(sans_controle("GET /\x1b[2J\x07é\r\n"), "GET /\\u{1b}[2J\\u{7}é\\r\\n");
         assert_eq!(detail("a", ""), "a");
         assert_eq!(detail("a", "b"), "a\nb");
     }
