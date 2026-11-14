@@ -162,12 +162,18 @@ fn _bloc_binaire(txt: &str, compresse: bool) -> Res<Vec<u8>> {
         return Err(illisible());
     }
     let corps = decoder(txt.get(fin_tete.min(txt.len())..).unwrap_or(""))?;
+    // L'entete annonce la taille d'un bloc decompresse : un bloc qui en rend
+    // davantage est une bombe zlib, pas un champ.
+    let taille_bloc = u32_le(&tete[4..])? as u64;
     let mut out = Vec::new();
     let mut pos = 0;
     for k in 3..3 + nblocs {
         let t = u32_le(&tete[4 * k..])?;
         let bloc = &corps[pos.min(corps.len())..(pos + t).min(corps.len())];
-        flate2::read::ZlibDecoder::new(bloc).read_to_end(&mut out).map_err(|_| illisible())?;
+        let lus = flate2::read::ZlibDecoder::new(bloc).take(taille_bloc + 1).read_to_end(&mut out).map_err(|_| illisible())?;
+        if lus as u64 > taille_bloc {
+            return Err(illisible());
+        }
         pos += t;
     }
     Ok(out)
@@ -299,8 +305,13 @@ pub fn lire_vtr(chemin: &Path) -> Res<Grille> {
         Some(n) => py::strip(n).parse().map_err(|_| illisible())?,
         None => 1,
     };
+    // Un scalaire, un vecteur, au plus un tenseur 3 x 3 : au-dela, le produit
+    // ci-dessous reboucle et « attendu » ne garde plus rien.
+    if !(1..=9).contains(&ncomp) {
+        return Err(illisible());
+    }
     let v = _tableau(*da, compresse, |x| x as f32)?;
-    let attendu = nx * ny * nz * ncomp;
+    let attendu = [ny, nz, ncomp].iter().try_fold(nx, |p, n| p.checked_mul(*n)).ok_or_else(illisible)?;
     if v.len() < attendu {
         return Err(refus(
             format!("Fichier de champ tronque : {} ({} valeurs pour {} attendues).", nom_de(chemin), v.len(), attendu), ""));

@@ -5,6 +5,15 @@
 # envoi sur main), une fois par version : bin/commit dit de quelle version ils viennent.
 DEPOT_BINAIRES="https://github.com/pilou33620/WEB_ANTENNA/releases/download/binaires"
 
+# L'archive telechargee doit avoir l'empreinte SHA-256 publiee avec elle : tronquee ou alteree en
+# route, elle est refusee. (L'empreinte vient du meme depot : elle ne protege pas d'un compte vole.)
+empreinte_juste() {
+  if command -v sha256sum >/dev/null 2>&1; then recu=$(sha256sum bin/.archive); else recu=$(shasum -a 256 bin/.archive); fi
+  [ -n "$recu" ] && [ "${recu%% *}" = "$(cat bin/.empreinte)" ] && return 0
+  echo "  [!] Empreinte de l'archive incorrecte : archive refusee."
+  return 1
+}
+
 obtenir_binaires() {
   # archive de production (publication « binaires », sans les sources) : son executable est deja la
   if [ ! -f Cargo.toml ] && [ -x bin/web_antenna ]; then return 0; fi
@@ -23,11 +32,14 @@ obtenir_binaires() {
   case "$(uname -s)" in Linux) os=linux ;; Darwin) os=macos ;; *) os=inconnu ;; esac
   case "$(uname -m)" in x86_64|amd64) cpu=x86_64 ;; aarch64|arm64) cpu=aarch64 ;; *) cpu=inconnu ;; esac
   echo "  Telechargement des executables WEB_ANTENNA ($os-$cpu)..."
-  if curl -fsSL -o bin/.archive "$DEPOT_BINAIRES/web_antenna-$os-$cpu.tar.gz" && tar -xzf bin/.archive -C bin; then
-    rm -f bin/.archive
+  archive="web_antenna-$os-$cpu.tar.gz"
+  if curl -fsSL -o bin/.archive "$DEPOT_BINAIRES/$archive" \
+     && curl -fsSL -o bin/.empreinte "$DEPOT_BINAIRES/$archive.sha256" \
+     && empreinte_juste && tar -xzf bin/.archive -C bin; then
+    rm -f bin/.archive bin/.empreinte
     return 0
   fi
-  rm -f bin/.archive
+  rm -f bin/.archive bin/.empreinte
   if [ -x bin/web_antenna ]; then
     echo "  [!] Telechargement impossible : on garde les executables deja presents."
     return 0

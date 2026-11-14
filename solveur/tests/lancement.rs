@@ -155,6 +155,48 @@ fn echec_et_arret() {
     assert!(antenne::arreter("inconnue").unwrap_err().message.contains("n'existe plus"));
 }
 
+/// Deux calculs ensemble, pas trois ; la place se libere a l'arret de l'un d'eux.
+#[test]
+fn pas_plus_de_deux_calculs() {
+    let (_v, _racine) = poste("lent");
+    let d = doc("essais/ref/localise/document.json");
+    let ident = |v: Json| v["id"].as_str().unwrap().to_string();
+    let (a, b) = (ident(antenne::lancer(&d).unwrap()), ident(antenne::lancer(&d).unwrap()));
+    assert!(antenne::lancer(&d).unwrap_err().message.starts_with("2 calculs tournent deja"));
+    assert!(antenne::lancer_balayage(&doc("../modele/essais/cas/banc-0066.json")).unwrap_err().message.starts_with("2 calculs tournent deja"));
+    // on n'arrete qu'un solveur parti : plus tot, son lancement deborderait sur l'essai suivant
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    antenne::arreter(&a).unwrap();
+    attendre(&a);
+    let c = ident(antenne::lancer(&d).unwrap());
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    for i in [b, c] {
+        antenne::arreter(&i).unwrap();
+        attendre(&i);
+    }
+    // les fils des taches arretees notent encore leur debit : qu'ils finissent avant l'essai suivant
+    std::thread::sleep(std::time::Duration::from_millis(300));
+}
+
+/// La base temporaire : creee pour soi seul, refusee si c'est un lien.
+#[cfg(unix)]
+#[test]
+fn base_temporaire_sure() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = temp("base");
+    let base = d.join("openems_antenne");
+    lancement::_exiger_base_sure(&base).unwrap();
+    assert_eq!(std::fs::metadata(&base).unwrap().permissions().mode() & 0o777, 0o700);
+    // un dossier a soi mais ouvert a tous est referme
+    std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o777)).unwrap();
+    lancement::_exiger_base_sure(&base).unwrap();
+    assert_eq!(std::fs::metadata(&base).unwrap().permissions().mode() & 0o777, 0o700);
+    let lien = d.join("lien");
+    std::os::unix::fs::symlink(&base, &lien).unwrap();
+    assert!(lancement::_exiger_base_sure(&lien).unwrap_err().message.contains("n'est pas sur"));
+    let _ = std::fs::remove_dir_all(&d);
+}
+
 #[test]
 fn balayage_et_tableau_s() {
     let (_v, racine) = poste("");

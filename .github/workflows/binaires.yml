@@ -83,4 +83,8 @@ jobs:
             || gh release create binaires --title "Exécutables" \
                  --notes "Exécutables de WEB_ANTENNA, recompilés à chaque envoi sur main. web_antenna-<système> : pris par binaires.sh et binaires.cmd. web_antenna-prod-<système> : la production complète (exécutable, scripts de démarrage, pages), à décompresser puis lancer par demarrer_WEB_ANTENNA." \
             || true
+          # l'empreinte de chaque archive, que binaires.sh et binaires.cmd verifient apres telechargement
+          for f in web_antenna-${{ matrix.nom }}.* web_antenna-prod-${{ matrix.nom }}.*; do
+            (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f") | cut -d" " -f1 > "$f.sha256"
+          done
           gh release upload binaires web_antenna-${{ matrix.nom }}.* web_antenna-prod-${{ matrix.nom }}.* --clobber

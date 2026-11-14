@@ -52,6 +52,7 @@
 // ==========================================================================
 //! Les projets sur le disque : ou on les range, et comment on les reprend.
 
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
@@ -417,7 +418,20 @@ fn _dossier(nom: &str, creer: bool) -> Res<String> {
     if !realpath(&chemin).starts_with(realpath(&base)) {
         return Err(refus(format!("Ce nom sort du dossier de travail : {}", n), ""));
     }
+    // les simulations ecrivent dans « calculs » : un lien les enverrait ailleurs sur le disque
+    _refuser_lien(&joindre(&chemin, D_CALCULS))?;
     Ok(chemin)
+}
+
+/// Un projet recu d'ailleurs peut contenir des liens symboliques : on ne lit ni n'ecrit a travers.
+fn _refuser_lien(chemin: &str) -> Res<()> {
+    if std::fs::symlink_metadata(chemin).is_ok_and(|m| m.file_type().is_symlink()) {
+        return Err(refus(
+            format!("« {} » est un lien symbolique : il n'est ni lu ni ecrit.", basename(chemin)),
+            "Un projet ne contient que de vrais fichiers. Supprimez ce lien du dossier du projet.",
+        ));
+    }
+    Ok(())
 }
 
 // ==========================================================================
@@ -429,6 +443,7 @@ fn _dossier(nom: &str, creer: bool) -> Res<String> {
 /// lequel. Rendre None ferait rouvrir un projet ampute sans que personne ne
 /// s'en apercoive — et c'est le dessin de la veille qui manquerait.
 fn _lire_json(chemin: &str) -> Res<Option<Json>> {
+    _refuser_lien(chemin)?;
     if !Path::new(chemin).is_file() {
         return Ok(None);
     }
@@ -573,7 +588,12 @@ fn pas_un_projet(nom: &str) -> ErreurProjet {
 /// lieu, c'est l'ancien fichier qui est la, entier.
 fn _ecrire_json(chemin: &str, valeur: &Json) -> Res<()> {
     let provisoire = format!("{}.tmp", chemin);
-    std::fs::write(&provisoire, compact(valeur)).and_then(|_| std::fs::rename(&provisoire, chemin)).map_err(|exc| {
+    _refuser_lien(chemin)?;
+    _refuser_lien(&provisoire)?;
+    // create_new ne suit pas un lien pose entre-temps : le provisoire est cree, jamais ouvert
+    let _ = std::fs::remove_file(&provisoire);
+    let ecrire = || std::fs::OpenOptions::new().write(true).create_new(true).open(&provisoire)?.write_all(compact(valeur).as_bytes());
+    ecrire().and_then(|_| std::fs::rename(&provisoire, chemin)).map_err(|exc| {
         let _ = std::fs::remove_file(&provisoire);
         refus(
             format!("« {} » n'a pas pu etre ecrit : {}", basename(chemin), erreur_os(&exc, &provisoire)),

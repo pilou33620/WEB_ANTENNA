@@ -125,6 +125,39 @@ fn banc_champs() {
     assert!(champs::serie(dos, "fd|../../secret|1.0", "", None, 0, 0).is_err());
 }
 
+/// Un .vtr forge : un nombre de composantes qui fait reboucler le produit, puis un bloc
+/// zlib qui rend plus que ce que son entete annonce.
+#[test]
+fn vtr_forge() {
+    let chemin = std::env::temp_dir().join(format!("essai_vtr_forge_{}.vtr", std::process::id()));
+    let ecrire = |attributs: &str, donnees: &str| {
+        let x: Vec<String> = (0..64).map(|i| i.to_string()).collect();
+        std::fs::write(&chemin, format!(
+            r#"<VTKFile type="RectilinearGrid" compressor="vtkZLibDataCompressor"><RectilinearGrid><Piece>
+            <PointData><DataArray type="Float32" Name="E" {attributs}>{donnees}</DataArray></PointData>
+            <Coordinates><DataArray type="Float64" format="ascii">{}</DataArray></Coordinates>
+            </Piece></RectilinearGrid></VTKFile>"#, x.join(" "))).unwrap();
+        champs::lire_vtr(&chemin).map(|g| g.v.len())
+    };
+    assert_eq!(ecrire(r#"NumberOfComponents="1" format="ascii""#, &"1 ".repeat(64)), Ok(64));
+    for ncomp in ["288230376151711744", "0", "10"] {
+        let e = ecrire(&format!(r#"NumberOfComponents="{ncomp}" format="ascii""#), &"1 ".repeat(64)).unwrap_err();
+        assert!(e.message.contains("entete incoherent"), "{ncomp} : {}", e.message);
+    }
+
+    let bloc = |annonce: u32, octets: &[u8]| {
+        use std::io::Write;
+        let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        z.write_all(octets).unwrap();
+        let z = z.finish().unwrap();
+        let tete: Vec<u8> = [1, annonce, annonce, z.len() as u32].iter().flat_map(|n| n.to_le_bytes()).collect();
+        crate::b64::encoder(&tete) + &crate::b64::encoder(&z)
+    };
+    assert_eq!(ecrire(r#"format="binary""#, &bloc(256, &[0; 256])), Ok(64));
+    assert!(ecrire(r#"format="binary""#, &bloc(256, &vec![0; 1 << 20])).is_err());
+    let _ = std::fs::remove_file(&chemin);
+}
+
 // -- banc-openems.py ---------------------------------------------------------
 
 #[test]

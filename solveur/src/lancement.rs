@@ -1406,6 +1406,26 @@ fn _base_temporaire() -> PathBuf {
     std::env::temp_dir().join("openems_antenne")
 }
 
+/// Cree la base temporaire, a soi seul. /tmp est partage et le nom est connu : un autre
+/// compte qui l'aurait posee avant nous (dossier a lui, ou lien) recevrait nos calculs.
+#[cfg(unix)]
+pub fn _exiger_base_sure(base: &Path) -> Res<()> {
+    use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+    let _ = std::fs::DirBuilder::new().mode(0o700).create(base);
+    let sure = std::fs::symlink_metadata(base).is_ok_and(|m| m.is_dir() && m.uid() == unsafe { libc::geteuid() })
+        && std::fs::set_permissions(base, std::fs::Permissions::from_mode(0o700)).is_ok();
+    if !sure {
+        return Err(refus(format!("Le dossier temporaire des calculs n'est pas sur : {}", base.display()),
+                         "C'est un lien symbolique, ou il appartient a un autre compte. Supprimez-le, ou ouvrez un projet : les calculs iront dedans."));
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+pub fn _exiger_base_sure(_: &Path) -> Res<()> {
+    Ok(())
+}
+
 /// La base du moment. Un projet devenu inaccessible — cle USB retiree,
 /// lecteur reseau tombe — ne doit pas empecher de lancer : on retombe sur
 /// le dossier temporaire, ce que le journal de la tache dit ligne 1 en
@@ -1444,7 +1464,11 @@ fn _est_ident(ident: &str) -> bool {
 /// Un dossier de calcul vierge, et son identifiant.
 pub fn _dossier_neuf() -> Res<(String, PathBuf)> {
     let ident = identifiant_neuf();
-    let dossier = _base_calculs().join(&ident);
+    let base = _base_calculs();
+    if base == _base_temporaire() {
+        _exiger_base_sure(&base)?;
+    }
+    let dossier = base.join(&ident);
     std::fs::create_dir_all(&dossier).map_err(|e| refus(format!("Le dossier de calcul n'a pas pu etre cree : {e}"), ""))?;
     Ok((ident, dossier))
 }
@@ -1458,6 +1482,9 @@ fn _exiger_solveur() -> Res<()> {
     Ok(())
 }
 
+/// Combien de taches calculent ensemble, au plus (un balayage compte pour une).
+const MAX_SIMULTANES: usize = 2;
+
 /// La tache qui calcule en ce moment, ou None.
 fn _en_cours() -> Option<Arc<Tache>> {
     verrou(&TACHES).iter().find(|t| matches!(t.etat(), "prepare" | "calcule")).cloned()
@@ -1470,6 +1497,8 @@ fn _en_cours() -> Option<Arc<Tache>> {
 /// optimum qui n'est pas le bon ; une simulation lancee pendant le banc
 /// fausserait tous les essais qui restent. Deux simulations ensemble, en
 /// revanche, restent permises comme avant : c'est un choix de l'utilisateur.
+/// Pas davantage : chaque solveur prend sa memoire et ses fils, et un client
+/// qui en lancerait sans compter mettrait le poste a genoux.
 fn _exiger_libre(pour_banc: bool) -> Res<()> {
     let Some(t) = _en_cours() else { return Ok(()) };
     let banc = match &t.i().genre {
@@ -1495,6 +1524,10 @@ fn _exiger_libre(pour_banc: bool) -> Res<()> {
         }
         Some(false) => Err(refus("Le banc de vitesse tourne : une simulation lancee maintenant fausserait ses mesures.",
                                  "Il dure une a deux minutes. Attendez sa fin, ou arretez-le.")),
+        None if verrou(&TACHES).iter().filter(|t| matches!(t.etat(), "prepare" | "calcule")).count() >= MAX_SIMULTANES => {
+            Err(refus(format!("{MAX_SIMULTANES} calculs tournent deja : le poste n'en mene pas davantage a la fois."),
+                      "Attendez la fin de l'un d'eux, ou arretez-le, puis relancez."))
+        }
         None => Ok(()),
     }
 }
@@ -1603,6 +1636,7 @@ pub fn lancer_banc(auto: bool) -> Res<Json> {
     let ident = identifiant_neuf();
     // DANS LE DOSSIER TEMPORAIRE, jamais dans le projet : ce ne sont pas des
     // calculs de l'antenne, et ils n'ont rien a faire dans sa liste.
+    _exiger_base_sure(&_base_temporaire())?;
     let dossier = _base_temporaire().join(format!("banc_{ident}"));
     std::fs::create_dir_all(&dossier).map_err(|e| refus(format!("Le dossier du banc n'a pas pu etre cree : {e}"), ""))?;
     let essais = fils_a_essayer(None);
