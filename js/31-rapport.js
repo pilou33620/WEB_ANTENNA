@@ -880,7 +880,7 @@ function rapGenererHtml(d, diags){
     h += '      <table class="rap-table">';
     h += '        <tbody>';
     h += '          <tr><td>Source des formes</td><td>' + (d.projet.source === "ipc2581" ? "Import de fichier IPC-2581 (" + rapEscHtml(d.projet.fichier) + ")" : "Dessin direct sur couche") + '</td></tr>';
-    h += '          <tr><td>Format d\'export</td><td>openEMS CSXCAD XML / Python</td></tr>';
+    h += '          <tr><td>Format d\'export</td><td>openEMS CSXCAD XML</td></tr>';
     h += '        </tbody>';
     h += '      </table>';
     h += '    </div>';

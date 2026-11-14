@@ -1,0 +1,30 @@
+[package]
+name = "web_antenna"
+version = "0.1.0"
+edition = "2021"
+description = "WEB_ANTENNA : serveur de l'outil « Antenne openEMS » (IPC-2581, openEMS, projets)"
+
+[workspace]
+resolver = "2"
+members = ["modele", "solveur"]
+# `cargo test` éprouve aussi les deux caisses ; les scripts binaires.* ne livrent que web_antenna
+default-members = [".", "modele", "solveur"]
+
+[dependencies]
+# Serveur HTTP/HTTPS, appairage et canal de pilotage : communs aux web tools (dépôt web_suite)
+web_tools_commun = { git = "https://github.com/pilou33620/web_suite", rev = "5c79b906e1fcf0e9b8e1589d106b0a92e2236021" }
+# Le lecteur IPC-2581 commun, et `py` (le JSON de Python) : la même révision que modele/
+ipc2581 = { git = "https://github.com/pilou33620/web_suite", rev = "915bf4fd282b442d23f3e15f59644f89e71175a5" }
+antenne_modele = { path = "modele" }
+antenne_solveur = { path = "solveur" }
+regex = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_System_Console"] }
+
+[profile.release]
+opt-level = "s"
+strip = true

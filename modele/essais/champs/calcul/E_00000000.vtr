@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<VTKFile type="RectilinearGrid" version="0.1" byte_order="LittleEndian" header_type="UInt32" compressor="vtkZLibDataCompressor">
+  <RectilinearGrid WholeExtent="0 6 0 4 0 2">
+  <Piece Extent="0 6 0 4 0 2">
+    <PointData>
+      <DataArray type="Float32" Name="E-Field" NumberOfComponents="3" format="binary">AQAAAOwEAADsBAAAIwAAAA==eJxjYGiwZ2BgcAAiIG4A4gUgelRsVGxUbFRsWIkBAPfnxKI=<InformationKey name="L2_NORM_RANGE" location="vtkDataArray" length="2"><Value index="0">0</Value></InformationKey></DataArray>
+    </PointData>
+    <CellData>
+    </CellData>
+    <Coordinates>
+      <DataArray type="Float64" Name="Array 0" format="binary">AQAAADgAAAA4AAAALgAAAA==eJxjYICAPys/XvJNCrCH0An2v+qy9pRMzoDyC+yrRda5P6wqgYpX2AMAqfYaXQ==</DataArray>
+      <DataArray type="Float64" Name="Array 1" format="binary">AQAAACgAAAAoAAAAIgAAAA==eJxjYICAPys/XvJNSrCH0AX2v+qy9pRMroDyG+wBQ9ESrw==</DataArray>
+      <DataArray type="Float64" Name="Array 2" format="binary">AQAAABgAAAAYAAAAFwAAAA==eJxjYICAX3VZe0omZ9hD6Ap7AE6cCKk=</DataArray>
+    </Coordinates>
+  </Piece>
+  </RectilinearGrid>
+</VTKFile>

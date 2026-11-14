@@ -1,0 +1,17 @@
+[package]
+name = "antenne_solveur"
+version = "0.1.0"
+edition = "2021"
+description = "Le pilotage d'openEMS par WEB_ANTENNA : XML du solveur, lancement et suivi, dépouillement (S, Z, ROE, champ lointain)"
+
+[lib]
+doctest = false # les schémas indentés des commentaires ne sont pas du code
+
+[dependencies]
+antenne_modele = { path = "../modele" }
+# `obj!` d'antenne_modele nomme ipc2581::py : la même révision que lui.
+ipc2581 = { git = "https://github.com/pilou33620/web_suite", rev = "915bf4fd282b442d23f3e15f59644f89e71175a5" }
+regex = "1" # les lignes d'avancement d'openEMS
+
+[dev-dependencies]
+roxmltree = "0.20" # relire le XML écrit, pour le comparer au modèle et aux références

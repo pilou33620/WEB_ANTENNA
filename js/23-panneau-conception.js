@@ -157,7 +157,7 @@ function conEteint(){
   return '<p class="intro">Ce mode remplace le fichier IPC-2581 par un '+
     'dessin : on pose le cuivre, on choisit le substrat et ses matériaux, et '+
     'le reste de l\'outil ne fait aucune différence — même assistant, mêmes '+
-    'refus, même script Python, même solveur.</p>'+
+    'refus, même fichier openEMS, même solveur.</p>'+
     '<div class="champ"><button class="tb on" data-con-entrer>'+
     '✏️ Entrer en conception</button>'+
     '<p class="note">La carte ouverte, s\'il y en a une, sera remplacée par '+

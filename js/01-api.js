@@ -69,7 +69,7 @@ async function apiConnecter(){
     }
   }
   throw new Error("Aucun serveur pour lire l'IPC-2581.\n\n"+
-    "Le parseur est en Python : lancez « python web_antenna.py » depuis le dossier "+
+    "Le lecteur est sur le serveur : lancez « demarrer_WEB_ANTENNA » depuis le dossier "+
     "du dépôt, puis ouvrez cette page par l'adresse qu'il affiche.\n\n"+
     "Tentatives :\n  "+essais.join("\n  "));
 }

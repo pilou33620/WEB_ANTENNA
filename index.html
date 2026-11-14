@@ -45,7 +45,7 @@
     <button class="tb" id="bCampagne" title="Campagne de mesures : les plans d'HISTORIQUE.md lancés l'un après l'autre, chaque relevé téléchargé">📋 Campagne</button>
     <button class="tb" id="bAssistant" title="Ouvrir l'assistant : il mène de la carte au modèle FDTD en sept étapes">🧭 Assistant</button>
     <button class="tb" id="bRapport" title="Générer un rapport d'ingénierie complet : résultats, empilage, géométrie, maillage et diagnostic des anomalies">📋 Rapport</button>
-    <button class="tb" id="bScript" title="Écrire le script Python openEMS qui refait exactement cette simulation" disabled>⤓ Script .py</button>
+    <button class="tb" id="bScript" title="Écrire le fichier XML openEMS qui refait exactement cette simulation, et son lisez-moi" disabled>⤓ Fichier .xml</button>
     <button class="tb" id="bLancer" title="Lancer openEMS sur ce modèle" disabled>▶ Lancer</button>
     <button class="tb danger" id="bArreter" title="Arrêter la simulation en cours (conserve l'application ouverte)" style="display:none">■ Stop</button>
     <div class="sim-header-prog" id="simProgression" style="display:none" title="Progression de la simulation">
@@ -103,8 +103,8 @@
              pose la boîte d'air et le port d'excitation, et le solveur rend le
              S<sub>11</sub>, l'impédance d'entrée et le diagramme de rayonnement.</p>
           <p class="petit">Rien n'est deviné en silence : tout ce que l'assistant
-             complète est écrit, chiffré, et justifié — y compris dans le script
-             Python qu'il sait exporter.</p>
+             complète est écrit, chiffré, et justifié — y compris dans le fichier
+             openEMS qu'il sait exporter.</p>
           <div class="depot" id="depot">
             <b>Déposez le fichier ici</b>
             <small>… ou cliquez pour le choisir.<br>

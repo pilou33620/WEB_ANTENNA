@@ -13,24 +13,33 @@ Deux points d'entrée, **un seul chemin derrière** : le fichier de fabrication,
 et le mode conception. Le second fabrique un document au format du premier —
 tout ce qui suit est le même code, y compris les refus.
 
-Interface en HTML / CSS / JavaScript, traitement en Python.
+Interface en HTML / CSS / JavaScript, traitement en Rust : un seul exécutable, `web_antenna`. Il n'y a plus de Python dans ce dépôt.
 
 ## Prérequis & Démarrage rapide
 
-La page, la lecture d'un fichier IPC-2581, la préparation du modèle et l'export du script ne demandent qu'un Python : sans solveur, seul le bouton « Lancer » reste éteint. Pour lancer des simulations sous Windows, il faut deux éléments (ailleurs, voir [Installer selon le poste](#installer-selon-le-poste)) :
-1. **Les binaires openEMS (`openEMS/`)** contenant le solveur, ses DLL (`CSXCAD.dll`, `openEMS.exe`) et les roues Python dans `openEMS/python/`.
-2. **L'environnement virtuel Python (`env/`)** créé impérativement avec **Python 3.10 ou 3.11 (64 bits)** avec les dépendances (`pip install -r requirements.txt`).
+L'outil lui-même ne demande **rien sur le poste** : ni Python, ni paquet à installer. Le script de démarrage télécharge l'exécutable `bin/web_antenna` depuis GitHub (publication « binaires », compilée par la CI à chaque envoi sur `main`), ou le compile sur place si `cargo` est installé ([rustup.rs](https://rustup.rs)).
+
+**Sans git ni cargo** : l'archive de production `web_antenna-prod-<système>` (`.tar.gz` ; `.zip` sous Windows) de la [publication « binaires »](https://github.com/pilou33620/WEB_ANTENNA/releases/tag/binaires) contient l'exécutable, les scripts de démarrage et la page, sans les sources. Décompressez-la, puis lancez `demarrer_WEB_ANTENNA` (voir *Lancement* ci-dessous). Elle ne se met pas à jour seule : pour changer de version, reprenez l'archive (le dossier `openEMS/`, s'il y est posé, est à reporter).
+
+La page, la lecture d'un fichier IPC-2581, la préparation du modèle et l'export du fichier openEMS marchent ainsi partout : sans solveur, seul le bouton « Lancer » reste éteint. Pour lancer des simulations il faut **openEMS**, c'est-à-dire ses deux exécutables `openEMS` et `nf2ff` (et leurs bibliothèques) :
+
+- dans un dossier **`openEMS/`** à la racine du dépôt (l'archive binaire officielle, sous Windows) ;
+- ou installés sur le poste, dans le `PATH` (Linux, Raspberry Pi, macOS).
+
+Plus de roues Python, plus d'environnement virtuel : voir [Installation d'openEMS](#installation-dopenems) en bas de page.
 
 Les champs s'affichent et s'animent **dans l'outil** (panneau « Champs ») : aucun visualiseur externe n'est nécessaire.
 
-*(Voir la section détaillée [Installation complète des prérequis](#installation-complète-des-prérequis) en bas de page pour les liens de téléchargement).*
-
 ### Lancement
 
+**Double-cliquez sur `demarrer_WEB_ANTENNA.cmd`** (Windows) — ou, depuis un terminal :
+
 ```bash
-# Démarrer le serveur (détecte et bascule automatiquement dans env/ s'il existe)
-python web_antenna.py
+./demarrer_WEB_ANTENNA.sh
 ```
+
+Le script met `bin/web_antenna` à jour (téléchargé, ou compilé si `cargo` est là) puis le lance avec les
+arguments reçus. Pour travailler sur le code : `cargo run -- --sans-maj`.
 
 La page s'ouvre toute seule dans votre navigateur. **Le port affiché au démarrage n'est pas
 toujours 8000** : voir « Le port » ci-dessous.
@@ -45,21 +54,17 @@ toujours 8000** : voir « Le port » ci-dessous.
 | `--sans-banc` | Ne mesure pas la vitesse du poste (les fils du dernier banc restent en vigueur) |
 | `--projets DIR` | Racine des projets pour ce lancement seulement, sans toucher au réglage retenu dans `~/.antenne-openems.json` ([WEB·SUITE](https://github.com/pilou33620/WEB_SUITE) y passe `PROJETS/ANTENNA`, synchronisé avec GitHub) |
 
-Sans carte sous la main :
-
-```bash
-python test/carte-antenne.py
-```
-
-écrit `test/patch-2450.xml`, un patch 2,45 GHz sur FR-4 de 1,6 mm dont la
+Sans carte sous la main : `test/patch-2450.xml` est un patch 2,45 GHz sur FR-4 de 1,6 mm dont la
 résonance se calcule à la main — de quoi essayer l'outil et savoir d'avance ce
-qu'on doit trouver.
+qu'on doit trouver. Cette carte est fabriquée par `tests/carte_antenne.rs`, qui vérifie à chaque
+`cargo test` que le fichier suivi est bien celui qu'il fabrique ;
+`CARTE_ANTENNE_SORTIE=ma-carte.xml cargo test --test carte_antenne` l'écrit ailleurs.
 
 ### Utiliser depuis un autre appareil
 
 Sans `--local`, le serveur écoute aussi sur le réseau. Le terminal affiche, sous l'adresse du poste, l'adresse **Réseau** à ouvrir depuis l'autre appareil (`https://<adresse>:<port>`, en `http://` sans `openssl`), celle de Tailscale s'il y en a une, et le code d'appairage. Lancé par WEB·SUITE, l'outil reçoit `--local`, sauf si le lanceur est lui-même en mode réseau (`--reseau`, le défaut sur Raspberry Pi).
 
-Depuis un autre appareil du réseau (tablette), la page demande une fois un **code d'appairage** à 6 chiffres, affiché dans le terminal du serveur (ou dans les logs de WEB_ANTENNA, dans WEB·SUITE). L'appareil s'en souvient ensuite, pour tous les web tools de ce poste (`appairage.py`, commun aux web tools) ; le poste lui-même n'en a jamais besoin.
+Depuis un autre appareil du réseau (tablette), la page demande une fois un **code d'appairage** à 6 chiffres, affiché dans le terminal du serveur (ou dans les logs de WEB_ANTENNA, dans WEB·SUITE). L'appareil s'en souvient ensuite, pour tous les web tools de ce poste (caisse Rust `web_tools_commun` du dépôt web_suite, commune aux web tools) ; le poste lui-même n'en a jamais besoin.
 
 En mode réseau, la connexion est **chiffrée (HTTPS)** quand la commande `openssl` est présente sur le poste (Raspberry Pi, Linux, macOS ; sous Windows, celle de Git) : une autorité propre au poste, créée une fois dans `~/.web_tools/tls/`, signe le certificat du serveur. Chaque appareil l'installe une fois, depuis le lien de la page du code (`/appairage/ca.pem`) ; sur iPad : Réglages › Profil téléchargé › Installer, puis Général › Informations › Réglages des certificats › activer. Comparer son empreinte SHA-256 avec celle du terminal. Sans `openssl` (ou avec `WEB_TOOLS_HTTP=1`), tout reste en HTTP et le terminal le dit.
 
@@ -91,24 +96,20 @@ serveur qui **démarre en annonçant une adresse qui n'est pas la sienne** :
   `127.0.0.1` compris — atterrissent chez l'autre programme. L'IPv4 est donc
   sondée explicitement avant chaque tentative.
 
-### Quel Python
+### Quel openEMS
 
-Aujourd'hui, `web_antenna.py` n'utilise que la bibliothèque standard : il démarre
-sous le Python du système. openEMS, numpy et h5py, eux, ne servent qu'aux
-simulations et vivent presque toujours dans un environnement
-virtuel à côté — et un `python web_antenna.py` lancé depuis une invite ordinaire
-ne l'utiliserait pas : le bouton « Lancer » resterait éteint sur un poste où
-tout est pourtant installé.
-
-Le serveur cherche donc l'interpréteur qui sait **vraiment** importer CSXCAD :
-celui qui le fait tourner d'abord, puis `env/`, `.venv/`, `venv/` à côté de
-`web_antenna.py`. Celui qui est retenu est annoncé au démarrage, et la liste des
-essais figure dans l'état renvoyé à la page.
+Le solveur n'est plus un module chargé par le serveur : c'est un **exécutable** que le serveur
+lance. Il le cherche d'abord dans le dossier `openEMS/` (ou `openems/`) du dépôt, puis dans le
+dossier donné par la variable `OPENEMS_DLL`, puis (Windows) dans `C:\openEMS`, enfin dans le
+`PATH`. Il le vérifie en le **lançant pour de vrai** : une archive incomplète ou une DLL absente
+se voit au démarrage, pas au milieu d'un calcul. L'exécutable retenu est annoncé dans le terminal
+(« via … »), et l'état renvoyé à la page (`GET /api/openems`, clé `solveur`) donne `executable`
+et `nf2ff`. `nf2ff` ne sert qu'au champ lointain.
 
 ### Les mises à jour
 
 Au démarrage, sauf avec `--sans-maj`, le serveur regarde si le dépôt a avancé sur
-GitHub, avant même de choisir son Python :
+GitHub, avant toute autre chose :
 
 1. sans `git`, ou hors d'un dépôt, il démarre sans rien dire ;
 2. `git fetch --quiet origin`, 10 s au plus et sans jamais demander de mot de
@@ -119,7 +120,10 @@ GitHub, avant même de choisir son Python :
    réserve (`git stash`) puis réappliqués ; en cas de conflit, le terminal le dit
    et ils restent dans la réserve (`git stash list`) ;
 4. après une mise à jour, il se relance avec les mêmes arguments
-   (`WEB_ANTENNA_DEJA_MAJ=1` évite la boucle).
+   (`WEB_ANTENNA_DEJA_MAJ=1` évite la boucle) : lancé par `demarrer_WEB_ANTENNA`
+   (`WEB_ANTENNA_RELANCEUR=1`), il sort avec le code 75 et le script reprend l'exécutable de la
+   nouvelle version avant de le relancer ; lancé seul, il se relance lui-même (pages à jour,
+   exécutable inchangé jusqu'au prochain `demarrer_WEB_ANTENNA`).
 
 Lancé par WEB·SUITE, c'est le lanceur qui vérifie, et il passe `--sans-maj` quand
 il vient de le faire. Les projets sont hors du dépôt (voir « Où vivent les
@@ -128,9 +132,18 @@ données ») : une mise à jour n'y touche pas.
 ## Arborescence
 
 ```
-├── web_antenna.py          le serveur : ce qu'un navigateur ne sait pas faire
-├── appairage.py            jeton, code d'appairage, HTTPS (copie de web_suite/lanceur)
-├── pilote.py               le canal de pilotage du MCP de web_suite (copie de web_suite/lanceur)
+├── Cargo.toml              l'exécutable web_antenna, et l'espace de travail (modele/, solveur/)
+├── src/
+│   ├── main.rs             le serveur : options, port, annonce, banc de vitesse au démarrage
+│   ├── serveur.rs          les fichiers de la page et les routes de l'API
+│   ├── projet.rs           les projets sur le disque : où on les range, et comment on les rouvre
+│   └── maj.rs              la mise à jour git au démarrage
+├── tests/                  les bancs du serveur (tests d'intégration Cargo, exécutable en boîte noire)
+│   ├── banc_serveur.rs       ce que le serveur sert et refuse (.git, chemins Windows, Host), ses routes
+│   ├── banc_github_relai.rs  le relai « Enregistrer + GitHub »
+│   └── carte_antenne.rs      fabrique la carte d'essai IPC-2581, et la compare à test/patch-2450.xml
+├── demarrer_WEB_ANTENNA.sh / .cmd  lancement : met bin/web_antenna à jour puis le lance
+├── binaires.sh / .cmd      bin/web_antenna : compilé ici (cargo) ou téléchargé depuis GitHub
 ├── index.html              la page, avec la modale de classification des nets (PWR, GND, Signal)
 ├── A-FAIRE.md, HISTORIQUE.md  ce qui reste à faire, et le carnet de mesures ; les relevés *.json sont à côté
 ├── css/
@@ -167,44 +180,41 @@ données ») : une mise à jour n'y touche pas.
 │   ├── 39-campagne.js      la campagne de mesures (provisoire)
 │   ├── travailleur-occt.js le lecteur STEP/IGES/BREP, dans un fil à part
 │   ├── 90-workspace.js     les panneaux détachables
-│   ├── pilote.js, pilote-antenna.js  le canal de pilotage (copie de web_suite/lanceur), et son branchement ici
+│   ├── pilote.js, pilote-antenna.js  le canal de pilotage côté page (copie de web_suite), et son branchement ici
 │   ├── telephone.js        la disposition sur petit écran (copie de WEB_CAO)
 │   ├── vendor/three.min.js three.js r134, posé ici et non pris sur un CDN
 │   └── vendor/occt/        OpenCascade en WebAssembly (occt-import-js), repris de WEB_3D
-├── python/
-│   ├── ipc2581_*.py        le parseur IPC-2581 (filtrage calques hors cuivre/perçage, netClass) et sa traduction en JSON
-│   ├── openems_modele.py   le document relu, vérifié, nettoyé (masse cachée, fusions, ports), maillé, chiffré
-│   ├── openems_pieces.py   les pièces importées : recollées, vérifiées fermées, placées, leurs faces maillées
-│   ├── openems_script.py   le modèle → un script Python autonome
-│   ├── openems_run.py      l'exécution en sous-processus, et son suivi
-│   ├── openems_champs.py   les .vtr relus : inventaire, tranche, amplitude et phase
-│   ├── openems_antenne.py  la façade : les seules fonctions que web_antenna.py connaît
-│   ├── projet.py           les projets sur le disque : où on les range, et comment on les rouvre
-│   └── test/
-│       ├── banc-openems.py   le banc principal : sans solveur, 23 sections
-│       ├── banc-champs.py    le format .vtr, l'inventaire, le découpage
-│       ├── banc-github-relai.py  le relai « Enregistrer + GitHub »
-│       └── banc-serveur.py   ce que le serveur sert et refuse (.git, chemins Windows, Host)
+├── modele/                 caisse antenne_modele
+│   ├── src/modele/         le document relu, vérifié, nettoyé (masse cachée, fusions, ports), maillé, chiffré
+│   ├── src/pieces.rs       les pièces importées : recollées, vérifiées fermées, placées, leurs faces maillées
+│   ├── src/champs.rs       les .vtr relus : inventaire, tranche, amplitude et phase
+│   └── essais/             les sorties figées du modèle Python d'origine
+├── solveur/                caisse antenne_solveur
+│   ├── src/xml.rs, ports.rs    le modèle → le XML d'openEMS, autonome
+│   ├── src/lancement.rs    l'exécution en sous-processus, et son suivi
+│   ├── src/depouillement.rs, hdf5.rs  S, Z, ROE ; nf2ff et la lecture de son HDF5
+│   ├── src/antenne.rs      la façade : les seules fonctions que le serveur connaît
+│   ├── src/bin/faux_openems.rs  le faux solveur des essais
+│   └── essais/             les références figées (voir essais/LISEZ-MOI.md)
 ├── test/
-│   ├── carte-antenne.py    fabrique une carte d'essai IPC-2581
-│   ├── patch-2450.xml      … celle qu'elle produit
+│   ├── patch-2450.xml      la carte d'essai IPC-2581 (fabriquée par tests/carte_antenne.rs)
 │   ├── banc-polygones.js   le découpage des découpes, cas dégénérés compris
 │   ├── banc-interface.js   ports, balayage, unités, liste des réglages, audit, classification nets, robustesse
 │   └── releve-lecture-antenna.json  le relevé auquel ce banc compare les lectures de la page
-├── env/                    l'environnement virtuel Python (dépendances pip)
-└── openEMS/                les binaires du solveur (à télécharger, voir « Installation »)
+├── bin/                    l'exécutable compilé ou téléchargé (hors dépôt)
+└── openEMS/                les exécutables du solveur (à télécharger, voir « Installation d'openEMS »)
 ```
 
 ## Ce que le serveur fait, et pourquoi il existe
 
 Il ne sert que ce **qu'un navigateur ne sait pas faire** :
 
-1. **lire un fichier IPC-2581.** Le parseur est en Python, il fait près de deux
-   cents kilo-octets de code, et aucun navigateur ne l'exécutera. La page envoie le
+1. **lire un fichier IPC-2581.** Le lecteur est la caisse Rust `ipc2581` du dépôt web_suite,
+   commune à WEB_CAO, et il ne tourne pas dans un navigateur. La page envoie le
    fichier tel quel, le modèle traduit revient en JSON, et à partir de là tout
    se passe dans le navigateur ;
-2. **appeler openEMS.** Le solveur est un binaire C++ piloté par des liaisons
-   Python ;
+2. **appeler openEMS.** Le solveur est un exécutable C++ : le serveur lui écrit son fichier
+   XML, le lance et suit son journal ;
 3. **écrire sur le disque, et relire.** Un projet est un dossier que vous
    choisissez — voir « Les projets » ci-dessous. Une page web n'écrit pas là
    où on lui dit, et le stockage local d'un navigateur n'est ni un dossier,
@@ -215,8 +225,9 @@ Il ne sert que ce **qu'un navigateur ne sait pas faire** :
 Tout le reste — l'affichage, la désignation du cuivre, l'assistant, la 3D, les
 courbes — est dans le navigateur et n'a besoin de personne.
 
-Aujourd'hui, `web_antenna.py` n'importe que la bibliothèque standard et les
-modules du dépôt ; openEMS, numpy et h5py ne servent qu'aux simulations.
+`web_antenna` est un exécutable autonome ; openEMS ne sert qu'aux simulations, et le passage
+en fréquence (S₁₁, impédance, ROE) comme la lecture du champ lointain sont faits par l'outil
+lui-même, sans numpy ni h5py.
 
 ## Les projets — choisir où ranger, et reprendre où l'on s'était arrêté
 
@@ -478,13 +489,10 @@ pourquoi. Chaque valeur porte donc sa provenance : `fichier`, `saisi` ou
   étroite, 2,4 % sur une décade. L'écart affiché est **mesuré sur le jeu de
   pôles retenu**, pas promis par le modèle.
 
-  Ce matériau n'est pas atteignable par les liaisons Python : CSXCAD 0.6.3
-  n'expose aucune classe dispersive, et `AddMaterial(eps_Delta=…)` répond
-  « unknown material property ». Le script écrit donc la structure au format
-  XML de CSXCAD, convertit le `<Material>` en `<DebyeMaterial>`, et la relit —
-  **dans le même objet**, faute de quoi deux propriétaires pour une seule
-  structure C++ font tomber l'interpréteur en faute de segmentation à la
-  fermeture. Tout cela est écrit et commenté dans le script généré.
+  Ce matériau n'était pas atteignable par les liaisons Python (CSXCAD 0.6.3
+  n'expose aucune classe dispersive), et l'ancien script devait convertir le
+  `<Material>` en `<DebyeMaterial>` dans le XML. L'outil écrit aujourd'hui ce XML
+  lui-même, et y pose le `<DebyeMaterial>` directement, pôle par pôle.
 
   Une borne dure : openEMS **saute en silence** tout pôle dont le temps de
   relaxation ne dépasse pas deux pas de temps. Les pôles sont donc bornés à
@@ -1215,7 +1223,7 @@ est automatiquement analysée sur sa courbe d'énergie résiduelle :
 ### Le panneau « Champs »
 
 Le serveur ne renvoie pas des images : il renvoie **l'amplitude et la phase**
-de chaque point de la grille (`python/openems_champs.py`). La page recalcule
+de chaque point de la grille (`modele/src/champs.rs`). La page recalcule
 l'image par `A·cos(φ + ωt)` à la cadence de l'écran — changer de composante,
 d'échelle, de palette ou de vitesse ne lui demande donc plus rien. Un
 enregistrement temporel, lui, est une vraie suite d'images : le serveur en
@@ -1242,10 +1250,11 @@ champ mourant l'air d'un champ intense. Et le maillage FDTD étant **gradué**
 à sa coordonnée réelle : étaler le tableau de valeurs comme une image donnerait
 une carte juste en valeurs et fausse en géométrie.
 
-Deux boutons, un seul chemin : « Écrire le script Python » et « Lancer »
+Deux boutons, un seul chemin : « Écrire le fichier openEMS (.xml) » et « Lancer »
 produisent **le même texte**. Ce qui tourne est exactement ce qu'on exporte —
-un script exporté qui ne reproduirait pas le résultat de l'interface serait
-pire qu'inutile.
+un fichier exporté qui ne reproduirait pas le résultat de l'interface serait
+pire qu'inutile. L'export télécharge le XML et un lisez-moi qui donne la commande
+(`openEMS <fichier>.xml`) et ce que le solveur écrira.
 
 ### Le balayage — une cote, une plage, une famille de courbes
 
@@ -1358,7 +1367,7 @@ chemin-là.
 ### Ce que le mode ne fait pas, et c'est ce qui le rend sûr
 
 Il **ne crée pas un second chemin vers le solveur**. Il fabrique un document
-au format exact de celui que rend le parseur Python, et le donne à la même
+au format exact de celui que rend le lecteur IPC-2581, et le donne à la même
 fonction de chargement. À partir de là, rien ne distingue une carte dessinée
 d'une carte importée : même rendu, même désignation du cuivre, même assistant,
 même aperçu 3D, même maillage, même script exporté, même solveur.
@@ -1432,7 +1441,7 @@ arrêtée ; pas pendant qu'on la cherche.
 **Et tout cela va jusqu'au solveur, par le même chemin que le reste.**
 L'empilage réglé ici devient le tableau `empilage` du document — une entrée par
 couche, avec son épaisseur, son εᵣ, sa tanδ, sa conductivité et son rôle —, que
-`python/openems_modele.py` transforme en cotes z : chaque diélectrique devient
+`modele/src/modele/` transforme en cotes z : chaque diélectrique devient
 un volume de matériau à pertes, chaque cuivre un plan (ou un volume, au choix
 du modèle de cuivre), et chaque interface une ligne de maillage. Le masque y
 arrive comme les autres, à une nuance près, et elle va dans le sens du choix
@@ -1778,15 +1787,15 @@ charge y sont plus pâles que celui qui excite : le S₁₁ est celui du vif.
 
 ## L'exécution, et pourquoi en sous-processus
 
-Le serveur écrit le script, puis le lance dans un **processus séparé**.
+Le serveur écrit le fichier XML du solveur, puis lance `openEMS` dessus dans un **processus séparé**.
 
 1. **Ce qui tourne est ce qu'on exporte.**
 2. **Un solveur qui plante n'emporte pas le serveur.** openEMS est du C++ :
    une géométrie dégénérée peut le faire tomber par une faute de segmentation,
-   qui tuerait le processus Python hôte — et avec lui la page et le travail en
+   qui ne tue que lui — ni le serveur, ni la page, ni le travail en
    cours.
 3. **On peut l'arrêter.** Un calcul de trois heures lancé par erreur se tue par
-   son PID ; un appel bloquant dans un fil d'exécution Python, non.
+   son PID.
 
 Le suivi se fait par **sondage** et non par flux : la page dit combien de
 lignes elle a déjà, le serveur envoie la suite. Fermer l'onglet n'interrompt
@@ -1833,7 +1842,7 @@ elle distingue trois cas qui ne se corrigent pas de la même façon :
 Le cas est nommé dans le journal et en tête du panneau de résultats ; sur un
 balayage, il est dans l'infobulle de la ligne qui n'a que des tirets.
 
-Exports : `.csv`, `.s1p` (Touchstone) et le script Python.
+Exports : `.csv`, `.s1p` (Touchstone) et le fichier XML d'openEMS.
 
 Le **tableau S complet** (bouton « Lancer les N simulations », étape « Le
 calcul ») enchaîne une simulation par port, l'excitation déplacée de l'un à
@@ -1870,15 +1879,24 @@ tous les outils liraient sans broncher et dont la moitié serait inventée.
 ## Banc d'essai
 
 ```bash
-python python/test/banc-openems.py
+cargo test
 ```
 
-Des vérifications sans solveur réparties en 23 sections : cotes en z, sens des
-polygones, maillage, refus attendus, conversion pouces/millimètres, script
+Tous les bancs Python d'origine sont devenus des tests Rust, sans solveur :
+
+| Où | Ce qui y est éprouvé |
+|---|---|
+| `modele/src/essais.rs` | le modèle, contre les **sorties figées du Python d'origine** (`modele/essais/` : 230 documents des bancs, comparés à l'octet), le lecteur de champs `.vtr`, le débit et les fils, les pièces importées |
+| `solveur/tests/xml.rs`, `references.rs` | le XML d'openEMS (ce que le banc vérifiait du script généré), la structure et le dépouillement contre les références numpy figées (`solveur/essais/LISEZ-MOI.md`), le lecteur HDF5 |
+| `solveur/tests/lancement.rs` | lancement, suivi, arrêt, balayage, tableau S, banc de vitesse, archivage — sur un **faux openEMS** (`solveur/src/bin/faux_openems.rs`) |
+| `src/projet/essais.rs` | les projets : les refus d'un nom, absent ≠ nul, le réglage du poste sous verrou, ranger et importer un calcul |
+| `tests/banc_serveur.rs`, `banc_github_relai.rs` | le serveur en boîte noire (l'exécutable lancé, puis HTTP) |
+| `tests/carte_antenne.rs` | la carte d'essai `test/patch-2450.xml` |
+
+Ce que ces bancs couvraient, section par section : cotes en z, sens des
+polygones, maillage, refus attendus, conversion pouces/millimètres, fichier
 généré, les deux modèles de pertes, les quatre primitives, les pièces
-importées (recollage, corps ouvert refusé, lignes sur les parois, rotation, et
-— si openEMS est installé — CSXCAD lui-même qui voit la paroi pleine et la
-cavité vide, avant et après le passage par le XML), la conductivité
+importées (recollage, corps ouvert refusé, lignes sur les parois, rotation), la conductivité
 déclarée d'un conducteur, le poids des enregistrements, les ports multiples et
 leurs refus, la géométrie du connecteur coaxial, les points d'un balayage —
 croisement compris, où le garde-fou porte sur le produit —, l'assemblage des
@@ -1904,10 +1922,9 @@ du code de ce dépôt au sens ordinaire :
    manquer une lecture — et vérifie que les trois cas se distinguent : une
    divergence numérique (énergie croissante), une descente tronquée par le
    garde-fou $n_\text{max}$, et une descente propre.
-3. **Le désembedage d'une ligne** (section 19) : extrait du script généré le
-   bloc de calcul analytique et l'**exécute** : ce bloc est du texte écrit dans
-   le script, pas une fonction du dépôt, et en tenir une seconde copie dans le banc
-   ne prouverait rien. Il éprouve l'aller-retour sur la ligne, la demi-onde guidée
+3. **Le désembedage d'une ligne** (section 19) : le calcul analytique, qui était
+   un bloc de texte du script généré, est aujourd'hui une fonction du dépouillement
+   (`solveur/src/depouillement.rs`). Le banc éprouve l'aller-retour sur la ligne, la demi-onde guidée
    qui ramène l'impédance sur elle-même, et vérifie qu'on n'a pas confondu l'εᵣ
    effectif de la ligne avec celui du patch.
 4. **Le port court-circuité par le cuivre** (section 20) : simule une pastille
@@ -1915,42 +1932,35 @@ du code de ce dépôt au sens ordinaire :
    `P01x274PCB-C.xml`) et vérifie qu'un avis grave bloque le calcul, tout en
    laissant passer une sonde normale ou une pastille fondue dans la masse.
 
-Le **serveur** a son propre banc (`python python/test/banc-serveur.py`,
-quelques secondes) : il ne sert que `index.html`, `css/` et `js/` —
-ni `.git/`, ni `env/`, ni un chemin Windows comme
+Le **serveur** a son propre banc (`cargo test --test banc_serveur`,
+quelques secondes, l'exécutable en boîte noire) : il ne sert que `index.html`, `css/` et `js/` —
+ni `.git/`, ni les sources, ni un chemin Windows comme
 `/C:%5cWindows%5cwin.ini` — et refuse un en-tête `Host` qui n'est ni une IP, ni
 `localhost`, ni le nom du poste (DNS rebinding). Les trois routes qui désignent un
 chemin du disque (racine des projets, import d'un calcul, ouverture de
 l'explorateur) ne répondent qu'à ce poste.
 
 Le relai **« Enregistrer + GitHub »** a le sien
-(`python python/test/banc-github-relai.py`) : un faux lanceur note ce qu'il
+(`cargo test --test banc_github_relai`) : un faux lanceur note ce qu'il
 reçoit, rien n'est poussé, et un autre appareil ne passe qu'avec le jeton du
-lanceur. Les copies communes se vérifient elles-mêmes : `python appairage.py`,
-`python pilote.py`. La CI (`.github/workflows/ci.yml`) lance le banc principal,
-celui du serveur et celui du relai, sans openEMS.
+lanceur. L'appairage et le canal de pilotage sont éprouvés dans la caisse commune
+(`cargo test` du dépôt web_suite). La CI (`.github/workflows/ci.yml`) compile,
+lance `cargo test` puis les deux bancs JavaScript, sans openEMS.
 
-Un bloc à part éprouve le **lecteur de champs** (`python/test/banc-champs.py`,
-appelé lui aussi par le banc principal). Il n'a besoin ni
-d'openEMS ni d'un dossier de calcul : il **écrit ses propres `.vtr`**, compressés
+Le **lecteur de champs** n'a besoin ni
+d'openEMS ni d'un dossier de calcul : ses essais relisent des `.vtr` fabriqués, compressés
 et non compressés, avec des grilles de tailles volontairement quelconques — c'est
 quand la longueur de l'en-tête n'est pas un multiple de trois octets que le
-décodage base 64 se décale, et une grille 4 × 4 ne le montrerait jamais. Il
-vérifie ensuite que la tranche extraite d'un volume est bien la bonne dans
+décodage base 64 se décale, et une grille 4 × 4 ne le montrerait jamais. Ils
+vérifient ensuite que la tranche extraite d'un volume est bien la bonne dans
 les trois directions, que la tranche proposée par défaut est celle qui
 **porte le champ** et non celle du milieu (qui, dans une boîte, est de
 l'air), que l'inventaire préfère le couple amplitude/phase aux instantanés,
-et qu'une clé inventée est refusée plutôt que résolue en chemin. Donnez-lui
-un dossier de calcul en argument et il refait le tour sur de vrais fichiers :
+et qu'une clé inventée est refusée plutôt que résolue en chemin.
 
-```bash
-python python/test/banc-champs.py <dossier-de-calcul>
-```
-
-Les deux derniers blocs sont en JavaScript et tournent sous **node**, que le
-banc appelle lui-même quand il est installé : le découpage des découpes
-(`test/banc-polygones.js`, cas dégénérés compris) et la logique
-de la page (`test/banc-interface.js`) :
+Les deux derniers blocs sont en JavaScript et tournent sous **node** : le découpage des découpes
+(`node test/banc-polygones.js`, cas dégénérés compris) et la logique
+de la page (`node test/banc-interface.js`) :
 - la classification des nets (GND, PWR, Signal), l'auto-détection, les filtres et les préréglages ;
 - la **liste des réglages et l'audit** : un chemin hors liste est refusé, chaque contrôle se lève quand il le doit, et ses corrections restent dans la liste ;
 - la mise en cache vectorielle `Path2D` du cuivre, de la grille Yee FDTD et du quadrillage ;
@@ -1960,14 +1970,14 @@ de la page (`test/banc-interface.js`) :
 - l'**empilage du mode conception** — chaque modèle d'usine tombe-t-il sur l'épaisseur qu'il annonce, le dessin survit-il à un changement de nombre de couches, le masque arrive-t-il au solveur, un port devenu faux est-il vu — ;
 - l'ordre des colonnes d'un fichier Touchstone, et le balayage d'une cote de **motif** — que le dessin revienne en place au bit près, que la carte et le port suivent la cote, qu'un second port survive au point, et que les cotes du motif disparaissent dès que le dessin n'en est plus la copie.
 
-```bash
-python python/test/banc-openems.py --simuler
-```
-
-lance en plus **deux** vraies simulations FDTD sur le patch d'essai — l'une
-nourrie par une sonde localisée, l'autre par un connecteur coaxial — et vérifie
+**Ce qui n'est pas rejoué ici : la vraie simulation.** Le banc Python avait une option
+`--simuler` qui lançait **deux** vraies simulations FDTD sur le patch d'essai — l'une
+nourrie par une sonde localisée, l'autre par un connecteur coaxial — et vérifiait
 que la résonance tombe à quelques pour-cent de la formule, et que les deux
-alimentations tombent au même endroit. Dernier passage :
+alimentations tombent au même endroit. Elle demande openEMS, et n'a pas d'équivalent
+automatique : le XML écrit par l'outil reste **à éprouver sur un vrai openEMS** (les endroits
+sont marqués « à vérifier sur un vrai openEMS » dans `solveur/src/`). Dernier passage du banc
+Python, pour mémoire :
 
 ```
 sonde localisée   résonance 2,3750 GHz   S11 −6,72 dB   Z = 19,7 +12,0j Ω
@@ -2119,78 +2129,62 @@ découpes de versement l'ont toujours été.
   masse. Sur un fichier sans connectivité, tout le cuivre est du même côté :
   la question n'a pas de réponse, et l'outil se tait.
 
-## Installation complète des prérequis
+## Installation d'openEMS
 
-### Installer selon le poste
+L'outil n'a besoin de rien d'autre que son exécutable (voir « Prérequis & Démarrage rapide »).
+Les **simulations** demandent openEMS, c'est-à-dire **deux exécutables** : `openEMS` (le solveur
+FDTD) et `nf2ff` (le champ lointain), avec leurs bibliothèques. Aucun Python : ni liaisons
+`CSXCAD`/`openEMS`, ni numpy, ni h5py, ni environnement virtuel.
 
 | Poste | L'outil | Les simulations |
 |---|---|---|
-| Raspberry Pi, Linux | `git clone https://github.com/pilou33620/WEB_ANTENNA.git`, puis `python3 web_antenna.py` | aucune installation automatique : le module Python et les binaires d'openEMS s'installent à part, dans `env/`, `.venv/` ou `venv/` (voir « Quel Python » et l'en-tête de `requirements.txt`). Sans eux, « Lancer » reste éteint et le reste marche |
-| Windows | le même `git clone`, puis `python web_antenna.py` | l'archive binaire et `env/` : les deux points ci-dessous, ou le bouton « Installer openEMS » de WEB·SUITE |
+| Raspberry Pi, Linux, macOS | `git clone https://github.com/pilou33620/WEB_ANTENNA.git`, puis `./demarrer_WEB_ANTENNA.sh` | installer openEMS de sorte que `openEMS` et `nf2ff` soient dans le `PATH` (paquet de la distribution, ou compilation d'[openEMS-project](https://github.com/thliebig/openEMS-project)), ou les poser dans `openEMS/` à la racine du dépôt. Sans eux, « Lancer » reste éteint et le reste marche |
+| Windows | le même `git clone`, puis double-clic sur `demarrer_WEB_ANTENNA.cmd` | l'archive binaire dans `openEMS/` : ci-dessous, ou le bouton « Installer openEMS » de WEB·SUITE |
 
 Par WEB·SUITE (`installer.sh`, `installer.cmd`), l'outil se télécharge avec les autres et écoute sur le port 8732.
 
-Sous Windows, le solveur et l'outil s'articulent autour de deux briques qu'il convient de mettre en place dans l'ordre suivant :
-
-### 1. Les binaires openEMS (`openEMS/`)
-
-L'archive officielle openEMS pour Windows contient **à la fois** les binaires C++ (`openEMS.exe`, `CSXCAD.dll`), et les roues d'installation Python (`.whl` pour `openEMS` et `CSXCAD`). **Cette archive doit être extraite en premier**, car `pip` en aura besoin à l'étape suivante.
+### Windows : l'archive binaire dans `openEMS/`
 
 1. **Télécharger l'archive binaire openEMS pour Windows (64-bit)** :
-   - Disponible sur le site officiel : [openems.de/download](https://www.openems.de/download/)
-   - Ou depuis les releases GitHub du projet : [openEMS-project Releases](https://github.com/thliebig/openEMS-project/releases) (ex. `openEMS_v0.0.36.zip`)
-2. **Extraire l'archive** dans un dossier nommé `openEMS/` placé **directement à la racine du projet** (à côté de `web_antenna.py`).
+   - sur le site officiel : [openems.de/download](https://www.openems.de/download/)
+   - ou depuis les publications GitHub du projet : [openEMS-project Releases](https://github.com/thliebig/openEMS-project/releases) (ex. `openEMS_v0.0.36.zip`)
+2. **Extraire l'archive** dans un dossier nommé `openEMS/` placé **directement à la racine du dépôt** (à côté de `index.html`).
 3. **Vérifier l'arborescence** : le dossier `openEMS/` doit contenir directement :
    ```
    openEMS/
-   ├── CSXCAD.dll
-   ├── openEMS.dll
    ├── openEMS.exe
-   ├── AppCSXCAD.exe
-   ├── python/
-   │   ├── CSXCAD-0.6.3-cp310-cp310-win_amd64.whl
-   │   ├── openEMS-0.0.36-cp310-cp310-win_amd64.whl
-   │   └── ...
+   ├── nf2ff.exe
+   ├── openEMS.dll, CSXCAD.dll, …   les bibliothèques des deux exécutables
    └── ...
    ```
+   L'outil d'extraction de Windows crée souvent un sous-dossier de même nom : il ne faut pas
+   `openEMS/openEMS/...`. Le sous-dossier `python/` de l'archive (les roues) ne sert plus.
 
-> `openems_run.py` ajoute automatiquement ce dossier au chemin de recherche des DLL (`os.add_dll_directory`). Cela élimine l'erreur `DLL load failed` qui survient d'ordinaire lors de `import CSXCAD`.
+Aucune modification du `PATH` n'est nécessaire : le serveur lance ces exécutables avec leur
+dossier en tête des chemins de recherche des bibliothèques.
 
----
+### Vérifier
 
-### 2. L'environnement virtuel Python (`env/`)
+Au démarrage, le terminal doit dire :
 
-Il est **impératif d'utiliser Python 3.10 ou Python 3.11 (64 bits)**, versions pour lesquelles les liaisons C++ précompilées d'openEMS sous Windows sont fournies. Avec Python 3.12 ou supérieur, l'installation des roues openEMS échouera.
-
-```powershell
-# 1. Créer l'environnement virtuel avec Python 3.10 ou 3.11
-# Sur Windows avec plusieurs versions de Python, utiliser le sélecteur py :
-py -3.10 -m venv env
-# (ou : py -3.11 -m venv env)
-
-# 2. Activer l'environnement
-.\env\Scripts\activate
-
-# 3. Installer les dépendances Python
-# (requirements.txt va automatiquement chercher CSXCAD et openEMS dans openEMS/python/)
-pip install -r requirements.txt
+```
+  Solveur openEMS   pret
+                    via …/openEMS/openEMS.exe
 ```
 
-> **Bascule automatique dans `env/` :** `web_antenna.py` détecte automatiquement si vous le lancez depuis une invite ordinaire avec le Python système. S'il trouve `env/` à la racine, il se relance de lui-même avec l'interpréteur de l'environnement virtuel.
-
----
+Sinon il dit pourquoi (« l'executable « openEMS » est introuvable », ou la fin de ce que
+l'exécutable a répondu) et rappelle où le poser.
 
 ### Pièges rencontrés sur Windows (et contournés dans le code)
 
-Quatre pièges rencontrés sur Windows sont automatiquement gérés : les deux premiers sur le réseau (voir « Le port » plus haut), les deux suivants sur le solveur :
+Deux pièges sur le réseau (voir « Le port » plus haut), et un sur le solveur :
 
-* **Nom court 8.3 du profil utilisateur :** openEMS 0.0.36 vérifie `os.getcwd() == os.path.realpath(sim_path)`. Quand `TEMP` vaut le nom court 8.3 du profil (`PIERRE~1.REN`), les deux ne coïncident pas et le calcul s'arrête sur une `AssertionError` nue. Les chemins sont donc canonisés avant d'être passés au solveur.
-* **Unités du champ lointain :** `CalcNF2FF(center=…)` attend des **mètres**, pas l'unité de dessin. Un centre donné en millimètres place le point de phase à des dizaines de mètres et la directivité ressort `nan`, sans la moindre erreur explicite.
+* **Unités du champ lointain :** le centre de phase de `nf2ff` est en **mètres**, pas dans l'unité de dessin. Un centre donné en millimètres place le point de phase à des dizaines de mètres et la directivité ressort `nan`, sans la moindre erreur explicite.
 
 ## Origine
 
 L'habillage — thème « dashboard nocturne », panneaux détachables — et la
-lecture de carte IPC-2581 (`js/01` à `js/05`, `python/ipc2581_*.py`) viennent
+lecture de carte IPC-2581 (`js/01` à `js/05`, et le lecteur devenu la caisse `ipc2581`) viennent
 de **WEB_CAO** (<https://github.com/pilou33620/WEB_CAO>), sous licence MIT.
 `js/06-ouverture.js` en est dérivé, réécrit pour ne plus dépendre des services
 propres à ce dépôt-là (profils d'utilisateur, dossiers de projet, reprise de

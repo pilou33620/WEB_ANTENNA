@@ -14,21 +14,23 @@ jobs:
         with:
           node-version: '22'
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - name: Exécutable Rust (web_antenna) et outils des caisses
+        run: cargo build --bins
 
-      # Sans openEMS : ses roues n'existent que pour Windows et Python 3.10 /
-      # 3.11. Le banc saute alors la partie qui l'exige, et le dit ; tout le
-      # reste (modèle, script généré, pertes, maillage, page) est éprouvé.
-      - name: Dépendances du banc
-        run: pip install --quiet numpy h5py
+      # Sans openEMS : le lancement, le suivi et le dépouillement sont éprouvés sur un faux
+      # openEMS (solveur/src/bin/faux_openems.rs) et sur les références figées du Python
+      # d'origine (modele/essais/, solveur/essais/ref/). Les bancs intégrés de l'appairage et du
+      # pilote sont des tests Rust de la caisse commune (dépôt web_suite).
+      #   modele/    : modèle, pièces, champs .vtr
+      #   solveur/   : XML d'openEMS, lancement, dépouillement, HDF5
+      #   src/       : projets, routes, mise à jour git
+      #   tests/     : banc_serveur (fichiers servis, Host, chemins Windows, routes),
+      #                banc_github_relai (Enregistrer + GitHub), carte_antenne (test/patch-2450.xml)
+      - name: Tests Rust — modèle, solveur, projets, serveur (exécutable en boîte noire)
+        run: cargo test
 
-      - name: Banc principal (lance aussi banc-champs, banc-polygones, banc-interface)
-        run: python python/test/banc-openems.py
+      - name: Découpage des polygones
+        run: node test/banc-polygones.js
 
-      - name: Serveur — fichiers servis, Host, chemins Windows
-        run: python python/test/banc-serveur.py
-
-      - name: Enregistrer + GitHub (relai au lanceur WEB_SUITE) — banc d'essai
-        run: python python/test/banc-github-relai.py
+      - name: Logique de la page — ports, balayage, unités
+        run: node test/banc-interface.js
