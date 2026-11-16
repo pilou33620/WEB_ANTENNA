@@ -144,3 +144,6 @@ target/
 !modele/essais/**/*.vtr
 # Les references de la caisse antenne_solveur (sondes de synthese, HDF5 de nf2ff) sont suivies.
 !solveur/essais/**/*.h5
+
+# Cache le lanceur Windows sous Linux (ecrit par demarrer_*.sh)
+.hidden

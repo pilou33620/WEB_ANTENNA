@@ -61,7 +61,7 @@ jobs:
           P=prod/web_antenna
           mkdir -p $P/test
           cp -r bin $P/
-          cp demarrer_*.sh demarrer_*.cmd binaires.sh binaires.cmd README.md LICENSE $P/
+          cp -r scripts $P/ && cp demarrer_*.sh demarrer_*.cmd README.md LICENSE $P/
           # ce que le serveur sert (STATIQUE de src/serveur.rs) : la page, css/ et js/
           cp index.html $P/
           cp -r css js $P/
