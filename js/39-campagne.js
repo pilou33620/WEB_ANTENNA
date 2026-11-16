@@ -16,7 +16,7 @@
    tourne dans son propre processus : rouvrir la page le reprend au suivi.
 
    Chaque plan fini se TÉLÉCHARGE sous le nom que lui donne HISTORIQUE.md
-   (recalage-patch-maillage-fin.json) : à poser à la racine de WEB_ANTENNA, puis à
+   (recalage-patch-maillage-fin.json) : à poser dans docs/mesures/ de WEB_ANTENNA, puis à
    pousser, pour que les corrections de A-FAIRE.md soient écrites d'après eux.
    ============================================================================= */
 
@@ -28,7 +28,7 @@ const CAMP_BASE={modele:"fr4-2c-16", f:2.45e9};
    balayage (`bal`, croisé si `source2`) ou une simulation seule. `rel` donne
    une plage en fraction de la cote posée : [min, max, pas]. */
 const CAMP_PLANS=[
-  /* La campagne du 22/10/2026 (six plans, relevés à la racine) a montré le
+  /* La campagne du 22/10/2026 (six plans, relevés dans docs/mesures/) a montré le
      port localisé sous-maillé ; le ruban se maille fin depuis. Reste à recaler
      les deux lois du patch (patchCorrLongueur, patchCorrRbord) sur ce
      maillage : L de 0 à +2 % (le maillage fin remonte la résonance de
@@ -99,7 +99,7 @@ function campPlage(b){
   return out;
 }
 
-/* Ce qu'on garde d'un résultat : les colonnes des croisement-*.json déjà à la racine. */
+/* Ce qu'on garde d'un résultat : les colonnes des croisement-*.json de docs/mesures/. */
 const CAMP_CHAMPS=["f0", "s11_min_db", "z0_re", "z0_im", "z0_pied_re", "z0_pied_im",
                    "bp_f1", "bp_f2", "nf2ff", "msl"];
 function campResume(q){
@@ -236,7 +236,7 @@ function campRendre(){
   const fait=id=>etat&&etat.releves[id]&&etat.releves[id].etapes.filter(Boolean).length===
                      CAMP_PLANS.find(p=>p.id===id).etapes.length;
   let h='<h3>Campagne de mesures</h3><p class="campNote">Les plans d\'HISTORIQUE.md, lancés '+
-        "l'un après l'autre. Chaque plan fini se télécharge : posez le fichier à la racine de "+
+        "l'un après l'autre. Chaque plan fini se télécharge : posez le fichier dans docs/mesures/ de "+
         "WEB_ANTENNA. Le dessin en cours est remplacé.</p>";
   h+=CAMP_PLANS.map(p=>'<label class="campPlan"><input type="checkbox" data-camp="'+p.id+'"'+
        ((CAMP.coches||(etat?etat.plans:CAMP_PLANS.map(q=>q.id))).includes(p.id)?" checked":"")+(CAMP.enCours?" disabled":"")+"> "+

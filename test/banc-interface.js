@@ -1415,9 +1415,9 @@ verifie("un balayage dont aucun point ne resonne ne designe pas d'optimum",
         controlesCarte().some(a=>a.titre.indexOf("Aucun point du balayage")===0));
 
 /* LES NEUF POINTS DU CROISEMENT g × y0, tels que le serveur les a rendus
-   (`croisement-g-y0.json`, a la racine) : le meilleur est g = 1,49 et
+   (`croisement-g-y0.json`, dans docs/mesures/) : le meilleur est g = 1,49 et
    y0 = 8,51 — le coin bas-bas. C'est le cas qui a fait ecrire la regle. */
-const CARTE_X=JSON.parse(fs.readFileSync(path.join(__dirname,"..","croisement-g-y0.json"),"utf8"));
+const CARTE_X=JSON.parse(fs.readFileSync(path.join(__dirname,"..","docs","mesures","croisement-g-y0.json"),"utf8"));
 ANT.resultat=Object.assign({balayage:true, pente_hz_par_unite:null,
                             lignes:CARTE_X.lignes,
                             points:CARTE_X.points.map(p=>({etiquette:p.etiquette,
@@ -1516,7 +1516,7 @@ verifie("l'outil « balayage » rend le tableau, S11 a la cible compris",
 /* LE CROISEMENT L × y0 DU 02/10 (`croisement-L-y0.json`), sans ses courbes :
    le S11 minimal designe 28,2 × 7 (-33,9 dB a 2,40 GHz), et la lecture doit
    dire que ce creux tombe 2 % sous la cible. */
-const CARTE_LY=JSON.parse(fs.readFileSync(path.join(__dirname,"..","croisement-L-y0.json"),"utf8"));
+const CARTE_LY=JSON.parse(fs.readFileSync(path.join(__dirname,"..","docs","mesures","croisement-L-y0.json"),"utf8"));
 ANT.resultat=Object.assign({balayage:true, lignes:CARTE_LY.lignes,
                             points:CARTE_LY.points.map(p=>({etiquette:p.etiquette,
                               valeur:p.valeur, valeur2:p.valeur2, resultat:p}))},

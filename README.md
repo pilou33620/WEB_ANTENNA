@@ -145,7 +145,7 @@ données ») : une mise à jour n'y touche pas.
 ├── demarrer_WEB_ANTENNA.sh / .cmd  lancement : met bin/web_antenna à jour puis le lance
 ├── scripts/binaires.sh / .cmd  bin/web_antenna : compilé ici (cargo) ou téléchargé depuis GitHub
 ├── index.html              la page, avec la modale de classification des nets (PWR, GND, Signal)
-├── A-FAIRE.md, HISTORIQUE.md  ce qui reste à faire, et le carnet de mesures ; les relevés *.json sont à côté
+├── docs/                   A-FAIRE.md, HISTORIQUE.md (le carnet de mesures) et mesures/ (les relevés *.json)
 ├── css/
 │   ├── theme.css           le thème « dashboard nocturne » et les styles des modales / badges
 │   ├── workspace.css       les panneaux détachables
@@ -1350,11 +1350,11 @@ lancer ; **Lancer** part ; **Arrêter** coupe le calcul en cours (**Reprendre** 
 Une étape qui échoue est notée et la campagne continue ; recharger la page reprend le
 suivi du calcul en cours.
 
-Elle a servi aux six « Plans de mesure » d'[HISTORIQUE.md](HISTORIQUE.md) le 22/10/2026,
+Elle a servi aux six « Plans de mesure » d'[HISTORIQUE.md](docs/HISTORIQUE.md) le 22/10/2026,
 et ne porte plus que le **recalage du patch** sur le maillage fin du ruban : L × `y₀` sur
 quatre stratifiés à 2,45 GHz et le FR-4 à 5,8 GHz. Le fichier
-`recalage-patch-maillage-fin.json` se télécharge à la fin : à poser à la racine et à
-pousser. L'outil sera retiré ensuite ([A-FAIRE.md](A-FAIRE.md)).
+`recalage-patch-maillage-fin.json` se télécharge à la fin : à poser dans `docs/mesures/` et à
+pousser. L'outil sera retiré ensuite ([A-FAIRE.md](docs/A-FAIRE.md)).
 
 ## Le mode conception — quand l'antenne n'existe pas encore
 
@@ -2062,7 +2062,7 @@ découpes de versement l'ont toujours été.
   est interpolé en tan δ et en épaisseur, et borné aux valeurs mesurées (tan δ de
   0,0027 à 0,02, h de 0,762 à 1,53 mm). Sur un autre stratifié, c'est une
   hypothèse, pas une mesure : l'aide de la cote dit de balayer `y₀`. Ces lois
-  restent à recaler sur le maillage fin du ruban ([A-FAIRE.md](A-FAIRE.md)) :
+  restent à recaler sur le maillage fin du ruban ([A-FAIRE.md](docs/A-FAIRE.md)) :
   d'ici là, un patch y tombe environ 0,7 % au-dessus de sa cible.
 * **Un méandre serré sort du modèle** : le MIFA pose le développé du quart
   d'onde, mais deux brins repliés plus proches que deux largeurs de piste se
@@ -2070,7 +2070,7 @@ découpes de versement l'ont toujours été.
   de 3,5 GHz pour 2,45 visés. La cote `kd` (développé visé, en % du quart
   d'onde, 100 par défaut) allonge les dents à empreinte fixe. Le croisement
   `kd` × `n` du 22/10/2026 (`croisement-mifa-kd-n.json`, bilan dans
-  [HISTORIQUE.md](HISTORIQUE.md)) : avec un repli, `kd` ≈ 137 % donne 2,45 GHz,
+  [HISTORIQUE.md](docs/HISTORIQUE.md)) : avec un repli, `kd` ≈ 137 % donne 2,45 GHz,
   mal adapté (−5 dB) ; avec deux ou trois, rien ne résonne sous 2,82 GHz jusqu'à
   160 %. Aucune seconde campagne n'a été lancée : `kd` vaut toujours 100, et le
   décalage reste.

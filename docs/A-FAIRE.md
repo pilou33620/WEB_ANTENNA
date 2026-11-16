@@ -11,14 +11,14 @@ vérifications passées ; aucun `TODO` ni `FIXME` dans le code).
 
 ## Fonctionnalités
 
-La campagne de mesures du 22/10/2026 (six plans, relevés à la racine, bilan dans
+La campagne de mesures du 22/10/2026 (six plans, relevés dans `mesures/`, bilan dans
 [HISTORIQUE.md](HISTORIQUE.md), « Campagne du 22/10/2026 ») a tranché quatre lignes. Les
 décisions du 23/10/2026 : ruban maillé fin par défaut, une petite campagne pour recaler le
 patch, pas de seconde campagne pour le MIFA ni pour les facteurs.
 
 - [ ] **Recaler le patch sur le maillage fin** : lancer la campagne « Recalage du patch »
   (bouton **📋 Campagne**, environ 11 h annoncées, la première a tenu en 2 h 30), poser
-  `recalage-patch-maillage-fin.json` à la racine, puis recaler `PATCH_K_LONGUEUR` et
+  `recalage-patch-maillage-fin.json` dans `mesures/`, puis recaler `PATCH_K_LONGUEUR` et
   `PATCH_RBORD` (`js/22-antennes.js`) sur ses cinq cas. D'ici là, sur ce maillage, un patch
   tombe environ 0,7 % au-dessus de sa cible.
 - [ ] **Retirer la campagne de mesures** une fois ce recalage rendu : le bouton

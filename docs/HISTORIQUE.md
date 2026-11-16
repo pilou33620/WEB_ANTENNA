@@ -100,7 +100,7 @@ changeait rien.
    autres cas ont été mesurés le 03/10/2026, et le gabarit est **corrigé**
    (voir « La correction du gabarit », plus bas).
 
-Le croisement complet est dans `croisement-g-y0.json`, à la racine.
+Le croisement complet est dans `mesures/croisement-g-y0.json`.
 
 **Le prolongement vers le bas (02/10/2026) a trouvé l'optimum — et il est
 encadré.** Neuf points de plus, même document (FR-4 **1,6 mm** : depuis le
@@ -328,7 +328,7 @@ pour sa réactance.
 
 Ce qui reste ouvert sur la physique des antennes se tranche au solveur. Les
 plans sont arrêtés ; les calculs se lancent depuis la page (le balayage d'une
-cote de motif, croisé au besoin), et chaque relevé s'enregistre à la racine
+cote de motif, croisé au besoin), et chaque relevé s'enregistre dans `mesures/`
 comme `croisement-*.json`. Sauf mention contraire : FR-4 1,53 mm, 2,45 GHz,
 réglages du croisement du patch.
 
@@ -374,7 +374,7 @@ et le relevé du pilotage par Claude (MCP de web_suite) du 19/10/2026, tout coch
 ### Campagne du 22/10/2026 — ce que les six plans ont tranché
 
 Lancée par le bouton **📋 Campagne** sur le poste de simulation, 2 h 30 pour 13 h
-annoncées (le débit supposé était pessimiste). Les six relevés sont à la racine.
+annoncées (le débit supposé était pessimiste). Les six relevés sont dans `mesures/`.
 Décisions du 23/10/2026 à la fin de chaque point.
 
 1. **MIFA, `kd` × `n`** (`croisement-mifa-kd-n.json`). Avec un repli, la résonance
