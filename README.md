@@ -143,7 +143,7 @@ données ») : une mise à jour n'y touche pas.
 │   ├── banc_github_relai.rs  le relai « Enregistrer + GitHub »
 │   └── carte_antenne.rs      fabrique la carte d'essai IPC-2581, et la compare à test/patch-2450.xml
 ├── demarrer_WEB_ANTENNA.sh / .cmd  lancement : met bin/web_antenna à jour puis le lance
-├── binaires.sh / .cmd      bin/web_antenna : compilé ici (cargo) ou téléchargé depuis GitHub
+├── scripts/binaires.sh / .cmd  bin/web_antenna : compilé ici (cargo) ou téléchargé depuis GitHub
 ├── index.html              la page, avec la modale de classification des nets (PWR, GND, Signal)
 ├── A-FAIRE.md, HISTORIQUE.md  ce qui reste à faire, et le carnet de mesures ; les relevés *.json sont à côté
 ├── css/
@@ -2141,7 +2141,7 @@ FDTD) et `nf2ff` (le champ lointain), avec leurs bibliothèques. Aucun Python : 
 | Raspberry Pi, Linux, macOS | `git clone https://github.com/pilou33620/WEB_ANTENNA.git`, puis `./demarrer_WEB_ANTENNA.sh` | installer openEMS de sorte que `openEMS` et `nf2ff` soient dans le `PATH` (paquet de la distribution, ou compilation d'[openEMS-project](https://github.com/thliebig/openEMS-project)), ou les poser dans `openEMS/` à la racine du dépôt. Sans eux, « Lancer » reste éteint et le reste marche |
 | Windows | le même `git clone`, puis double-clic sur `demarrer_WEB_ANTENNA.cmd` | l'archive binaire dans `openEMS/` : ci-dessous, ou le bouton « Installer openEMS » de WEB·SUITE |
 
-Par WEB·SUITE (`installer.sh`, `installer.cmd`), l'outil se télécharge avec les autres et écoute sur le port 8732.
+Par WEB·SUITE (`scripts/installer.sh`, `scripts\installer.cmd`), l'outil se télécharge avec les autres et écoute sur le port 8732.
 
 ### Windows : l'archive binaire dans `openEMS/`
 
