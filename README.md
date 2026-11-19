@@ -2073,12 +2073,22 @@ découpes de versement l'ont toujours été.
   l'axe, et un brin de 24,5 mm résonnait à 2,46 GHz au lieu de 2,89. Le
   diamètre saisi ne règle donc que le maillage autour du fil ; un brin incliné
   ou une spire sont des marches d'escalier. Les longueurs des motifs sont
-  **mesurées** (openEMS, 19/11/2026, FR-4 1,6 mm) : le brin à 0,98 quart
-  d'onde tient ±4,4 % sur six cas de 868 MHz à 5,8 GHz ; l'hélice suit
-  pied + 6,8 mm + N·2,6·(D − 0,8 mm) à ±3,5 % sur dix cas (D de 3 à 8 mm,
-  1,2 à 3,4 GHz), et s'adapte mal par nature (5 à 20 Ω au pied). Hors de ces
-  bornes, et sur un autre stratifié, ce sont des extrapolations. Un brin
-  rabattu sur la masse (180°) ne s'adapte pas (−0,6 dB).
+  **mesurées** (openEMS, 19/11/2026, FR-4 1,6 mm). Le brin à 0,98 quart
+  d'onde tient ±4,4 % sur huit cas, de 433 MHz à 5,8 GHz, couché ou vertical.
+  L'hélice suit pied + 6,8 mm + N·2,6·(D − 0,8 mm), la spire comptant 8 % de
+  moins par octave sous 1,4 GHz : ±3,5 % sur dix cas (D de 3 à 8 mm, 1,2 à
+  3,4 GHz), et ses valeurs par défaut tombent à +2,1 % au plus de 433 MHz à
+  2,45 GHz. Elle s'adapte mal par nature (5 à 20 Ω au pied) : prévoir un
+  circuit d'accord. Sans carte (plaque de 60 × 60 mm sur 3 mm d'air), brin
+  −1,1 %, hélice +0,9 %. La masse compte : plafonnée à 80 mm à 433 MHz, tout
+  sortait 15 % trop haut. Sur un autre stratifié, ou hors de ces bornes, ce
+  sont des extrapolations. Un brin rabattu sur la masse (180°) ne s'adapte pas
+  (−0,6 dB).
+* **Une antenne 3D importée en métal fonctionne comme antenne**, posée sur sa
+  pastille avec le port dessous : mesuré sur une tige de 0,8 mm (2,73 GHz,
+  −13 dB) et une tôle de 3 × 0,3 mm (2,81 GHz, −16 dB), hautes de 24,5 mm.
+  Rien ne vérifie qu'elle touche la pastille : à 1 mm au-dessus, le calcul va
+  au bout et ne rend aucune résonance.
 * **Les motifs d'antenne sont analytiques**, pas optimisés : 2 à 5 % d'écart
   sur la résonance, davantage sur substrat épais ou εᵣ élevé. C'est un point
   de départ que la simulation corrige, jamais un résultat — et c'est

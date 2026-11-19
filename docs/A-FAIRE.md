@@ -19,8 +19,9 @@ patch, pas de seconde campagne pour le MIFA ni pour les facteurs.
 - [x] **Antennes filaires recalées sur openEMS** (19/11/2026) : brin à 0,98 quart d'onde
   (`CON_BRIN_K`), hélice par `conHeliceLeff` (`js/22-antennes.js`). Le fil part en `Curve`,
   sans rayon. Reste à mesurer : un autre stratifié, une hélice hors de D 3 à 8 mm.
-- [ ] **Antenne 3D importée** : une pièce STEP en métal sert déjà d'antenne (port sur sa
-  pastille). Un mode dédié dans WEB_3D pour la préparer — hors de ce dépôt.
+- [ ] **Antenne 3D importée, contact non vérifié** : une pièce métal posée sur sa pastille
+  fonctionne (mesuré, voir README), mais une pièce qui flotte au-dessus n'est signalée par
+  rien — il faudrait pouvoir la déclarer « antenne » pour lui appliquer le garde-fou du fil.
 - [ ] **Recaler le patch sur le maillage fin** : lancer la campagne « Recalage du patch »
   (bouton **📋 Campagne**, environ 11 h annoncées, la première a tenu en 2 h 30), poser
   `recalage-patch-maillage-fin.json` dans `mesures/`, puis recaler `PATCH_K_LONGUEUR` et
