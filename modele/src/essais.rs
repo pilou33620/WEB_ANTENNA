@@ -309,6 +309,22 @@ fn fil_d_antenne_maille() {
     let pire = |t: &[f64], a: f64, b: f64| t.windows(2).filter(|w| w[0] >= a - 1e-6 && w[1] <= b + 1e-6)
         .map(|w| w[1] - w[0]).fold(0.0, f64::max);
 
+    // les garde-fous : pied en l'air, pied sur le cuivre, fil qui replonge dans la carte
+    let titres = |pts: &str| {
+        let mut d = json("essais/cas/banc-0001.json");
+        if let Json::Objet(d) = &mut d {
+            d.insert("primitives".into(), Json::Liste(vec![obj! {"nom" => "brin", "type" => "fil", "r" => 0.4, "pas" => 1.0,
+                "pts" => json_depuis_texte(pts).unwrap()}]));
+        }
+        let m = modele::normaliser(&d).unwrap_or_else(|e| panic!("{}", e.message)).m;
+        m["avis"].as_liste().unwrap().iter().filter(|a| a["rang"].as_str() == Some("grave"))
+            .map(|a| a["titre"].as_str().unwrap().to_string()).collect::<Vec<_>>().join(" | ")
+    };
+    assert!(!titres("[[35,30.1,1.6],[35,30.1,4.6],[35,52.1,4.6]]").contains("fil"), "pied sur le patch : rien a dire");
+    assert!(titres("[[35,30.1,3.0],[35,30.1,6.0]]").contains("n'est soude sur rien"), "pied en l'air");
+    assert!(titres("[[5,5,1.6],[5,5,6.0]]").contains("n'est soude sur rien"), "pied hors du cuivre du dessus");
+    assert!(titres("[[35,30.1,1.6],[35,30.1,2.6],[35,35,0.8]]").contains("traverse la carte"), "le fil replonge");
+
     assert!(pire(&avec(0.0)[1], 37.0, 52.0) > 1.01, "sans pas, le fil reste au pas de l'air");
     let [x, y, z] = avec(1.0);
     assert!(pres(&x, 35.0) && pres(&y, 52.1) && pres(&z, 4.67), "les sommets portent une ligne");

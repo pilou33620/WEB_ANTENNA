@@ -1354,6 +1354,13 @@ const CON_CHAMPS_FIL_CARTE=[
 const CON_CHAMP_INCL={id:"incl", nom:"inclinaison du fil", sym:"θ", unite:"°", signe:true,
   aide:"0° : parallèle à la carte, vers le côté sans masse ; 90° : vertical ; 180° : rabattu au-dessus de la masse"};
 
+/* SANS CARTE, C'EST LE MÊME MOTIF SUR UN AUTRE EMPILAGE : avec de l'air pour
+   diélectrique, le « cuivre dessous » est une plaque de masse nue et le port
+   excite l'intervalle d'air sous le pied du fil. Rien d'autre à coder. */
+const CON_FIL_SANS_CARTE=["Antenne sans carte",
+  "choisissez l'empilage « patch suspendu sur 3 mm d'air » : la masse devient une plaque nue, "+
+  "le port excite les 3 mm d'air sous le pied"];
+
 function conFilCarte(c){
   const Lq=CON_C0/(4*c.f);
   return {Lq:Lq, d:0.8, wp:2.5, Lb:25, marge:3,
@@ -1406,7 +1413,8 @@ const CON_MOTIF_BRIN={
         ["Quart d'onde dans l'air", conLong(CON_C0/(4*c.f),2)],
         ["Fil développé (pied + brin)", conLong(p.h+p.L,2)+" — raccourci de 5 % : un fil épais résonne plus bas"],
         ["Masse", conLong(p.Lg,2)+" — c'est le second bras"],
-        ["Port", "vertical, sous la pastille : l'impédance est lue au pied du fil"]
+        ["Port", "vertical, sous la pastille : l'impédance est lue au pied du fil"],
+        CON_FIL_SANS_CARTE
       ]
     });
   }
@@ -1441,7 +1449,8 @@ const CON_MOTIF_HELICE={
         ["Quart d'onde dans l'air", conLong(CON_C0/(4*c.f),2)],
         ["Fil développé", conLong(dev,2)+" — estimation grossière : balayez N"],
         ["Hauteur de l'hélice", conLong(p.h+p.N*p.p,2)],
-        ["Port", "vertical, sous la pastille : l'impédance est lue au pied du fil"]
+        ["Port", "vertical, sous la pastille : l'impédance est lue au pied du fil"],
+        CON_FIL_SANS_CARTE
       ]
     });
   }

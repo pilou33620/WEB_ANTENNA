@@ -263,6 +263,63 @@ fn _avis_ports_court_circuit(m: &Json, cuivre: &[Bloc]) -> Vec<Json> {
     out
 }
 
+// UN FIL D'ANTENNE EST SOUDE, OU IL N'EST RIEN. Son pied (le premier sommet)
+// doit tomber sur le cuivre de l'antenne : en l'air, c'est un fil flottant que
+// le port n'alimente pas ; sur la masse, un court-circuit. Et un fil qui
+// redescend sous son pied au-dessus du cuivre traverse la carte. Le calcul
+// irait au bout dans les trois cas. Ne sont vises que les fils qui portent un
+// `pas` : un cable du decor a le droit de flotter.
+const FIL_TOL_Z_MM: f64 = 0.1;
+
+fn _avis_fils_antenne(m: &Json, cuivre: &[Bloc]) -> Vec<Json> {
+    let mut out = Vec::new();
+    let masse_connue = cuivre.iter().flat_map(|b| &b.polys).any(|q| q.m || q.mixte);
+    for o in liste(&m["primitives"]).iter().filter(|o| f(&o["pas"]) > 0.0) {
+        let pts = liste(&o["pts"]);
+        let (x, y, z) = (f(&pts[0][0]), f(&pts[0][1]), f(&pts[0][2]));
+        let nom = txt(&o["nom"]);
+        let couche = liste(&m["conducteurs"]).iter()
+            .find(|c| f(&c["z0"]) - FIL_TOL_Z_MM <= z && z <= f(&c["z1"]) + FIL_TOL_Z_MM);
+        let vu = couche.map(|c| _cuivre_sous(cuivre, txt(&c["nom"]), x, y)).unwrap_or_default();
+        if !vu.antenne && !vu.masse {
+            out.push(avis(
+                "grave",
+                format!("Le fil « {nom} » n'est soude sur rien"),
+                format!("Son pied, en ({x:.3} ; {y:.3} ; {z:.3}) mm, ne touche {} : le fil flotte,                          et le port ne l'alimente pas. Amenez le pied sur la pastille du port                          (« pied au port », etape « Autour ») et retenez cette pastille a l'etape                          « Le cuivre ».",
+                        match couche {
+                            Some(c) => format!("aucun cuivre retenu de « {} »", txt(&c["nom"])),
+                            None => "aucune couche de cuivre (hauteur z)".to_string(),
+                        })));
+            continue;
+        }
+        if masse_connue && vu == MASSE {
+            out.push(avis(
+                "grave",
+                format!("Le fil « {nom} » est soude sur la masse"),
+                format!("En ({x:.3} ; {y:.3}) mm, sous son pied, il n'y a que du cuivre de masse :                          l'antenne est court-circuitee a son pied. Soudez-la sur une pastille                          isolee de la masse, et posez le port entre cette pastille et la masse.")));
+        }
+        // Le fil part du cote ou il est soude : au-dessus pour la face du dessus.
+        let dessus = z >= f(&m["z_haut"]) / 2.0;
+        let dedans = pts.iter().skip(1).filter(|q| {
+            if dessus { f(&q[2]) < z - 1e-6 } else { f(&q[2]) > z + 1e-6 }
+        });
+        let pire = dedans.clone().map(|q| (f(&q[2]) - z).abs()).fold(0.0, f64::max);
+        if pire > 0.0 {
+            let sur_cuivre = dedans.clone().any(|q| liste(&m["conducteurs"]).iter().any(|c| {
+                let v = _cuivre_sous(cuivre, txt(&c["nom"]), f(&q[0]), f(&q[1]));
+                v.antenne || v.masse
+            }));
+            out.push(avis(
+                if sur_cuivre { "grave" } else { "attention" },
+                format!("Le fil « {nom} » traverse la carte"),
+                format!("Il passe {pire:.2} mm sous le niveau de son pied{}. Augmentez la hauteur du                          pied, ou relevez l'inclinaison du fil.",
+                        if sur_cuivre { ", a l'aplomb du cuivre : il le touche, et l'antenne est court-circuitee" }
+                        else { "" })));
+        }
+    }
+    out
+}
+
 // LE CONNECTEUR COAXIAL A AUSSI DEUX BORNES, et aucune n'etait verifiee. L'ame
 // se raccorde a « de » sur l'axe, la gaine a « a » sur tout son tour. Une ame
 // posee a cote du cuivre est un circuit ouvert ; une gaine dans une reserve de
@@ -703,6 +760,7 @@ pub(super) fn _avis(m: &Json) -> Vec<Json> {
 
     out.extend(_avis_ports_court_circuit(m, &cuivre));
     out.extend(_avis_coax_contacts(m, &cuivre));
+    out.extend(_avis_fils_antenne(m, &cuivre));
     out.extend(_avis_ecarts_ouverts(m));
     out.extend(_avis_ponts_de_maille(m));
 
