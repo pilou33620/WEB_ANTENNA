@@ -320,6 +320,50 @@ fn _avis_fils_antenne(m: &Json, cuivre: &[Bloc]) -> Vec<Json> {
     out
 }
 
+// UNE ANTENNE IMPORTEE DOIT TOUCHER SA PASTILLE. Mesure : une tige de metal a
+// 1 mm au-dessus de la pastille, le calcul va au bout et ne rend aucune
+// resonance. On cherche une face du corps posee sur le cuivre de l'antenne :
+// ses sommets, les milieux de ses aretes et son centre -- un pied plus large
+// que la pastille n'a aucun sommet dessus. Une masse touchee en plus est
+// legitime (le court-circuit d'un PIFA) ; la masse seule ne l'est pas.
+pub(super) fn _avis_pieces_antenne(m: &Json, pieces: &[crate::pieces::Piece]) -> Vec<Json> {
+    let mut out = Vec::new();
+    let cuivre = cuivre_de(m);
+    let masse_connue = cuivre.iter().flat_map(|b| &b.polys).any(|q| q.m || q.mixte);
+    for (p, c) in crate::pieces::corps_inclus(pieces).filter(|(_, c)| c.antenne) {
+        let Some(i) = c.inclus.as_ref() else { continue };
+        let s = |k: u32| { let k = k as usize * 3; [i.geo.sommets[k], i.geo.sommets[k + 1], i.geo.sommets[k + 2]] };
+        let mut touche = Vu::default();
+        for couche in liste(&m["conducteurs"]) {
+            let (z0, z1) = (f(&couche["z0"]) - FIL_TOL_Z_MM, f(&couche["z1"]) + FIL_TOL_Z_MM);
+            for t in i.geo.faces.chunks_exact(3) {
+                let (a, b, d) = (s(t[0]), s(t[1]), s(t[2]));
+                if [a, b, d].iter().any(|q| q[2] < z0 || q[2] > z1) {
+                    continue;
+                }
+                let mi = |u: [f64; 3], v: [f64; 3]| [(u[0] + v[0]) / 2.0, (u[1] + v[1]) / 2.0];
+                let g = [(a[0] + b[0] + d[0]) / 3.0, (a[1] + b[1] + d[1]) / 3.0];
+                for q in [[a[0], a[1]], [b[0], b[1]], [d[0], d[1]], mi(a, b), mi(b, d), mi(d, a), g] {
+                    let vu = _cuivre_sous(&cuivre, txt(&couche["nom"]), q[0], q[1]);
+                    touche.antenne |= vu.antenne;
+                    touche.masse |= vu.masse;
+                }
+            }
+        }
+        if touche.antenne || (!masse_connue && touche.masse) {
+            continue;
+        }
+        out.push(avis(
+            "grave",
+            format!("L'antenne « {} » ne touche {}", c.nom, if touche.masse { "que la masse" } else { "aucun cuivre" }),
+            format!("Aucune face du corps « {} » de « {} » n'est posee sur le cuivre retenu de l'antenne                      (a {FIL_TOL_Z_MM} mm pres en hauteur) : {}. Posez-la sur la pastille du port                      (« origine au port », etape « Autour ») et retenez cette pastille a l'etape « Le cuivre ».",
+                    c.nom, p.nom,
+                    if touche.masse { "elle est court-circuitee, sans point d'alimentation" }
+                    else { "elle flotte, et le port ne l'alimente pas" })));
+    }
+    out
+}
+
 // LE CONNECTEUR COAXIAL A AUSSI DEUX BORNES, et aucune n'etait verifiee. L'ame
 // se raccorde a « de » sur l'axe, la gaine a « a » sur tout son tour. Une ame
 // posee a cote du cuivre est un circuit ouvert ; une gaine dans une reserve de

@@ -409,6 +409,8 @@ pub struct Corps {
     pub matiere: String,
     pub er: f64,
     pub df: f64,
+    /// Le corps est l'antenne (export « pour WEB_ANTENNA » de WEB_3D) : il doit toucher sa pastille.
+    pub antenne: bool,
     /// None pour un corps « ignore » : il ne voyage pas avec ses triangles.
     pub inclus: Option<Inclus>,
 }
@@ -438,6 +440,9 @@ impl Corps {
             o.insert("emprise".into(), nombres(i.emprise));
             o.insert("plans".into(), Json::Liste(i.plans.iter().map(|p| nombres(p.iter().copied())).collect()));
             o.insert("priorite".into(), i.priorite.into());
+        }
+        if let (true, Json::Objet(o)) = (self.antenne, &mut q) {
+            o.insert("antenne".into(), true.into());
         }
         q
     }
@@ -537,7 +542,8 @@ pub fn pieces(doc_pieces: &Json, k_mm: f64) -> Result<Vec<Piece>, ErreurPiece> {
                          non en surfaces) depuis l'outil de mecanique."));
                 }
             }
-            corps.push((Corps { nom: cn, materiau: mat, matiere: _texte(&c["matiere"], 30), er, df, inclus: None }, a));
+            corps.push((Corps { nom: cn, materiau: mat, matiere: _texte(&c["matiere"], 30), er, df,
+                                antenne: c["antenne"].vrai(), inclus: None }, a));
         }
 
         if total > MAX_TRIANGLES {

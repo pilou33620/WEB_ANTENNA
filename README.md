@@ -578,8 +578,16 @@ la même cellule. Le modèle **refuse** un fil d'antenne dont le pied ne touche
 aucun cuivre retenu, qui est soudé sur la masse, ou qui replonge dans la carte
 au-dessus du cuivre. **Sans carte** : le même motif sur l'empilage « patch
 suspendu sur 3 mm d'air » — la masse est une plaque nue, le port excite l'air
-sous le pied. Une antenne 3D du commerce — tôle pliée, PIFA — s'importe en
-STEP juste en dessous, matière « métal ».
+sous le pied.
+
+**Une antenne 3D** — tôle pliée, PIFA, antenne du commerce — s'importe en STEP
+juste en dessous. Dessinée dans [WEB_3D](../WEB_3D) avec l'origine au point de
+soudure et Z vers le haut, puis exportée par « Exporter pour WEB_ANTENNA », ses
+corps s'appellent « ANTENNE … » : à l'import ils passent en métal, l'origine de
+la pièce est posée sur le port (bouton « origine au port » pour l'y ramener),
+et le modèle **refuse** une antenne dont aucune face ne touche le cuivre retenu
+de l'antenne. Mesuré de bout en bout sur une lame de 3 × 0,3 × 24,5 mm :
+2,81 GHz, −15,7 dB ; une tige de 0,8 mm de même hauteur, 2,73 GHz.
 
 Ces objets entrent dans l'emprise : la boîte d'air se mesure depuis eux aussi,
 sinon un boîtier se retrouverait **dans** la couche absorbante — c'est-à-dire
@@ -2084,11 +2092,11 @@ découpes de versement l'ont toujours été.
   sortait 15 % trop haut. Sur un autre stratifié, ou hors de ces bornes, ce
   sont des extrapolations. Un brin rabattu sur la masse (180°) ne s'adapte pas
   (−0,6 dB).
-* **Une antenne 3D importée en métal fonctionne comme antenne**, posée sur sa
-  pastille avec le port dessous : mesuré sur une tige de 0,8 mm (2,73 GHz,
-  −13 dB) et une tôle de 3 × 0,3 mm (2,81 GHz, −16 dB), hautes de 24,5 mm.
-  Rien ne vérifie qu'elle touche la pastille : à 1 mm au-dessus, le calcul va
-  au bout et ne rend aucune résonance.
+* **Une antenne 3D importée n'est vérifiée que si elle est déclarée.** Le
+  garde-fou de contact ne vise que les corps nommés « ANTENNE … » — ce que
+  fait l'export « pour WEB_ANTENNA » de WEB_3D. Une pièce métal d'une autre
+  origine, posée à 1 mm au-dessus de sa pastille, part au calcul sans un mot
+  et ne rend aucune résonance : renommez son corps dans l'outil de mécanique.
 * **Les motifs d'antenne sont analytiques**, pas optimisés : 2 à 5 % d'écart
   sur la résonance, davantage sur substrat épais ou εᵣ élevé. C'est un point
   de départ que la simulation corrige, jamais un résultat — et c'est

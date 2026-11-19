@@ -332,3 +332,26 @@ fn fil_d_antenne_maille() {
     let mini = |t: &[f64]| t.windows(2).map(|w| w[1] - w[0]).fold(f64::MAX, f64::min);
     assert!(mini(&y) > 0.3 && mini(&x) > 0.3, "aucune cellule-copeau : {} {}", mini(&x), mini(&y));
 }
+
+/// L'antenne importee (un corps marque « antenne ») doit toucher le cuivre retenu.
+#[test]
+fn piece_antenne_touche_sa_pastille() {
+    let _v = seul();
+    let (s, t) = cube();
+    let graves = |z: f64| {
+        let mut d = json("essais/cas/banc-0001.json");
+        if let Json::Objet(d) = &mut d {
+            d.insert("pieces".into(), Json::Liste(vec![obj! {
+                "nom" => "antenne", "position" => crate::outils::nombres([34.0, 29.1, z]), "rotation" => crate::outils::nombres([0.0, 0.0, 0.0]),
+                "corps" => Json::Liste(vec![obj! {"nom" => "ANTENNE lame", "materiau" => "metal", "antenne" => true,
+                                                  "sommets" => s.clone(), "triangles" => t.clone()}]),
+            }]));
+        }
+        let m = modele::normaliser(&d).unwrap_or_else(|e| panic!("{}", e.message)).m;
+        assert!(matches!(m["pieces"][0]["corps"][0]["antenne"], Json::Bool(true)));
+        m["avis"].as_liste().unwrap().iter().filter(|a| a["rang"].as_str() == Some("grave"))
+            .map(|a| a["titre"].as_str().unwrap().to_string()).collect::<Vec<_>>().join(" | ")
+    };
+    assert!(!graves(1.6).contains("ne touche"), "posee sur le patch : {}", graves(1.6));
+    assert!(graves(2.6).contains("ne touche aucun cuivre"), "a 1 mm au-dessus");
+}

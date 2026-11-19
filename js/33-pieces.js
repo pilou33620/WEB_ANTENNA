@@ -92,6 +92,12 @@ const ANT_DEVINE=[
   [antMots("mousse|foam"),                                                "mousse"],
   [antMots("pmma|acryl|acrylique|plexi|light.?pipe|guide.?lum"),          "pmma"]
 ];
+/* L'ANTENNE EXPORTÉE PAR WEB_3D (« Exporter pour WEB_ANTENNA ») : ses corps
+   s'appellent « ANTENNE … », et son origine est le point de soudure, Z vers
+   le haut. Le corps est alors en métal, marqué antenne — le serveur vérifie
+   qu'il touche sa pastille — et la pièce est posée, origine sur le port. */
+const ANT_RE_ANTENNE=/^antenn[ea]([^a-z]|$)/i;
+
 function antMatiereDevinee(nom){
   for(const [re,id] of ANT_DEVINE)if(re.test(nom||""))return id;
   return "abs";
@@ -766,6 +772,7 @@ const ANT_CARTE_PIECE={id:"carte", nom:"Carte électronique", source:"carte", co
    celle qu'on a saisie, et un « poser dessus » après un quart de tour pose
    la pièce couchée, pas la pièce d'avant. */
 function antPiecePoser(p,quoi){
+  if(quoi==="port"){ antPieceAuPort(p); return; }
   const b=antPieceEmprise(p), c=antCarteMonde(), k=antKmm();
   if(!isFinite(b[0]))return;
   const d=[0,0,0];
@@ -872,7 +879,10 @@ async function antPiecesImporter(fichiers){
         const r=await antOcctLire(format,tampon,f.name,function(t){ antPiecesDire(aEsc(t)); });
         r.maillages.forEach(function(m,i){
           if(!m.index.length&&!m.position.length)return;
-          corps.push(antCorpsNeuf(m.nom||m.noeud||("corps "+(i+1)),m.position,m.index));
+          const nomCorps=m.nom||m.noeud||("corps "+(i+1));
+          const c=antCorpsNeuf(nomCorps,m.position,m.index,ANT_RE_ANTENNE.test(nomCorps)?"metal":undefined);
+          if(ANT_RE_ANTENNE.test(nomCorps))c.antenne=true;
+          corps.push(c);
         });
       }
       if(!corps.length)throw new Error("Aucun solide dans ce fichier.");
@@ -886,13 +896,18 @@ async function antPiecesImporter(fichiers){
       const b=antPieceEmprise(p), c=antCarteMonde();
       const marge=Math.max(c.x2-c.x1,c.y2-c.y1);
       const loin=!(b[3]>c.x1-marge&&b[0]<c.x2+marge&&b[4]>c.y1-marge&&b[1]<c.y2+marge);
-      if(loin){ antPiecePoser(p,"centrer"); antPiecePoser(p,"dessus"); }
+      const antenne=corps.some(q=>q.antenne);
+      if(antenne)antPieceAuPort(p);
+      else if(loin){ antPiecePoser(p,"centrer"); antPiecePoser(p,"dessus"); }
 
       ANT.pieces.push(p);
       const ouverts=corps.filter(q=>q.bords).length;
       const nT=corps.reduce((s,q)=>s+q.nT,0);
       antPiecesDire("« "+aEsc(f.name)+" » : "+corps.length+" corps, "+aEnt(nT)+
-        " triangles."+(loin?" Son repère était loin de la carte : elle est "+
+        " triangles."+(antenne?(ANT.port&&ANT.port.pose
+          ?" <b>Antenne</b> : son origine est posée sur le port, sur le cuivre du dessus."
+          :" <b>Antenne</b> : posez le port sur sa pastille, puis « origine au port ».")
+        :loin?" Son repère était loin de la carte : elle est "+
         "posée au milieu, dessus — les boutons de pose la déplacent.":
         " Elle garde la place que son fichier lui donne.")+
         (ouverts?" <b>"+ouverts+" corps ouvert(s)</b>, ignoré(s) : CSXCAD les "+
@@ -903,6 +918,17 @@ async function antPiecesImporter(fichiers){
       antPiecesDire("« "+aEsc(f.name)+" » : "+aEsc(e.message||e),"alerte");
     }
   }
+}
+
+/* L'origine du fichier d'une antenne, amenée sur le port actif, à la hauteur
+   du cuivre du dessus. Sans port posé, la pièce ne bouge pas. */
+function antPieceAuPort(p){
+  if(!ANT.port||!ANT.port.pose)return false;
+  /* ponytail: suppose la carte à sa place d'origine dans l'assemblage ; si on l'a
+     déplacée (fiche « carte »), reposer l'antenne à la main. */
+  p.rotation=[0,0,0];
+  p.position=[+(+ANT.port.x).toFixed(4), +(+ANT.port.y).toFixed(4), antHautCuivre()];
+  return true;
 }
 
 /* ==========================================================================
@@ -919,6 +945,7 @@ function antPiecesDoc(){
               if(mat.m==="ignore")return d;
               d.sommets=c.sommets; d.triangles=c.triangles;
               if(mat.m==="dielectrique"){ d.er=c.er; d.df=c.df; }
+              if(c.antenne&&mat.m==="metal")d.antenne=true;
               return d;
             })};
   });
@@ -1048,6 +1075,7 @@ function antPieceFiche(p,i){
     xyz("position","position",p.position,u)+
     xyz("rotation X Y Z","rotation",p.rotation,"°")+
     '<div class="pnl-bar piece-pose">'+
+      (p.corps.some(c=>c.antenne)?'<button class="tb mini" data-p-poser="port" data-p="'+i+'" title="Amène l\'origine du fichier de l\'antenne — son point de soudure — sur le port actif, sur le cuivre du dessus">⌖ origine au port</button>':'')+
       '<button class="tb mini" data-p-poser="centrer" data-p="'+i+'" title="Centre la pièce sur la carte en X et Y">centrer sur la carte</button>'+
       '<button class="tb mini" data-p-poser="dessus" data-p="'+i+'" title="Le dessous de la pièce sur le dessus de la carte">poser dessus</button>'+
       '<button class="tb mini" data-p-poser="dessous" data-p="'+i+'" title="Le dessus de la pièce sous le dessous de la carte">poser dessous</button>'+

@@ -53,7 +53,7 @@ pub use maillage::{_cout, _estimation, DUMP_REGIONS, DUMP_TYPES};
 pub use ponts::_ponts_de_maille;
 pub use structure::{_emprise_primitive, microruban_eeff, microruban_z0};
 
-use avis::_avis;
+use avis::{_avis, _avis_pieces_antenne};
 use maillage::*;
 use ponts::_ouvrir_ecarts;
 use structure::*;
@@ -1227,7 +1227,8 @@ pub fn normaliser(doc: &Json) -> Res<Modele> {
 
     // Ce que l'assistant a a dire : des avis, pas des refus. Ils partent avec
     // le modele et la page les affiche tels quels.
-    let remarques = _avis(&modele);
+    let mut remarques = _avis(&modele);
+    remarques.extend(_avis_pieces_antenne(&modele, &pieces));
     poser(&mut modele, "avis", Json::Liste(remarques));
     // LE PORT EXCITE RESTE ACCESSIBLE SOUS SON ANCIEN NOM. C'est lui que la
     // vue 3D dessine en rouge, lui que l'export Touchstone nomme, lui dont
