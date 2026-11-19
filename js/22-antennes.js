@@ -1347,7 +1347,7 @@ function antFilAppliquer(o){
 const CON_CHAMPS_FIL_CARTE=[
   {id:"d", nom:"diamètre du fil", aide:"le fil réel : 0,8 mm pour un fil de cuivre courant"},
   {id:"wp", nom:"pastille de soudure", aide:"un carré de cuivre sur la face du dessus ; le port est dessous"},
-  {id:"Lg", nom:"longueur du plan de masse", aide:"c'est le second bras de l'antenne : la raccourcir déplace la résonance"},
+  {id:"Lg", nom:"longueur du plan de masse", aide:"c'est le second bras de l'antenne : la raccourcir remonte la résonance (mesuré à 433 MHz : +15 % avec 80 mm au lieu de 138)"},
   {id:"Lb", nom:"largeur de la carte", aide:"de part et d'autre de la pastille"},
   {id:"marge", nom:"carte au-delà de la masse", aide:"le substrat sans cuivre, du côté où part le fil"}
 ];
@@ -1361,12 +1361,17 @@ const CON_FIL_SANS_CARTE=["Antenne sans carte",
   "choisissez l'empilage « patch suspendu sur 3 mm d'air » : la masse devient une plaque nue, "+
   "le port excite les 3 mm d'air sous le pied"];
 
+/* SUR DE L'AIR, L'INTERVALLE SOUS LE PIED EST UN BOUT DE L'ANTENNE : le port
+   y est une ligne de 3 mm en série avec le fil. Mesuré (plaque de 60 × 60 mm,
+   brin vertical) : sans le compter, 2,22 GHz pour 2,45 visés. Sur un stratifié
+   il est déjà dans le facteur mesuré. */
+function conFilAir(c){ return c.er<1.05?c.h:0; }
+
 function conFilCarte(c){
   const Lq=CON_C0/(4*c.f);
-  return {Lq:Lq, d:0.8, wp:2.5, Lb:25, marge:3,
-          /* ponytail: masse plafonnée à 80 mm pour qu'une carte à 433 MHz reste une carte ;
-             plus courte que le quart d'onde, elle remonte la résonance — à balayer. */
-          Lg:Math.min(Math.max(Lq*0.8,10),80)};
+  /* LA MASSE VAUT 0,8 QUART D'ONDE, SANS PLAFOND. Mesuré à 433 MHz : plafonnée à
+     80 mm (0,46 quart d'onde), brin et hélice sortaient 15 à 18 % trop haut. */
+  return {Lq:Lq, d:0.8, wp:2.5, Lb:25, marge:3, Lg:Math.max(Lq*0.8,10)};
 }
 
 /* La carte commune aux motifs filaires, et le fil `g` posé sur sa pastille. */
@@ -1410,13 +1415,13 @@ const CON_MOTIF_BRIN={
   ].concat(CON_CHAMPS_FIL_CARTE),
   defauts:function(c){
     const k=conFilCarte(c);
-    return {L:Math.max(CON_BRIN_K*k.Lq-3,1), h:3, incl:0, d:k.d, wp:k.wp, Lg:k.Lg, Lb:k.Lb, marge:k.marge};
+    return {L:Math.max(CON_BRIN_K*k.Lq-3-conFilAir(c),1), h:3, incl:0, d:k.d, wp:k.wp, Lg:k.Lg, Lb:k.Lb, marge:k.marge};
   },
   tracer:function(c,p){
     return conFilTracer(p,{type:"brin", L:p.L},{
       titre:"Brin coudé",
       resume:"fil de "+conLong(p.h+p.L,1)+" (pied "+conLong(p.h,1)+"), incliné de "+p.incl+"°, sur masse de "+conLong(p.Lg,1),
-      festim:CON_BRIN_K*CON_C0/(4*(p.h+p.L)),
+      festim:CON_BRIN_K*CON_C0/(4*(p.h+p.L+conFilAir(c))),
       lignes:[
         ["Quart d'onde dans l'air", conLong(CON_C0/(4*c.f),2)],
         ["Fil développé (pied + brin)", conLong(p.h+p.L,2)+" — "+Math.round(CON_BRIN_K*100)+" % du quart d'onde, mesuré à ±5 %"],
@@ -1453,7 +1458,7 @@ const CON_MOTIF_HELICE={
   defauts:function(c){
     const k=conFilCarte(c);
     const D=Math.min(Math.max(k.Lq/20,3),8), p=D/2.5;
-    return {N:+conHeliceSpires(k.Lq,3,D).toFixed(1), D:D, p:p, h:3, incl:90,
+    return {N:+conHeliceSpires(k.Lq,3+conFilAir(c),D).toFixed(1), D:D, p:p, h:3, incl:90,
             d:k.d, wp:k.wp, Lg:k.Lg, Lb:k.Lb, marge:k.marge};
   },
   tracer:function(c,p){
@@ -1461,7 +1466,7 @@ const CON_MOTIF_HELICE={
     return conFilTracer(p,{type:"helice", D:p.D, p:p.p, N:p.N},{
       titre:"Hélice",
       resume:p.N+" spires de "+conLong(p.D,1)+" au pas de "+conLong(p.p,1)+", haute de "+conLong(p.h+p.N*p.p,1),
-      festim:CON_C0/(4*conHeliceLeff(p.h,p.D,p.N)),
+      festim:CON_C0/(4*conHeliceLeff(p.h+conFilAir(c),p.D,p.N)),
       lignes:[
         ["Quart d'onde dans l'air", conLong(CON_C0/(4*c.f),2)],
         ["Fil développé", conLong(dev,2)+" — plus long que le quart d'onde : c'est normal"],
