@@ -16,6 +16,11 @@ La campagne de mesures du 22/10/2026 (six plans, relevés dans `mesures/`, bilan
 décisions du 23/10/2026 : ruban maillé fin par défaut, une petite campagne pour recaler le
 patch, pas de seconde campagne pour le MIFA ni pour les facteurs.
 
+- [ ] **Antennes filaires (brin coudé, hélice), à éprouver sur un vrai openEMS** : un brin
+  quart d'onde vertical sur masse doit résonner près de c/(4·L) ; recaler ensuite le
+  raccourcissement (5 %, supposé) et le nombre de spires de l'hélice (`js/22-antennes.js`).
+- [ ] **Antenne 3D importée** : une pièce STEP en métal sert déjà d'antenne (port sur sa
+  pastille). Un mode dédié dans WEB_3D pour la préparer — hors de ce dépôt.
 - [ ] **Recaler le patch sur le maillage fin** : lancer la campagne « Recalage du patch »
   (bouton **📋 Campagne**, environ 11 h annoncées, la première a tenu en 2 h 30), poser
   `recalage-patch-maillage-fin.json` dans `mesures/`, puis recaler `PATCH_K_LONGUEUR` et

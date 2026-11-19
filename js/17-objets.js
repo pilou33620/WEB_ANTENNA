@@ -57,6 +57,55 @@ function antObjetNeuf(type){
   return Object.assign(base,{c:[cx,cy,+(z+h).toFixed(3)], r:+(r*4).toFixed(3)});
 }
 
+/* ==========================================================================
+   Les fils d'antenne : brin coudé, brin droit, hélice
+   --------------------------------------------------------------------------
+   UNE ANTENNE FILAIRE EST UN « FIL » COMME LES AUTRES pour le solveur : une
+   polyligne de métal. Ce qui change est ici — quelques cotes au lieu d'une
+   liste de sommets — et dans le maillage : le fil porte un `pas`, et le
+   serveur maille son emprise à ce pas (maillage.rs). openEMS pose un fil sur
+   les arêtes de sa grille ; sans ce pas, les spires d'une hélice tombent
+   dans la même cellule.
+
+   Le pied est soudé sur une pastille de la carte : c'est entre cette pastille
+   et la masse qu'on pose le port, comme pour une antenne imprimée.
+
+   g = {type, pied:[x,y,z], h, L | D, p, N, incl, azim, d}, tout dans la même
+   unité de longueur. `incl` : 0° le brin est parallèle à la carte, 90° il
+   est vertical. `azim` : sa direction dans le plan, 0° vers +x, 90° vers +y.
+   ========================================================================== */
+const ANT_FILS_ANTENNE={
+  brin:   {titre:"Brin coudé", aide:"un fil soudé par un pied plié, puis un brin droit ; à 90° d'inclinaison, c'est un brin droit vertical"},
+  helice: {titre:"Hélice",     aide:"un fil enroulé (antenne ressort) au bout d'un pied droit"}
+};
+/* `antFilTrace` et `antFilAppliquer` — le tracé lui-même — sont dans
+   22-antennes.js : les motifs du mode conception s'en servent aussi. */
+
+/* Le dessus du cuivre de la face supérieure, là où se soude le pied : lu
+   dans le modèle quand il y en a un, sinon le haut de l'empilage. */
+function antHautCuivre(){
+  const c=(ANT.modele&&ANT.modele.conducteurs)||[];
+  if(!c.length)return antHautCarte();
+  return +(Math.max.apply(null,c.map(q=>q.z1))/antKmm()).toFixed(4);
+}
+
+/* Un fil d'antenne neuf : le pied sur le port s'il est posé — c'est là qu'est
+   la pastille —, le quart d'onde de la fréquence visée pour longueur. */
+function antFilAntenneNeuf(type){
+  const k=1/antKmm(), b=V.bbox||{x1:0,y1:0,x2:10,y2:10};
+  const p=ANT.port&&ANT.port.pose?ANT.port:{x:(b.x1+b.x2)/2, y:(b.y1+b.y2)/2};
+  const f=(ANT.bande&&ANT.bande.fcible)||2.45e9;
+  const q=0.95*299792458e3/(4*f)*k;               // le quart d'onde, raccourci de 5 %
+  const g={type:type, pied:[+(+p.x).toFixed(4), +(+p.y).toFixed(4), antHautCuivre()],
+           h:+(3*k).toFixed(4), incl:type==="helice"?90:0, azim:0, d:+(0.8*k).toFixed(4)};
+  if(type==="helice"){
+    g.D=+(5*k).toFixed(4); g.p=+(2*k).toFixed(4);
+    g.N=+Math.max(1,(q-g.h)/Math.hypot(Math.PI*g.D,g.p)).toFixed(1);
+  }else g.L=+Math.max(q-g.h,k).toFixed(3);
+  return antFilAppliquer({nom:ANT_FILS_ANTENNE[type].titre.toLowerCase()+" "+(ANT.primitives.length+1),
+                          type:"fil", materiau:"metal", er:4.3, df:0.02, priorite:20, gen:g});
+}
+
 /* Un triplet de champs XYZ. `ou` désigne où écrire dans l'objet : "a", "b",
    "c", ou "pts.2" pour le troisième sommet d'un fil. */
 function antXYZ(i,etiquette,ou,v){
@@ -67,17 +116,47 @@ function antXYZ(i,etiquette,ou,v){
     '<span class="u">'+antUnite()+'</span></div>';
 }
 
-function antChampNb(i,etiquette,ou,v,pas,mini){
+function antChampNb(i,etiquette,ou,v,pas,mini,unite){
   return '<div class="xyz"><label>'+etiquette+'</label>'+
     '<input type="text" inputmode="decimal" spellcheck="false"'+
     (mini!=null?' min="'+mini+'"':"")+
     ' data-obj="'+i+'" data-ou="'+ou+'" value="'+mdlNb(v)+'">'+
-    '<span class="u">'+antUnite()+'</span></div>';
+    '<span class="u">'+(unite!=null?unite:antUnite())+'</span></div>';
+}
+
+/* Ce que les cotes donnent : le développé, le pas du maillage, et le fil qui
+   traverserait la carte. Récrit à chaque frappe, sans redessiner la fiche. */
+function antFilNote(o){
+  const g=o.gen, t=antFilTrace(g);
+  const dev=g.type==="helice" ? g.h+g.N*Math.hypot(Math.PI*g.D,g.p) : g.h+g.L;
+  return 'Inclinaison : 0° parallèle à la carte, 90° vertical. Direction : 0° vers +x, 90° vers +y. '+
+    'Fil développé : <b>'+mdlNb(+dev.toFixed(2))+' '+antUnite()+'</b> ; maillé au pas de '+mdlNb(t.pas)+' '+antUnite()+'. '+
+    'Le port se pose sur la pastille du pied, entre elle et la masse.'+
+    (t.zmin<g.pied[2]-1e-9 ? ' <b>⚠ Le fil descend sous son pied</b> ('+mdlNb(+(g.pied[2]-t.zmin).toFixed(3))+' '+antUnite()+') : il traverse la carte. Augmentez la hauteur du pied.' : '');
+}
+
+/* La fiche d'un fil d'antenne : ses cotes, pas ses sommets. */
+function antFilFiche(o,i){
+  const g=o.gen, helice=g.type==="helice";
+  return antXYZ(i,"pied (soudure)","gen.pied",g.pied)+
+    '<div class="pnl-bar"><button class="tb mini" data-fil-port="'+i+'" title="Amener le pied sur le port actif : la pastille où le fil est soudé">⌖ pied au port</button></div>'+
+    antChampNb(i,"hauteur du pied","gen.h",g.h)+
+    (helice
+      ? antChampNb(i,"diamètre des spires","gen.D",g.D)+
+        antChampNb(i,"pas entre spires","gen.p",g.p)+
+        antChampNb(i,"nombre de spires","gen.N",g.N,null,null,"")
+      : antChampNb(i,"longueur du brin","gen.L",g.L))+
+    antChampNb(i,"inclinaison","gen.incl",g.incl,null,null,"°")+
+    antChampNb(i,"direction","gen.azim",g.azim,null,null,"°")+
+    antChampNb(i,"diamètre du fil","gen.d",g.d)+
+    '<p class="note" data-fil-note="'+i+'">'+antFilNote(o)+'</p>';
 }
 
 function antObjetFiche(o,i){
   let geo;
-  if(o.type==="fil"){
+  if(o.type==="fil"&&o.gen){
+    geo=antFilFiche(o,i);
+  }else if(o.type==="fil"){
     geo=o.pts.map((p,k)=>antXYZ(i,"sommet "+(k+1),"pts."+k,p)).join("")+
       '<div class="pnl-bar">'+
       '<button class="tb mini" data-pt-plus="'+i+'">+ un sommet</button>'+
@@ -103,7 +182,7 @@ function antObjetFiche(o,i){
 
   return '<div class="objet">'+
     '<div class="objet-tete">'+
-      '<b>'+aEsc(ANT_FORMES[o.type].titre)+'</b>'+
+      '<b>'+aEsc(o.gen?ANT_FILS_ANTENNE[o.gen.type].titre:ANT_FORMES[o.type].titre)+'</b>'+
       '<input type="text" class="nom" data-obj="'+i+'" data-ou="nom" value="'+aEsc(o.nom)+'">'+
       '<select data-obj="'+i+'" data-ou="materiau">'+
         '<option value="metal"'+(o.materiau==="metal"?" selected":"")+'>métal</option>'+
@@ -118,6 +197,10 @@ ANT_CORPS.objets=function(){
   const boutons=Object.keys(ANT_FORMES).map(t=>
     '<button class="tb mini" data-forme="'+t+'" title="'+aEsc(ANT_FORMES[t].aide)+
     '">+ '+aEsc(ANT_FORMES[t].titre)+'</button>').join("");
+
+  const fils=Object.keys(ANT_FILS_ANTENNE).map(t=>
+    '<button class="tb mini" data-fil-antenne="'+t+'" title="'+aEsc(ANT_FILS_ANTENNE[t].aide)+
+    '">+ '+aEsc(ANT_FILS_ANTENNE[t].titre)+'</button>').join("");
 
   const liste=ANT.primitives.length
     ? ANT.primitives.map(antObjetFiche).join("")
@@ -144,6 +227,10 @@ ANT_CORPS.objets=function(){
        un fil, un réflecteur saisis en coordonnées. */
     ((typeof antPiecesHtml==="function")
       ? '<div class="champ pieces" id="antPieces">'+antPiecesHtml()+'</div>' : "")+
+    '<div class="champ"><label>Antenne filaire <small>soudée sur une pastille de la carte</small></label>'+
+    '<div class="raccourcis">'+fils+'</div>'+
+    '<p class="note">Posez d\'abord le port sur la pastille où le fil est soudé : le pied s\'y place. '+
+    'Une antenne 3D du commerce (tôle pliée, PIFA) s\'importe en STEP ci-dessus, matière « métal ».</p></div>'+
     '<div class="champ"><label>Formes simples <small>fil, cylindre, boîte, sphère — en coordonnées</small></label>'+
     '<div class="raccourcis">'+boutons+'</div>'+
     '<p class="note">Le métal est un <b>conducteur parfait</b>. Un boîtier en '+
@@ -158,6 +245,21 @@ ANT_LIER.objets=function(box){
   box.querySelectorAll("[data-forme]").forEach(function(b){
     b.onclick=function(){
       ANT.primitives.push(antObjetNeuf(b.dataset.forme));
+      antMaj(true);
+    };
+  });
+  box.querySelectorAll("[data-fil-antenne]").forEach(function(b){
+    b.onclick=function(){
+      ANT.primitives.push(antFilAntenneNeuf(b.dataset.filAntenne));
+      antMaj(true);
+    };
+  });
+  box.querySelectorAll("[data-fil-port]").forEach(function(b){
+    b.onclick=function(){
+      const o=ANT.primitives[+b.dataset.filPort];
+      if(!o||!o.gen||!ANT.port||!ANT.port.pose)return;
+      o.gen.pied[0]=ANT.port.x; o.gen.pied[1]=ANT.port.y; o.gen.pied[2]=antHautCuivre();
+      antFilAppliquer(o);
       antMaj(true);
     };
   });
@@ -191,9 +293,16 @@ ANT_LIER.objets=function(box){
         const v=parseFloat(s);
         if(!isFinite(v))return;
         if(commit)el.value=mdlNb(v);
+        /* « gen.h » : une cote de fil d'antenne, dont les sommets découlent. */
+        const gen=ou.indexOf("gen.")===0, cible=gen?o.gen:o, cle=gen?ou.slice(4):ou;
         if(ou.indexOf("pts.")===0)o.pts[+ou.slice(4)][+el.dataset.k]=v;
-        else if(el.dataset.k!=null)o[ou][+el.dataset.k]=v;
-        else o[ou]=v;
+        else if(el.dataset.k!=null)cible[cle][+el.dataset.k]=v;
+        else cible[cle]=v;
+        if(gen){
+          antFilAppliquer(o);
+          const n=box.querySelector('[data-fil-note="'+el.dataset.obj+'"]');
+          if(n)n.innerHTML=antFilNote(o);
+        }
       }else{
         o[ou]=el.value;
       }

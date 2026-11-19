@@ -790,6 +790,13 @@ pub(super) fn _primitives(doc: &Json, k_mm: f64) -> Res<Vec<Json>> {
                 }
                 poser(&mut o, "pts", Json::Liste(pts.into_iter().map(nombres).collect()));
                 poser(&mut o, "r", r);
+                // UN FIL D'ANTENNE PORTE SON PAS DE MAILLAGE : sans lui, un brin ou
+                // une helice est maille au pas de l'air, et les spires se touchent.
+                // Absent (un cable, un fil du decor), rien ne change : voir `_maillage`.
+                let pas = _nb_pos(&p["pas"], 0.0) * k_mm;
+                if pas > 0.0 {
+                    poser(&mut o, "pas", pas);
+                }
             }
             "cylindre" => {
                 let (a, b) = (_xyz(&p["a"], k_mm), _xyz(&p["b"], k_mm));

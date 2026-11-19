@@ -564,6 +564,19 @@ Quatre formes, saisies en coordonnées et visibles dans la vue 3D : **fil**
 **boîte** (boîtier, batterie, écran ; plate, c'est un réflecteur) et
 **sphère**. En métal ou en diélectrique.
 
+**Une antenne filaire se pose ici aussi**, en cotes et non en sommets : un
+**brin coudé** (un pied plié soudé sur une pastille, puis un brin droit —
+incliné à 90°, c'est un brin droit vertical) ou une **hélice** (antenne
+ressort). Posez d'abord le port sur la pastille : le pied du fil s'y place, et
+le port reste ce qu'il est pour une antenne imprimée, entre la pastille et la
+masse. Pour le solveur c'est un « fil » comme les autres, à une différence
+près : il porte un **pas de maillage** (cinq rayons pour un brin ; le huitième
+du diamètre ou le quart du pas pour une hélice), et son emprise est maillée à
+ce pas, une ligne sur chaque sommet. openEMS pose un fil sur les arêtes de sa
+grille (`CalcPEC_Curves`) : sans ce pas, les spires d'une hélice tombent dans
+la même cellule. Une antenne 3D du commerce — tôle pliée, PIFA — s'importe en
+STEP juste en dessous, matière « métal ».
+
 Ces objets entrent dans l'emprise : la boîte d'air se mesure depuis eux aussi,
 sinon un boîtier se retrouverait **dans** la couche absorbante — c'est-à-dire
 hors du calcul, sans que rien ne le dise. Leurs faces portent des lignes de
@@ -1490,6 +1503,8 @@ cela se voit dans la galerie.
 | **F inversé à méandres (MIFA)** | le même quart d'onde replié en accordéon : deux fois plus court, plus étroit de bande |
 | **Dipôle imprimé** | un bras par face, sans masse : c'est la forme qui se nourrit du port vertical |
 | **Ligne 50 Ω** | pas une antenne : la structure dont on connaît d'avance le résultat |
+| **Brin coudé (fil)** | un fil soudé par un pied plié sur une pastille, masse dessous : couché (0°), incliné, vertical (90°) ou rabattu sur la masse (180°) |
+| **Hélice (fil)** | le même pied, puis un fil enroulé — l'antenne ressort ; le nombre de spires est la cote à balayer |
 
 **Choisir un motif n'écrit rien.** Il ouvre sa fiche : le dessin coté, les
 cotes dans des champs, et deux nombres — la résonance que ces cotes-là
@@ -2048,6 +2063,15 @@ découpes de versement l'ont toujours été.
 * **Un polygone plus fin que la maille disparaît**, et openEMS ne le dit
   qu'une fois, au milieu de son démarrage. L'assistant les compte et le
   signale — si l'un d'eux est la pastille du port, le port n'excite plus rien.
+* **Les antennes filaires n'ont été éprouvées sur aucun vrai openEMS.** Le
+  tracé, le maillage et le XML sont vérifiés par les bancs ; la résonance ne
+  l'est pas. Le fil est rendu par les arêtes de la grille : un brin incliné ou
+  une spire y sont des marches d'escalier, et son rayon apparent est celui de
+  la cellule (un cinquième environ), pas celui qu'on a saisi. Les motifs
+  « Brin coudé » et « Hélice » posent le quart d'onde en fil développé, sans
+  correction mesurée — pour une hélice c'est grossier : balayez `N`. Rien ne
+  vérifie que le pied touche une pastille, ni qu'une hélice couchée ne
+  traverse pas la carte (la fiche le signale, le modèle ne le refuse pas).
 * **Les motifs d'antenne sont analytiques**, pas optimisés : 2 à 5 % d'écart
   sur la résonance, davantage sur substrat épais ou εᵣ élevé. C'est un point
   de départ que la simulation corrige, jamais un résultat — et c'est

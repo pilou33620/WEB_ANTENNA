@@ -291,3 +291,28 @@ fn banc_pieces() {
     assert_eq!(e.message, "Le corps « coque » de « boitier » n'est pas ferme : 3 arete(s) ne bordent qu'une face.");
     assert!(pieces::MAX_TRIANGLES == 400000 && pieces::MAX_CORPS == 400 && modele::MAX_CORPS == 64 * 1024 * 1024);
 }
+
+/// Le fil d'antenne : ses sommets tombent sur des lignes, et son emprise est maillée à son pas.
+#[test]
+fn fil_d_antenne_maille() {
+    let _v = seul();
+    let mut doc = json("essais/cas/banc-0001.json");
+    let mut avec = |pas: f64| {
+        if let Json::Objet(d) = &mut doc {
+            d.insert("primitives".into(), Json::Liste(vec![obj! {"nom" => "brin", "type" => "fil", "r" => 0.4, "pas" => pas,
+                "pts" => json_depuis_texte("[[35,30.1,1.67],[35,30.1,4.67],[35,52.1,4.67]]").unwrap()}]));
+        }
+        let m = modele::normaliser(&doc).unwrap_or_else(|e| panic!("{}", e.message)).m;
+        ["x", "y", "z"].map(|a| m["maillage"][a].as_liste().unwrap().iter().filter_map(|v| v.as_f64()).collect::<Vec<f64>>())
+    };
+    let pres = |t: &[f64], v: f64| t.iter().any(|w| (w - v).abs() < 1e-6);
+    let pire = |t: &[f64], a: f64, b: f64| t.windows(2).filter(|w| w[0] >= a - 1e-6 && w[1] <= b + 1e-6)
+        .map(|w| w[1] - w[0]).fold(0.0, f64::max);
+
+    assert!(pire(&avec(0.0)[1], 37.0, 52.0) > 1.01, "sans pas, le fil reste au pas de l'air");
+    let [x, y, z] = avec(1.0);
+    assert!(pres(&x, 35.0) && pres(&y, 52.1) && pres(&z, 4.67), "les sommets portent une ligne");
+    assert!(pire(&y, 30.1, 53.1) <= 1.0 + 1e-6 && pire(&z, 1.67, 5.67) <= 1.0 + 1e-6 && pire(&x, 34.0, 36.0) <= 1.0 + 1e-6);
+    let mini = |t: &[f64]| t.windows(2).map(|w| w[1] - w[0]).fold(f64::MAX, f64::min);
+    assert!(mini(&y) > 0.3 && mini(&x) > 0.3, "aucune cellule-copeau : {} {}", mini(&x), mini(&y));
+}

@@ -256,6 +256,7 @@ function balDocumentPour(poses){
       p:ANT.ports.map(q=>JSON.parse(JSON.stringify(q))),
       i:ANT.portActif}:null;
   const carteAvant=motifs.length?{L:CON.carte.L, W:CON.carte.W}:null;
+  const filsAvant=ANT.primitives;      // conPoser repose les fils du motif
   if(motifs.length){
     const g=conGabarit(CON.gabarit);
     const c=conContexte();
@@ -278,7 +279,7 @@ function balDocumentPour(poses){
          arrondi qu'à la pose. */
       CON.carte.L=+r.t.carte.L.toFixed(3);
       CON.carte.W=+r.t.carte.W.toFixed(3);
-      conPoser(r.t.port,r.t.ligne,r.t.autres);
+      conPoser(r.t.port,r.t.ligne,r.t.autres,r.t.fils);
       /* LES AUTRES PORTS SURVIVENT AU BALAYAGE, alors que la POSE les
          supprime — et les deux ont raison. Poser un motif refait la carte
          entière : les ports supplémentaires y désignaient du cuivre qui
@@ -324,6 +325,7 @@ function balDocumentPour(poses){
     });
     ANT.portActif=portsAvant.i;
     CON.carte.L=carteAvant.L; CON.carte.W=carteAvant.W;
+    ANT.primitives=filsAvant;
   }
   return doc;
 }

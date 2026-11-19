@@ -52,6 +52,13 @@ const APM_COULEURS={
    ========================================================================== */
 function apmBoite(t,avecCotes){
   const b={x1:0, y1:0, x2:t.carte.L, y2:t.carte.W};
+  /* Un fil d'antenne dépasse de la carte : il reste dans le cadre. */
+  (t.fils||[]).forEach(function(g){
+    antFilTrace(g).pts.forEach(function(q){
+      b.x1=Math.min(b.x1,q[0]-1); b.x2=Math.max(b.x2,q[0]+1);
+      b.y1=Math.min(b.y1,q[1]-1); b.y2=Math.max(b.y2,q[1]+1);
+    });
+  });
   if(avecCotes)(t.cotes||[]).forEach(function(k){
     /* Un repère porte son étiquette au bout de son trait : c'est ce point-là
        qu'il faut garder dans le cadre, avec de quoi écrire trois ou quatre
@@ -151,6 +158,13 @@ function apmSVG(g,p,opts){
                           forme(f,APM_COULEURS.haut,0.9); });
   t.formes.forEach(f=>{ if(f.cu!=="bas"&&f.trou)forme(f,APM_COULEURS.substrat,1); });
   t.formes.forEach(f=>{ if(f.type==="via")forme(f,APM_COULEURS.via,1); });
+  /* Le fil d'antenne, vu de dessus : un brin vertical s'y réduit à un point. */
+  (t.fils||[]).forEach(function(g){
+    const tr=antFilTrace(g);
+    out.push('<polyline points="'+tr.pts.map(q=>X(q[0])+","+Y(q[1])).join(" ")+
+      '" fill="none" stroke="'+APM_COULEURS.via+'" stroke-width="'+Math.max(E(2*tr.r),1.5)+
+      '" stroke-linecap="round" stroke-linejoin="round"/>');
+  });
 
   /* 3. Le port, que le motif pose lui-même. Le montrer est le seul moyen de
         vérifier d'un coup d'œil qu'il tombe bien là où l'antenne s'alimente

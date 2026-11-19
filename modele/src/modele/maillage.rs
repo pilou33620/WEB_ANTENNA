@@ -695,6 +695,24 @@ fn _maillage(modele: &mut Json, cuivre: &[Bloc], pieces: &[Piece], res_air: f64,
     // que c'est lui qui cree x_obl et y_obl.
     for o in liste(&modele["primitives"]) {
         let e = _emprise_primitive(o);
+        // LE FIL D'ANTENNE : une ligne sur ses sommets, puis une tous les `pas`,
+        // et une cellule de marge. openEMS pose un fil sur les ARETES de la
+        // grille (CalcPEC_Curves) : c'est la grille qui decide de sa forme.
+        // OBLIGATOIRES, parce que le seuil de l'affinage suit le pas du
+        // dielectrique -- a 433 MHz il effacerait les lignes d'une helice. Une
+        // ligne a moins du tiers du pas d'une obligatoire deja posee lui cede.
+        let (pas, r) = (f(&o["pas"]), f(&o["r"]));
+        if pas > 0.0 {
+            for (obl, a, b) in [(&mut x_obl, e[0] + r, e[3] - r), (&mut y_obl, e[1] + r, e[4] - r),
+                                (&mut z_obl, e[2] + r, e[5] - r)] {
+                for v in [vec![a - pas], _lignes(a, b, pas), vec![b + pas]].concat() {
+                    if obl.iter().all(|w: &f64| (w - v).abs() >= pas / 3.0) {
+                        obl.push(v);
+                    }
+                }
+            }
+            continue;
+        }
         x_obl.extend([e[0], e[3]]);
         y_obl.extend([e[1], e[4]]);
         z_obl.extend([e[2], e[5]]);

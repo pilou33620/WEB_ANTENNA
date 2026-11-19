@@ -622,6 +622,34 @@ verifie("la planche montre le port, et la vignette non",
         planche.indexOf("var(--red)")>=0&&
         apmVignette(CON_MOTIF_PATCH).indexOf("var(--red)")<0);
 
+/* -- les antennes filaires ------------------------------------------------ */
+/* Le fil est une polyligne calculee : sa longueur developpee doit etre celle
+   des cotes, son pied doit rester ou on l'a pose, et le pas du maillage doit
+   separer deux spires. */
+{
+  const dev=pts=>pts.slice(1).reduce((s,q,i)=>s+Math.hypot(q[0]-pts[i][0],q[1]-pts[i][1],q[2]-pts[i][2]),0);
+  const br=antFilTrace({type:"brin",pied:[10,20,1.6],h:3,L:25,incl:0,azim:90,d:0.8});
+  verifie("brin coude : pied, coude, bout vers +y",
+          JSON.stringify(br.pts)==="[[10,20,1.6],[10,20,4.6],[10,45,4.6]]"&&br.r===0.4, JSON.stringify(br.pts));
+  const dr=antFilTrace({type:"brin",pied:[0,0,0],h:3,L:25,incl:90,azim:0,d:0.8});
+  verifie("a 90 degres le brin est droit et vertical",
+          Math.abs(dr.pts[2][2]-28)<1e-6&&Math.abs(dr.pts[2][0])<1e-6&&Math.abs(dr.pts[2][1])<1e-6);
+  const g={type:"helice",pied:[0,0,0],h:3,D:5,p:2,N:6,incl:90,azim:0,d:0.6};
+  const he=antFilTrace(g);
+  const attendu=3+6*Math.hypot(Math.PI*5,2);
+  verifie("helice : le fil developpe est celui des cotes, a 1 % pres (cordes)",
+          Math.abs(dev(he.pts)-attendu)/attendu<0.01, dev(he.pts)+" / "+attendu);
+  verifie("helice : six spires montent de six pas, et rien ne descend sous le pied",
+          Math.abs(he.pts[he.pts.length-1][2]-(3+12))<1e-6&&he.zmin===0);
+  verifie("helice : le pas du maillage separe deux spires", he.pas<=2/4&&he.pas<=5/8);
+  verifie("helice couchee trop bas : le fil traverse la carte, et zmin le dit",
+          antFilTrace(Object.assign({},g,{incl:0,h:1})).zmin<0);
+  const tb=CON_MOTIF_BRIN.tracer(conContexte(),conGabaritCotes(CON_MOTIF_BRIN,conContexte(),null));
+  verifie("le motif brin pose son fil sur la pastille, et le port dessous",
+          tb.fils.length===1&&tb.fils[0].pied[0]===tb.port.x&&tb.fils[0].pied[1]===tb.port.y&&
+          Math.abs(tb.calcul.festim-conContexte().f)/conContexte().f<0.005);
+}
+
 /* -- tous les motifs, une passe de bon sens ------------------------------ */
 /* Ce qu'aucun motif n'a le droit de faire, quelle que soit la frequence :
    sortir du substrat, poser un port hors carte, ou rendre une carte nulle.

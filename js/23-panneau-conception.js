@@ -624,7 +624,7 @@ function conChampCote(ch,val){
      oriente le faisceau de l'autre côté. */
   if(ch.unite)
     return '<span>'+lab+
-      '<input type="number" step="5" data-con-cote="'+ch.id+
+      '<input type="number" step="'+(ch.pas||5)+'" data-con-cote="'+ch.id+
       '" value="'+(+val||0)+'"> '+aEsc(ch.unite)+'</span>';
   return '<span>'+lab+
     '<input type="number" step="'+conPas(0.05)+'" min="0" data-con-cote="'+

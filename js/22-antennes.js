@@ -1287,9 +1287,170 @@ const CON_MOTIF_LIGNE={
 /* La liste, dans l'ordre où le panneau la montre : les motifs qu'on dessine
    le plus souvent d'abord, l'étalon en dernier — il ne rayonne pas, et il ne
    se cherche que lorsqu'on doute du reste. */
+/* ==========================================================================
+   Les antennes filaires : un fil soudé sur une pastille
+   --------------------------------------------------------------------------
+   LA CARTE N'EST ICI QUE LE SUPPORT : un plan de masse dessous, une pastille
+   dessus au bord de ce plan, et le port vertical entre les deux. L'antenne
+   est un FIL — un objet de l'étape « Autour », tracé par `antFilTrace`
+   ci-dessous — que `conPoser` range dans `ANT.primitives`. Le fil part
+   vers +y, côté sans masse ; son inclinaison le relève (90° : vertical) ou le
+   rabat au-dessus de la masse (180°).
+   ========================================================================== */
+/* g = {type, pied:[x,y,z], h, L | D, p, N, incl, azim, d} : voir 17-objets.js. */
+const ANT_HELICE_SEGMENTS=16;      // par spire
+
+function antFilTrace(g){
+  const ri=(+g.incl||0)*Math.PI/180, ra=(+g.azim||0)*Math.PI/180;
+  /* w : l'axe du brin. u et v : le plan en travers, u dans le plan de la carte. */
+  const w=[Math.cos(ri)*Math.cos(ra), Math.cos(ri)*Math.sin(ra), Math.sin(ri)];
+  const u=[-Math.sin(ra), Math.cos(ra), 0];
+  const v=[w[1]*u[2]-w[2]*u[1], w[2]*u[0]-w[0]*u[2], w[0]*u[1]-w[1]*u[0]];
+  const h=Math.max(+g.h||0,0), d=Math.max(+g.d||0,1e-6);
+  const loc=[[0,0,0]];
+  if(h>0)loc.push([0,0,h]);
+  let pas;
+  if(g.type==="helice"){
+    const R=Math.max(+g.D||0,1e-6)/2, p=Math.max(+g.p||0,1e-6);
+    const n=Math.max(1,Math.round(ANT_HELICE_SEGMENTS*(+g.N||0)));
+    /* L'axe de l'hélice est décalé d'un rayon : la première spire part du
+       bout du pied, sans coude vers le centre. */
+    for(let i=(h>0?1:0);i<=n;i++){
+      const t=2*Math.PI*i/ANT_HELICE_SEGMENTS;
+      const a=R*(1-Math.cos(t)), b=R*Math.sin(t), c=p*i/ANT_HELICE_SEGMENTS;
+      loc.push([a*u[0]+b*v[0]+c*w[0], a*u[1]+b*v[1]+c*w[1], h+a*u[2]+b*v[2]+c*w[2]]);
+    }
+    /* Huit cellules dans le diamètre, quatre dans le pas : en dessous, deux
+       spires voisines se touchent sur la grille. */
+    pas=Math.min(2*R/8, p/4);
+  }else{
+    const L=Math.max(+g.L||0,1e-6);
+    loc.push([L*w[0], L*w[1], h+L*w[2]]);
+    /* Un fil posé sur une arête de grille a le rayon apparent d'un cinquième
+       de cellule environ : cinq rayons de pas, sans dépasser soixante
+       cellules sur la longueur. */
+    pas=Math.max(2.5*d, (h+L)/60);
+  }
+  const pied=g.pied||[0,0,0];
+  const pts=loc.map(q=>[0,1,2].map(k=>+((+pied[k]||0)+q[k]).toFixed(4)));
+  return {pts:pts, pas:+pas.toFixed(4), r:+(d/2).toFixed(4),
+          zmin:Math.min.apply(null,pts.map(q=>q[2]))};
+}
+
+/* Les sommets, le rayon et le pas d'un fil d'antenne suivent ses cotes. */
+function antFilAppliquer(o){
+  const t=antFilTrace(o.gen);
+  o.pts=t.pts; o.r=t.r; o.pas=t.pas;
+  return o;
+}
+
+const CON_CHAMPS_FIL_CARTE=[
+  {id:"d", nom:"diamètre du fil", aide:"le fil réel : 0,8 mm pour un fil de cuivre courant"},
+  {id:"wp", nom:"pastille de soudure", aide:"un carré de cuivre sur la face du dessus ; le port est dessous"},
+  {id:"Lg", nom:"longueur du plan de masse", aide:"c'est le second bras de l'antenne : la raccourcir déplace la résonance"},
+  {id:"Lb", nom:"largeur de la carte", aide:"de part et d'autre de la pastille"},
+  {id:"marge", nom:"carte au-delà de la masse", aide:"le substrat sans cuivre, du côté où part le fil"}
+];
+const CON_CHAMP_INCL={id:"incl", nom:"inclinaison du fil", sym:"θ", unite:"°", signe:true,
+  aide:"0° : parallèle à la carte, vers le côté sans masse ; 90° : vertical ; 180° : rabattu au-dessus de la masse"};
+
+function conFilCarte(c){
+  const Lq=CON_C0/(4*c.f);
+  return {Lq:Lq, d:0.8, wp:2.5, Lb:25, marge:3,
+          /* ponytail: masse plafonnée à 80 mm pour qu'une carte à 433 MHz reste une carte ;
+             plus courte que le quart d'onde, elle remonte la résonance — à balayer. */
+          Lg:Math.min(Math.max(Lq*0.8,10),80)};
+}
+
+/* La carte commune aux motifs filaires, et le fil `g` posé sur sa pastille. */
+function conFilTracer(p,g,calcul){
+  const xc=p.Lb/2, yp=p.Lg-p.wp/2;
+  g.pied=[xc,yp,0]; g.azim=90; g.incl=p.incl; g.h=p.h; g.d=p.d;
+  return {
+    carte:{L:p.Lb, W:p.Lg+p.marge},
+    formes:[
+      gRect("bas","GND",0,0,p.Lb,p.Lg),
+      gRect("haut","ANTENNE",xc-p.wp/2,yp-p.wp/2,xc+p.wp/2,yp+p.wp/2)
+    ],
+    port:{x:xc, y:yp, w:p.wp/2, l:p.wp/2},
+    fils:[g],
+    cotes:[
+      gCote("Lg",0,0,0,p.Lg,-2.2,"Lg"),
+      gCote("Lb",0,0,p.Lb,0,-2.2,"Lb",true),
+      gCote("marge",p.Lb,p.Lg,p.Lb,p.Lg+p.marge,2.2,"m",true),
+      gRepere("wp",xc+p.wp/2,yp,p.Lb+4,yp,"wp")
+    ],
+    calcul:calcul
+  };
+}
+
+const CON_MOTIF_BRIN={
+  id:"brin", nom:"Brin coudé (fil)", role:"gnd",
+  aide:"un fil soudé par un pied plié sur la carte : brin quart d'onde, couché, incliné ou vertical",
+  besoin:"Il faut au moins deux couches de cuivre : la pastille dessus, la masse dessous.",
+  champs:[
+    {id:"L", nom:"longueur du brin", aide:"avec le pied, c'est le quart d'onde : la cote qui fixe la résonance"},
+    {id:"h", nom:"hauteur du pied", aide:"la partie verticale, de la pastille au coude"},
+    CON_CHAMP_INCL
+  ].concat(CON_CHAMPS_FIL_CARTE),
+  defauts:function(c){
+    const k=conFilCarte(c);
+    return {L:Math.max(0.95*k.Lq-3,1), h:3, incl:0, d:k.d, wp:k.wp, Lg:k.Lg, Lb:k.Lb, marge:k.marge};
+  },
+  tracer:function(c,p){
+    return conFilTracer(p,{type:"brin", L:p.L},{
+      titre:"Brin coudé",
+      resume:"fil de "+conLong(p.h+p.L,1)+" (pied "+conLong(p.h,1)+"), incliné de "+p.incl+"°, sur masse de "+conLong(p.Lg,1),
+      festim:0.95*CON_C0/(4*(p.h+p.L)),
+      lignes:[
+        ["Quart d'onde dans l'air", conLong(CON_C0/(4*c.f),2)],
+        ["Fil développé (pied + brin)", conLong(p.h+p.L,2)+" — raccourci de 5 % : un fil épais résonne plus bas"],
+        ["Masse", conLong(p.Lg,2)+" — c'est le second bras"],
+        ["Port", "vertical, sous la pastille : l'impédance est lue au pied du fil"]
+      ]
+    });
+  }
+};
+
+const CON_MOTIF_HELICE={
+  id:"helice", nom:"Hélice (fil)", role:"gnd",
+  aide:"un fil enroulé soudé sur la carte : l'antenne ressort, plus courte qu'un brin pour la même fréquence",
+  besoin:"Il faut au moins deux couches de cuivre : la pastille dessus, la masse dessous.",
+  champs:[
+    {id:"N", nom:"nombre de spires", sym:"N", unite:"spires", pas:0.5, aide:"la cote qui fixe la résonance : c'est elle qu'on balaye"},
+    {id:"D", nom:"diamètre des spires", aide:"mesuré à l'axe du fil"},
+    {id:"p", nom:"pas entre spires", aide:"d'une spire à la suivante, le long de l'axe"},
+    {id:"h", nom:"hauteur du pied", aide:"la partie droite, de la pastille à la première spire"},
+    CON_CHAMP_INCL
+  ].concat(CON_CHAMPS_FIL_CARTE),
+  defauts:function(c){
+    const k=conFilCarte(c);
+    /* ponytail: le fil développé vaut le quart d'onde, sans correction mesurée ;
+       une hélice serrée résonne ailleurs — le nombre de spires est à balayer. */
+    const D=Math.min(Math.max(k.Lq/20,3),8), p=D/2.5;
+    return {N:+Math.max(1,(k.Lq-3)/Math.hypot(Math.PI*D,p)).toFixed(1), D:D, p:p, h:3, incl:90,
+            d:k.d, wp:k.wp, Lg:k.Lg, Lb:k.Lb, marge:k.marge};
+  },
+  tracer:function(c,p){
+    const dev=p.h+p.N*Math.hypot(Math.PI*p.D,p.p);
+    return conFilTracer(p,{type:"helice", D:p.D, p:p.p, N:p.N},{
+      titre:"Hélice",
+      resume:p.N+" spires de "+conLong(p.D,1)+" au pas de "+conLong(p.p,1)+", haute de "+conLong(p.h+p.N*p.p,1),
+      festim:CON_C0/(4*dev),
+      lignes:[
+        ["Quart d'onde dans l'air", conLong(CON_C0/(4*c.f),2)],
+        ["Fil développé", conLong(dev,2)+" — estimation grossière : balayez N"],
+        ["Hauteur de l'hélice", conLong(p.h+p.N*p.p,2)],
+        ["Port", "vertical, sous la pastille : l'impédance est lue au pied du fil"]
+      ]
+    });
+  }
+};
+
 const CON_GABARITS=[
   CON_MOTIF_PATCH, CON_MOTIF_MONOPOLE, CON_MOTIF_IFA,
-  CON_MOTIF_MIFA, CON_MOTIF_DIPOLE, CON_MOTIF_RESEAU, CON_MOTIF_LIGNE
+  CON_MOTIF_MIFA, CON_MOTIF_DIPOLE, CON_MOTIF_RESEAU, CON_MOTIF_LIGNE,
+  CON_MOTIF_BRIN, CON_MOTIF_HELICE
 ];
 
 function conGabarit(id){
@@ -1409,8 +1570,18 @@ function conVirgules(t){ return String(t).replace(/(\d)\.(\d)/g,"$1,$2"); }
    premier plan de masse. `w` est l'étendue en x, `l` celle en y — c'est ainsi
    que python/openems_modele.py construit son volume, et les confondre pose un
    port en travers de la ligne. */
-function conPoser(port,ligne,autres){
+function conPoser(port,ligne,autres,fils){
   const cu=conCuivres();
+  /* LES FILS DU MOTIF REMPLACENT CEUX DU MOTIF PRÉCÉDENT, et rien d'autre : un
+     boîtier ou un câble posé à la main à l'étape « Autour » reste. Le pied est
+     au-dessus du cuivre du dessus — l'épaisseur de ce qui est sous lui. */
+  const i0=CON.pile.findIndex(e=>e.k==="cu");
+  const z=CON.pile.slice(i0+1).reduce((s,e)=>s+(e.k==="cu"?0:e.ep),0);
+  ANT.primitives=ANT.primitives.filter(o=>!o.motif).concat((fils||[]).map(function(g,i){
+    g.pied[2]=+z.toFixed(4);
+    return antFilAppliquer({nom:"antenne"+(i?" "+(i+1):""), type:"fil", materiau:"metal",
+                            er:4.3, df:0.02, priorite:20, motif:true, gen:g});
+  }));
   /* UN MOTIF REFAIT LA CARTE ENTIÈRE : les ports supplémentaires posés sur le
      dessin précédent désignaient du cuivre qui n'existe plus. On revient donc
      à un seul port, celui que le motif alimente. */
@@ -1633,7 +1804,7 @@ function conGabaritPoser(id,p){
   conGabaritDebut(c.f,t.carte.L,t.carte.W);
   conRoleSeconde(g.role);
   r.elements.forEach(function(el){ CON.elements.push(el); });
-  conPoser(t.port,t.ligne,t.autres);
+  conPoser(t.port,t.ligne,t.autres,t.fils);
   conGabaritFin(conGabaritFiche(g,c,q,t));
   return true;
 }
