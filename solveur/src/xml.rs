@@ -491,7 +491,17 @@ pub fn generer(m: &Json, pieces: &[Piece]) -> Result<Simulation, ErreurModele> {
         let pr = o["priorite"].as_i64().unwrap_or(0);
         match txt(&o["type"]) {
             "fil" => {
-                let mut e = Elt::new("Wire").a("Priority", pr.to_string()).n("WireRadius", lit(f(&o["r"]), DEC));
+                // UN FIL D'ANTENNE EST UNE COURBE, SANS RAYON. openEMS pose de toute facon
+                // le fil sur les aretes de la grille ; le rayon y ajoute les aretes dont le
+                // milieu tombe dedans -- des ailettes autour de l'axe des que la cellule
+                // approche le rayon. Mesure sur un brin vertical de 24,5 mm, fil de 0,8 mm :
+                // 2,46 GHz avec le rayon, 2,89 GHz sans (et pour tout rayon <= 0,2 mm) ; la
+                // theorie dit 2,9. C'est aussi ce que fait l'exemple d'helice d'openEMS.
+                let mut e = if f(&o["pas"]) > 0.0 {
+                    Elt::new("Curve").a("Priority", pr.to_string())
+                } else {
+                    Elt::new("Wire").a("Priority", pr.to_string()).n("WireRadius", lit(f(&o["r"]), DEC))
+                };
                 for q in liste(&o["pts"]) {
                     e = e.e(point("Vertex", [lit(f(&q[0]), 5), lit(f(&q[1]), 5), lit(f(&q[2]), 5)]));
                 }

@@ -95,12 +95,12 @@ function antFilAntenneNeuf(type){
   const k=1/antKmm(), b=V.bbox||{x1:0,y1:0,x2:10,y2:10};
   const p=ANT.port&&ANT.port.pose?ANT.port:{x:(b.x1+b.x2)/2, y:(b.y1+b.y2)/2};
   const f=(ANT.bande&&ANT.bande.fcible)||2.45e9;
-  const q=0.95*299792458e3/(4*f)*k;               // le quart d'onde, raccourci de 5 %
+  const q=CON_BRIN_K*299792458e3/(4*f)*k;         // le quart d'onde, au facteur mesuré
   const g={type:type, pied:[+(+p.x).toFixed(4), +(+p.y).toFixed(4), antHautCuivre()],
            h:+(3*k).toFixed(4), incl:type==="helice"?90:0, azim:0, d:+(0.8*k).toFixed(4)};
   if(type==="helice"){
     g.D=+(5*k).toFixed(4); g.p=+(2*k).toFixed(4);
-    g.N=+Math.max(1,(q-g.h)/Math.hypot(Math.PI*g.D,g.p)).toFixed(1);
+    g.N=+conHeliceSpires(299792458e3/(4*f),g.h/k,g.D/k).toFixed(1);   // la loi mesurée, en mm
   }else g.L=+Math.max(q-g.h,k).toFixed(3);
   return antFilAppliquer({nom:ANT_FILS_ANTENNE[type].titre.toLowerCase()+" "+(ANT.primitives.length+1),
                           type:"fil", materiau:"metal", er:4.3, df:0.02, priorite:20, gen:g});

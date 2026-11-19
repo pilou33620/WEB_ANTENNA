@@ -16,9 +16,9 @@ La campagne de mesures du 22/10/2026 (six plans, relevés dans `mesures/`, bilan
 décisions du 23/10/2026 : ruban maillé fin par défaut, une petite campagne pour recaler le
 patch, pas de seconde campagne pour le MIFA ni pour les facteurs.
 
-- [ ] **Antennes filaires (brin coudé, hélice), à éprouver sur un vrai openEMS** : un brin
-  quart d'onde vertical sur masse doit résonner près de c/(4·L) ; recaler ensuite le
-  raccourcissement (5 %, supposé) et le nombre de spires de l'hélice (`js/22-antennes.js`).
+- [x] **Antennes filaires recalées sur openEMS** (19/11/2026) : brin à 0,98 quart d'onde
+  (`CON_BRIN_K`), hélice par `conHeliceLeff` (`js/22-antennes.js`). Le fil part en `Curve`,
+  sans rayon. Reste à mesurer : un autre stratifié, une hélice hors de D 3 à 8 mm.
 - [ ] **Antenne 3D importée** : une pièce STEP en métal sert déjà d'antenne (port sur sa
   pastille). Un mode dédié dans WEB_3D pour la préparer — hors de ce dépôt.
 - [ ] **Recaler le patch sur le maillage fin** : lancer la campagne « Recalage du patch »

@@ -222,6 +222,10 @@ fn objets_pieces_et_carte() {
         let q = p.descendants().find(|n| n.has_tag_name(balise)).unwrap_or_else(|| panic!("{balise} absent"));
         assert_eq!(q.attribute("Priority"), Some(o["priorite"].as_i64().unwrap().to_string().as_str()));
     }
+    // le fil d'antenne (il porte un pas) part en courbe, sans rayon : voir xml.rs
+    let fil = antenne_modele::json_depuis_texte(r#"[{"nom":"brin","type":"fil","r":0.4,"pas":1,"pts":[[35,30.1,1.6],[35,30.1,20]]}]"#).unwrap();
+    let (_, sim) = generer(&avec(doc("banc-0001"), "primitives", fil));
+    assert!(sim.xml.contains("<Curve Priority=\"20\">") && !sim.xml.contains("<Wire"));
     // les pieces importees : un polyedre ferme par corps, ses triangles DANS le fichier
     let d = doc("banc-0139");
     let m = modele::normaliser(&d).unwrap();

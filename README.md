@@ -574,7 +574,11 @@ près : il porte un **pas de maillage** (cinq rayons pour un brin ; le huitième
 du diamètre ou le quart du pas pour une hélice), et son emprise est maillée à
 ce pas, une ligne sur chaque sommet. openEMS pose un fil sur les arêtes de sa
 grille (`CalcPEC_Curves`) : sans ce pas, les spires d'une hélice tombent dans
-la même cellule. Une antenne 3D du commerce — tôle pliée, PIFA — s'importe en
+la même cellule. Le modèle **refuse** un fil d'antenne dont le pied ne touche
+aucun cuivre retenu, qui est soudé sur la masse, ou qui replonge dans la carte
+au-dessus du cuivre. **Sans carte** : le même motif sur l'empilage « patch
+suspendu sur 3 mm d'air » — la masse est une plaque nue, le port excite l'air
+sous le pied. Une antenne 3D du commerce — tôle pliée, PIFA — s'importe en
 STEP juste en dessous, matière « métal ».
 
 Ces objets entrent dans l'emprise : la boîte d'air se mesure depuis eux aussi,
@@ -2063,15 +2067,18 @@ découpes de versement l'ont toujours été.
 * **Un polygone plus fin que la maille disparaît**, et openEMS ne le dit
   qu'une fois, au milieu de son démarrage. L'assistant les compte et le
   signale — si l'un d'eux est la pastille du port, le port n'excite plus rien.
-* **Les antennes filaires n'ont été éprouvées sur aucun vrai openEMS.** Le
-  tracé, le maillage et le XML sont vérifiés par les bancs ; la résonance ne
-  l'est pas. Le fil est rendu par les arêtes de la grille : un brin incliné ou
-  une spire y sont des marches d'escalier, et son rayon apparent est celui de
-  la cellule (un cinquième environ), pas celui qu'on a saisi. Les motifs
-  « Brin coudé » et « Hélice » posent le quart d'onde en fil développé, sans
-  correction mesurée — pour une hélice c'est grossier : balayez `N`. Rien ne
-  vérifie que le pied touche une pastille, ni qu'une hélice couchée ne
-  traverse pas la carte (la fiche le signale, le modèle ne le refuse pas).
+* **Une antenne filaire est simulée sur les arêtes de la grille**, sans
+  rayon : c'est une courbe (`Curve`), comme dans l'exemple d'hélice d'openEMS.
+  Le rayon faisait pire que rien — la grille y ajoutait des ailettes autour de
+  l'axe, et un brin de 24,5 mm résonnait à 2,46 GHz au lieu de 2,89. Le
+  diamètre saisi ne règle donc que le maillage autour du fil ; un brin incliné
+  ou une spire sont des marches d'escalier. Les longueurs des motifs sont
+  **mesurées** (openEMS, 19/11/2026, FR-4 1,6 mm) : le brin à 0,98 quart
+  d'onde tient ±4,4 % sur six cas de 868 MHz à 5,8 GHz ; l'hélice suit
+  pied + 6,8 mm + N·2,6·(D − 0,8 mm) à ±3,5 % sur dix cas (D de 3 à 8 mm,
+  1,2 à 3,4 GHz), et s'adapte mal par nature (5 à 20 Ω au pied). Hors de ces
+  bornes, et sur un autre stratifié, ce sont des extrapolations. Un brin
+  rabattu sur la masse (180°) ne s'adapte pas (−0,6 dB).
 * **Les motifs d'antenne sont analytiques**, pas optimisés : 2 à 5 % d'écart
   sur la résonance, davantage sur substrat épais ou εᵣ élevé. C'est un point
   de départ que la simulation corrige, jamais un résultat — et c'est

@@ -1352,7 +1352,7 @@ const CON_CHAMPS_FIL_CARTE=[
   {id:"marge", nom:"carte au-delà de la masse", aide:"le substrat sans cuivre, du côté où part le fil"}
 ];
 const CON_CHAMP_INCL={id:"incl", nom:"inclinaison du fil", sym:"θ", unite:"°", signe:true,
-  aide:"0° : parallèle à la carte, vers le côté sans masse ; 90° : vertical ; 180° : rabattu au-dessus de la masse"};
+  aide:"0° : parallèle à la carte, vers le côté sans masse ; 90° : vertical ; 180° : rabattu au-dessus de la masse (mesuré : −0,6 dB, inadapté sans circuit d'accord)"};
 
 /* SANS CARTE, C'EST LE MÊME MOTIF SUR UN AUTRE EMPILAGE : avec de l'air pour
    diélectrique, le « cuivre dessous » est une plaque de masse nue et le port
@@ -1391,6 +1391,14 @@ function conFilTracer(p,g,calcul){
   };
 }
 
+/* LE FACTEUR MESURÉ (openEMS, 19/11/2026, FR-4 1,6 mm, fil de 0,8 mm, cotes du
+   motif). Avec pied + brin = 0,94 quart d'onde, la résonance sortait de −0,2 à
+   +8,8 % au-dessus de la cible : 868 MHz +3,9 % couché et +6,1 % vertical,
+   2,45 GHz +6,7 % et +3,3 %, 5,8 GHz +8,8 % et −0,2 %. À 0,98 les six cas
+   tiennent dans ±4,4 %. L'inclinaison ne donne pas de loi nette.
+   À 180° (rabattu sur la masse, à 3 mm) rien ne s'adapte : −0,6 dB. */
+const CON_BRIN_K=0.98;
+
 const CON_MOTIF_BRIN={
   id:"brin", nom:"Brin coudé (fil)", role:"gnd",
   aide:"un fil soudé par un pied plié sur la carte : brin quart d'onde, couché, incliné ou vertical",
@@ -1402,16 +1410,17 @@ const CON_MOTIF_BRIN={
   ].concat(CON_CHAMPS_FIL_CARTE),
   defauts:function(c){
     const k=conFilCarte(c);
-    return {L:Math.max(0.95*k.Lq-3,1), h:3, incl:0, d:k.d, wp:k.wp, Lg:k.Lg, Lb:k.Lb, marge:k.marge};
+    return {L:Math.max(CON_BRIN_K*k.Lq-3,1), h:3, incl:0, d:k.d, wp:k.wp, Lg:k.Lg, Lb:k.Lb, marge:k.marge};
   },
   tracer:function(c,p){
     return conFilTracer(p,{type:"brin", L:p.L},{
       titre:"Brin coudé",
       resume:"fil de "+conLong(p.h+p.L,1)+" (pied "+conLong(p.h,1)+"), incliné de "+p.incl+"°, sur masse de "+conLong(p.Lg,1),
-      festim:0.95*CON_C0/(4*(p.h+p.L)),
+      festim:CON_BRIN_K*CON_C0/(4*(p.h+p.L)),
       lignes:[
         ["Quart d'onde dans l'air", conLong(CON_C0/(4*c.f),2)],
-        ["Fil développé (pied + brin)", conLong(p.h+p.L,2)+" — raccourci de 5 % : un fil épais résonne plus bas"],
+        ["Fil développé (pied + brin)", conLong(p.h+p.L,2)+" — "+Math.round(CON_BRIN_K*100)+" % du quart d'onde, mesuré à ±5 %"],
+        ["Diamètre du fil", "il règle le maillage autour du fil, pas un volume : le fil est simulé sur les arêtes de la grille"],
         ["Masse", conLong(p.Lg,2)+" — c'est le second bras"],
         ["Port", "vertical, sous la pastille : l'impédance est lue au pied du fil"],
         CON_FIL_SANS_CARTE
@@ -1419,6 +1428,16 @@ const CON_MOTIF_BRIN={
     });
   }
 };
+
+/* LA LOI MESURÉE DE L'HÉLICE (openEMS, 19/11/2026, FR-4 1,6 mm, pied de 3 mm,
+   carte du motif à 2,45 GHz). L'hélice résonne comme un brin de longueur
+   pied + 6,8 mm + N·2,6·(D − 0,8 mm) — bien moins que son fil développé, et le
+   pas entre spires n'y change presque rien (1,2 → 2,4 mm : +2 %). Dix cas, D
+   de 3 à 8 mm, pas de 1,2 à 3 mm, 1,5 à 6,5 spires, 1,4 à 3,1 GHz : ±3,5 %.
+   ponytail: hors de ces bornes c'est une extrapolation ; l'adaptation est
+   mauvaise par nature (5 à 20 Ω au pied) — prévoir un circuit d'accord. */
+function conHeliceLeff(h,D,N){ return h+6.8+N*2.6*(D-0.8); }
+function conHeliceSpires(Lq,h,D){ return Math.max(1,(Lq-h-6.8)/(2.6*(D-0.8))); }
 
 const CON_MOTIF_HELICE={
   id:"helice", nom:"Hélice (fil)", role:"gnd",
@@ -1433,10 +1452,8 @@ const CON_MOTIF_HELICE={
   ].concat(CON_CHAMPS_FIL_CARTE),
   defauts:function(c){
     const k=conFilCarte(c);
-    /* ponytail: le fil développé vaut le quart d'onde, sans correction mesurée ;
-       une hélice serrée résonne ailleurs — le nombre de spires est à balayer. */
     const D=Math.min(Math.max(k.Lq/20,3),8), p=D/2.5;
-    return {N:+Math.max(1,(k.Lq-3)/Math.hypot(Math.PI*D,p)).toFixed(1), D:D, p:p, h:3, incl:90,
+    return {N:+conHeliceSpires(k.Lq,3,D).toFixed(1), D:D, p:p, h:3, incl:90,
             d:k.d, wp:k.wp, Lg:k.Lg, Lb:k.Lb, marge:k.marge};
   },
   tracer:function(c,p){
@@ -1444,10 +1461,13 @@ const CON_MOTIF_HELICE={
     return conFilTracer(p,{type:"helice", D:p.D, p:p.p, N:p.N},{
       titre:"Hélice",
       resume:p.N+" spires de "+conLong(p.D,1)+" au pas de "+conLong(p.p,1)+", haute de "+conLong(p.h+p.N*p.p,1),
-      festim:CON_C0/(4*dev),
+      festim:CON_C0/(4*conHeliceLeff(p.h,p.D,p.N)),
       lignes:[
         ["Quart d'onde dans l'air", conLong(CON_C0/(4*c.f),2)],
-        ["Fil développé", conLong(dev,2)+" — estimation grossière : balayez N"],
+        ["Fil développé", conLong(dev,2)+" — plus long que le quart d'onde : c'est normal"],
+        ["Longueur équivalente", conLong(conHeliceLeff(p.h,p.D,p.N),2)+" — loi mesurée à ±3,5 % (D 3 à 8 mm, 1,4 à 3,1 GHz)"],
+        ["Adaptation", "5 à 20 Ω au pied, mesuré : une hélice courte demande un circuit d'accord"],
+        ["Diamètre du fil", "il règle le maillage autour du fil, pas un volume"],
         ["Hauteur de l'hélice", conLong(p.h+p.N*p.p,2)],
         ["Port", "vertical, sous la pastille : l'impédance est lue au pied du fil"],
         CON_FIL_SANS_CARTE
