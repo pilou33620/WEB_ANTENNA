@@ -1441,8 +1441,17 @@ const CON_MOTIF_BRIN={
    de 3 à 8 mm, pas de 1,2 à 3 mm, 1,5 à 6,5 spires, 1,4 à 3,1 GHz : ±3,5 %.
    ponytail: hors de ces bornes c'est une extrapolation ; l'adaptation est
    mauvaise par nature (5 à 20 Ω au pied) — prévoir un circuit d'accord. */
-function conHeliceLeff(h,D,N){ return h+6.8+N*2.6*(D-0.8); }
-function conHeliceSpires(Lq,h,D){ return Math.max(1,(Lq-h-6.8)/(2.6*(D-0.8))); }
+/* DEUX RETOUCHES MESURÉES, sur les hélices par défaut. Sous 1,4 GHz la spire
+   « vaut » moins : −7 % à 868 MHz, −12 % à 433 MHz, soit 8 % par octave. Et
+   sur de l'air (plaque nue) le décalage tombe de 6,8 à 5,1 mm, l'intervalle
+   d'air `air` s'ajoutant au pied. */
+function conHeliceSpire(D,f){
+  return 2.6*(D-0.8)*Math.max(0.8,1-0.08*Math.max(0,Math.log2(1.4e9/f)));
+}
+function conHeliceLeff(h,D,N,f,air){ return h+(air?air+5.1:6.8)+N*conHeliceSpire(D,f); }
+function conHeliceSpires(Lq,h,D,f,air){
+  return Math.max(1,(Lq-conHeliceLeff(h,D,0,f,air))/conHeliceSpire(D,f));
+}
 
 const CON_MOTIF_HELICE={
   id:"helice", nom:"Hélice (fil)", role:"gnd",
@@ -1458,7 +1467,7 @@ const CON_MOTIF_HELICE={
   defauts:function(c){
     const k=conFilCarte(c);
     const D=Math.min(Math.max(k.Lq/20,3),8), p=D/2.5;
-    return {N:+conHeliceSpires(k.Lq,3+conFilAir(c),D).toFixed(1), D:D, p:p, h:3, incl:90,
+    return {N:+conHeliceSpires(k.Lq,3,D,c.f,conFilAir(c)).toFixed(1), D:D, p:p, h:3, incl:90,
             d:k.d, wp:k.wp, Lg:k.Lg, Lb:k.Lb, marge:k.marge};
   },
   tracer:function(c,p){
@@ -1466,11 +1475,11 @@ const CON_MOTIF_HELICE={
     return conFilTracer(p,{type:"helice", D:p.D, p:p.p, N:p.N},{
       titre:"Hélice",
       resume:p.N+" spires de "+conLong(p.D,1)+" au pas de "+conLong(p.p,1)+", haute de "+conLong(p.h+p.N*p.p,1),
-      festim:CON_C0/(4*conHeliceLeff(p.h+conFilAir(c),p.D,p.N)),
+      festim:CON_C0/(4*conHeliceLeff(p.h,p.D,p.N,c.f,conFilAir(c))),
       lignes:[
         ["Quart d'onde dans l'air", conLong(CON_C0/(4*c.f),2)],
         ["Fil développé", conLong(dev,2)+" — plus long que le quart d'onde : c'est normal"],
-        ["Longueur équivalente", conLong(conHeliceLeff(p.h,p.D,p.N),2)+" — loi mesurée à ±3,5 % (D 3 à 8 mm, 1,4 à 3,1 GHz)"],
+        ["Longueur équivalente", conLong(conHeliceLeff(p.h,p.D,p.N,c.f,conFilAir(c)),2)+" — loi mesurée (D 3 à 8 mm, 433 MHz à 3,4 GHz)"],
         ["Adaptation", "5 à 20 Ω au pied, mesuré : une hélice courte demande un circuit d'accord"],
         ["Diamètre du fil", "il règle le maillage autour du fil, pas un volume"],
         ["Hauteur de l'hélice", conLong(p.h+p.N*p.p,2)],

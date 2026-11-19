@@ -100,7 +100,7 @@ function antFilAntenneNeuf(type){
            h:+(3*k).toFixed(4), incl:type==="helice"?90:0, azim:0, d:+(0.8*k).toFixed(4)};
   if(type==="helice"){
     g.D=+(5*k).toFixed(4); g.p=+(2*k).toFixed(4);
-    g.N=+conHeliceSpires(299792458e3/(4*f),g.h/k,g.D/k).toFixed(1);   // la loi mesurée, en mm
+    g.N=+conHeliceSpires(299792458e3/(4*f),g.h/k,g.D/k,f,0).toFixed(1);   // la loi mesurée, en mm
   }else g.L=+Math.max(q-g.h,k).toFixed(3);
   return antFilAppliquer({nom:ANT_FILS_ANTENNE[type].titre.toLowerCase()+" "+(ANT.primitives.length+1),
                           type:"fil", materiau:"metal", er:4.3, df:0.02, priorite:20, gen:g});
