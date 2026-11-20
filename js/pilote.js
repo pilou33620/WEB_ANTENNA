@@ -82,7 +82,7 @@
       page: "", projet: () => "", focus: Date.now(), interrupteur: false,
       commandes: {}, capturer: null,
     };
-    let canal = null, actif = false, minuteurs = [], arretPoll = null, dernierEnvoi = "";
+    let canal = null, actif = false, minuteurs = [], arretPoll = null, dernierEnvoi = "", generation = 0;
     const vus = new Map();          // id d'onglet -> {onglet, t}
     const traitees = new Set();     // ids de commandes déjà reçues : une redistribution ne rejoue rien
     const originaux = new WeakMap(); // def d'écriture -> son « appliquer » d'origine, que seul le clic appelle
@@ -154,9 +154,12 @@
       if (canal && actif) canal.postMessage({ t: "present", onglet: vue() });
     }
 
+    /* Une seule boucle à la fois : relais perdu puis repris pendant le repos d'une boucle (serveur en
+       panne), l'ancienne repartait à son réveil à côté de la nouvelle. La génération l'arrête. */
     async function boucle() {
+      const moi = ++generation;
       let enPanne = false;
-      while (actif && P.relais) {
+      while (actif && P.relais && moi === generation) {
         const ctl = typeof AbortController === "function" ? new AbortController() : null;
         arretPoll = ctl;
         try {
@@ -167,7 +170,7 @@
           (d.commandes || []).forEach(livrer);
         } catch (_) {
           enPanne = true;
-          if (actif && P.relais) await new Promise(f => setTimeout(f, R.repos));   // serveur arrêté : on réessaie
+          if (actif && P.relais && moi === generation) await new Promise(f => setTimeout(f, R.repos));   // serveur arrêté : on réessaie
         }
       }
     }
